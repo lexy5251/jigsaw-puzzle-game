@@ -4,7 +4,7 @@ import 'package:jigsaw_puzzle/jigsaw_game.dart';
 
 void main() {
   testWidgets('game boots with an empty board and a full tray', (tester) async {
-    final game = JigsawGame();
+    final game = JigsawGame(imageAsset: 'test_photo.jpg', columns: 6, rows: 4);
     // runAsync lets the real asset load + image decode inside onLoad finish
     // (they happen off the fake test clock).
     await tester.runAsync(() async {

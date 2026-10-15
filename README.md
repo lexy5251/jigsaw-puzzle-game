@@ -42,6 +42,7 @@ flutter build web
 flutter build apk --release
 ```
 
-The current `test/widget_test.dart` is a placeholder and contains no tests.
+Tests live in `test/`: game-logic unit tests plus widget tests for snapping
+and the select-screen flow. Run them with `flutter test`.
 
 Planning notes in `docs/` are local files and are excluded from Git.

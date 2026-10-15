@@ -16,7 +16,7 @@ void main() {
   const liftedTouch = Offset(50, 400); // above the tray: piece is on the board
 
   Future<JigsawGame> bootGame(WidgetTester tester) async {
-    final game = JigsawGame();
+    final game = JigsawGame(imageAsset: 'test_photo.jpg', columns: 6, rows: 4);
     // runAsync lets the real asset load + image decode inside onLoad finish
     // (they happen off the fake test clock).
     await tester.runAsync(() async {
