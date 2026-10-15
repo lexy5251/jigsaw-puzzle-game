@@ -1,5 +1,5 @@
 // Game logic overview:
-// 1. onLoad loads the photo, creates 24 pieces in a 6 x 4 grid, shuffles
+// 1. onLoad loads the photo, creates columns x rows pieces, shuffles
 //    them into the bottom tray, and draws the board outline.
 // 2. The camera controls which part of the board is visible and its zoom.
 //    The tray stays fixed on screen while the board view moves or zooms.
@@ -23,13 +23,21 @@ import 'piece_tray.dart';
 import 'puzzle_logic.dart';
 import 'puzzle_piece.dart';
 
-const _columns = 6;
-const _rows = 4;
-
 /// The board uses image pixels as world units; the tray stays in screen space.
 /// Gestures on empty space pan and zoom the camera.
 class JigsawGame extends FlameGame
     with DragCallbacks, ScaleCallbacks, ScrollCallbacks {
+  JigsawGame({
+    required this.imageAsset,
+    required this.columns,
+    required this.rows,
+  });
+
+  /// Image file name under assets/images/ (Flame's default image prefix).
+  final String imageAsset;
+  final int columns;
+  final int rows;
+
   late final PuzzleProgress progress;
 
   PieceTray? _tray;
@@ -45,11 +53,11 @@ class JigsawGame extends FlameGame
 
   @override
   Future<void> onLoad() async {
-    final image = await images.load('test_photo.jpg');
+    final image = await images.load(imageAsset);
 
-    final pieceSize = Vector2(image.width / _columns, image.height / _rows);
+    final pieceSize = Vector2(image.width / columns, image.height / rows);
     _boardSize = Vector2(image.width.toDouble(), image.height.toDouble());
-    progress = PuzzleProgress(totalPieces: _columns * _rows);
+    progress = PuzzleProgress(totalPieces: columns * rows);
 
     world.add(
       RectangleComponent(
@@ -63,8 +71,8 @@ class JigsawGame extends FlameGame
     );
 
     final pieces = <PieceData>[
-      for (var row = 0; row < _rows; row++)
-        for (var column = 0; column < _columns; column++)
+      for (var row = 0; row < rows; row++)
+        for (var column = 0; column < columns; column++)
           PieceData(
             sprite: Sprite(
               image,
