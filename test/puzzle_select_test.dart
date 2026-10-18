@@ -12,7 +12,9 @@ void main() {
   ) async {
     await tester.pumpWidget(const JigsawPuzzleApp());
 
-    await tester.tap(find.text('Test Photo'));
+    expect(find.text('Landscapes'), findsOneWidget);
+
+    await tester.tap(find.text('Alpine Lakes Panorama'));
     await tester.pumpAndSettle();
 
     expect(find.text('24 pieces · Easy'), findsOneWidget);
@@ -41,7 +43,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(GameScreen), findsNothing);
-    expect(find.text('Test Photo'), findsOneWidget);
+    expect(find.text('Alpine Lakes Panorama'), findsOneWidget);
   });
 
   testWidgets('size picker scrolls in a short window', (tester) async {
@@ -51,7 +53,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     await tester.pumpWidget(const JigsawPuzzleApp());
-    await tester.tap(find.byType(Card));
+    await tester.tap(find.byType(Card).first);
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
