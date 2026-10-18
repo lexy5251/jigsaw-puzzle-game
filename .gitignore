@@ -127,3 +127,6 @@ pubspec_overrides.yaml
 !/ios/**/default.mode2v3
 !/ios/**/default.pbxuser
 !/ios/**/default.perspectivev3
+
+# Local backups of pre-compression puzzle images
+originals/

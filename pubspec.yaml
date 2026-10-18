@@ -60,6 +60,12 @@ flutter:
 
   assets:
     - assets/images/
+    - assets/images/landscapes/
+    - assets/images/cozy/
+    - assets/images/animals/
+    - assets/images/flowers/
+    - assets/images/cities/
+    - assets/images/art/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

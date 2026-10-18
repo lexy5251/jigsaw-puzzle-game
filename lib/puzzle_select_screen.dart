@@ -1,5 +1,6 @@
 // Puzzle selection overview:
-// 1. Shows the catalog images in a grid.
+// 1. Shows the catalog grouped into themed categories; categories with no
+//    images yet are hidden.
 // 2. Tapping an image opens a sheet with the available puzzle sizes.
 // 3. Choosing a size opens GameScreen with that image and size.
 // 4. Dismissing the sheet leaves the user on the selection screen.
@@ -9,26 +10,17 @@ import 'package:flutter/material.dart';
 import 'game_screen.dart';
 import 'puzzle_catalog.dart';
 
-/// Lets the user choose an image and grid size before starting a puzzle.
 class PuzzleSelectScreen extends StatelessWidget {
   const PuzzleSelectScreen({super.key});
 
-  Future<void> _selectSizeAndStartPuzzle(
-    BuildContext context,
-    PuzzleImage image,
-  ) async {
-    // Wait for the picker to return a size, or null if it is dismissed.
+  Future<void> _startPuzzle(BuildContext context, PuzzleImage image) async {
     final selectedSize = await showModalBottomSheet<PuzzleSize>(
       context: context,
       builder: (_) => _PuzzleSizePicker(image: image),
     );
 
-    if (selectedSize == null) {
-      return;
-    }
-
-    // The screen may have been removed while we waited for the choice.
-    if (!context.mounted) {
+    // The sheet can be dismissed, or this screen removed while it is open.
+    if (selectedSize == null || !context.mounted) {
       return;
     }
 
@@ -44,28 +36,65 @@ class PuzzleSelectScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Choose a puzzle')),
-      body: GridView.builder(
+      body: ListView(
         padding: const EdgeInsets.all(16),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          mainAxisSpacing: 16,
-          crossAxisSpacing: 16,
-          childAspectRatio: 0.85,
-        ),
-        itemCount: puzzleCatalog.length,
-        itemBuilder: (context, index) {
-          final image = puzzleCatalog[index];
-          return _PuzzleCard(
-            image: image,
-            onTap: () => _selectSizeAndStartPuzzle(context, image),
-          );
-        },
+        children: [
+          for (final category in puzzleCategories)
+            _CategorySection(
+              category: category,
+              onImageTap: (image) => _startPuzzle(context, image),
+            ),
+        ],
       ),
     );
   }
 }
 
-/// Displays an image preview and title; the parent handles the tap.
+class _CategorySection extends StatelessWidget {
+  const _CategorySection({required this.category, required this.onImageTap});
+
+  final PuzzleCategory category;
+  final ValueChanged<PuzzleImage> onImageTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final images = imagesInCategory(category.id);
+    if (images.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 8, bottom: 12),
+          child: Text(
+            category.title,
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+        ),
+        GridView.builder(
+          // The outer ListView scrolls; this grid only sizes itself.
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            mainAxisSpacing: 16,
+            crossAxisSpacing: 16,
+            childAspectRatio: 0.85,
+          ),
+          itemCount: images.length,
+          itemBuilder: (context, index) {
+            final image = images[index];
+            return _PuzzleCard(image: image, onTap: () => onImageTap(image));
+          },
+        ),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+}
+
 class _PuzzleCard extends StatelessWidget {
   const _PuzzleCard({required this.image, required this.onTap});
 
@@ -75,13 +104,20 @@ class _PuzzleCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      clipBehavior: Clip.antiAlias, // Keeps the photo inside the rounded card.
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(child: Image.asset(image.assetPath, fit: BoxFit.cover)),
+            Expanded(
+              child: Image.asset(
+                image.assetPath,
+                fit: BoxFit.cover,
+                // Decode smaller previews to reduce memory use.
+                cacheWidth: 640,
+              ),
+            ),
             Padding(
               padding: const EdgeInsets.all(12),
               child: Text(
@@ -96,7 +132,6 @@ class _PuzzleCard extends StatelessWidget {
   }
 }
 
-/// Shows the available grid sizes and returns the user's choice.
 class _PuzzleSizePicker extends StatelessWidget {
   const _PuzzleSizePicker({required this.image});
 
@@ -121,7 +156,6 @@ class _PuzzleSizePicker extends StatelessWidget {
             ListTile(
               title: Text('${size.pieceCount} pieces · ${size.label}'),
               subtitle: Text('${size.columns} × ${size.rows}'),
-              // Close the sheet and return this size to the awaiting caller.
               onTap: () => Navigator.pop(context, size),
             ),
         ],
