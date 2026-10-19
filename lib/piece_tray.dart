@@ -16,7 +16,14 @@ import 'puzzle_piece.dart';
 
 /// The image region and solved position needed to create a board piece.
 class PieceData {
-  PieceData({required this.sprite, required this.correctPosition});
+  PieceData({
+    required this.index,
+    required this.sprite,
+    required this.correctPosition,
+  });
+
+  /// Canonical piece number (row * columns + column); save files reference it.
+  final int index;
 
   final Sprite sprite;
 
@@ -61,6 +68,10 @@ class PieceTray extends PositionComponent
       _padding + _remainingPieces.length * _thumbnailSlotWidth;
 
   bool get isEmpty => _remainingPieces.isEmpty;
+
+  /// Piece indexes still in the tray, in display order (used by saves).
+  List<int> get remainingPieceIndexes =>
+      [for (final data in _remainingPieces) data.index];
 
   @override
   Future<void> onLoad() async {
@@ -175,6 +186,7 @@ class PieceTray extends PositionComponent
   // The tray owns this drag until release, even after the piece leaves it.
   void _liftPieceOntoBoard(_TrayThumbnail thumbnail, Vector2 canvasPosition) {
     final piece = PuzzlePiece(
+      index: thumbnail.data.index,
       sprite: thumbnail.data.sprite,
       size: pieceWorldSize.clone(),
       position: Vector2.zero(),
