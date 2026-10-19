@@ -1,6 +1,6 @@
 // Game logic overview:
-// 1. onLoad loads the photo, creates columns x rows pieces, shuffles
-//    them into the bottom tray, and draws the board outline.
+// 1. onLoad loads the photo and creates columns x rows pieces. It restores
+//    saved progress when available; otherwise all pieces start in the tray.
 // 2. The camera controls which part of the board is visible and its zoom.
 //    The tray stays fixed on screen while the board view moves or zooms.
 // 3. onGameResize adjusts the tray and fits the board above it again.
@@ -9,10 +9,13 @@
 // 5. keepPieceClearOfTray moves dropped pieces up if they overlap the tray.
 // 6. onPieceLocked counts placed pieces and shows "Puzzle complete!"
 //    when every piece is locked in its correct position.
+// 7. persistProgress saves the board and tray after a move, or deletes the
+//    save when the puzzle is complete.
 //
 // PieceTray and PuzzlePiece handle dragging pieces and snapping them into place.
 
 import 'dart:math';
+import 'dart:ui' as ui;
 
 import 'package:flame/components.dart';
 import 'package:flame/events.dart';
@@ -22,6 +25,7 @@ import 'package:flutter/material.dart';
 import 'piece_tray.dart';
 import 'puzzle_logic.dart';
 import 'puzzle_piece.dart';
+import 'puzzle_save.dart';
 
 /// The board uses image pixels as world units; the tray stays in screen space.
 /// Gestures on empty space pan and zoom the camera.
@@ -31,6 +35,8 @@ class JigsawGame extends FlameGame
     required this.imageAsset,
     required this.columns,
     required this.rows,
+    this.saveStore,
+    this.saveKey,
   });
 
   /// Image file name under assets/images/ (Flame's default image prefix).
@@ -38,8 +44,17 @@ class JigsawGame extends FlameGame
   final int columns;
   final int rows;
 
+  /// Reads and writes saved progress. Tests can omit storage to play in memory.
+  final PuzzleSaveStore? saveStore;
+
+  /// Identifies this image and grid size in storage.
+  /// Saving and loading require both [saveStore] and [saveKey].
+  final String? saveKey;
+
+  /// Live count of correctly placed pieces, used to detect completion.
   late final PuzzleProgress progress;
 
+  // Live piece state: the tray holds unused pieces; world holds board pieces.
   PieceTray? _tray;
   late Vector2 _boardSize;
 
@@ -59,6 +74,27 @@ class JigsawGame extends FlameGame
     _boardSize = Vector2(image.width.toDouble(), image.height.toDouble());
     progress = PuzzleProgress(totalPieces: columns * rows);
 
+    _addBoardOutline();
+    final allPieces = _createPieceData(image, pieceSize);
+    final savedState = await _loadSavedProgress(allPieces.length);
+
+    final List<PieceData> trayPieces;
+    if (savedState == null) {
+      // Start fresh: every piece goes into the tray in a random order.
+      trayPieces = List.of(allPieces)..shuffle();
+    } else {
+      // Resume: restore the board and preserve the remaining tray order.
+      _restoreBoardPieces(savedState, allPieces, pieceSize);
+      trayPieces = [
+        for (final index in savedState.trayPieceIndexes) allPieces[index],
+      ];
+    }
+
+    _addTray(trayPieces, pieceSize);
+    _fitCameraToBoard();
+  }
+
+  void _addBoardOutline() {
     world.add(
       RectangleComponent(
         size: _boardSize.clone(),
@@ -69,20 +105,34 @@ class JigsawGame extends FlameGame
           ..color = const Color(0x66FFFFFF),
       ),
     );
+  }
 
-    final pieces = <PieceData>[
-      for (var row = 0; row < rows; row++)
-        for (var column = 0; column < columns; column++)
+  /// Cuts the image into pieces with stable indexes for saving and restoring.
+  List<PieceData> _createPieceData(ui.Image image, Vector2 pieceSize) {
+    final pieces = <PieceData>[];
+    for (var row = 0; row < rows; row++) {
+      for (var column = 0; column < columns; column++) {
+        final correctPosition = Vector2(
+          column * pieceSize.x,
+          row * pieceSize.y,
+        );
+        pieces.add(
           PieceData(
+            index: row * columns + column,
             sprite: Sprite(
               image,
-              srcPosition: Vector2(column * pieceSize.x, row * pieceSize.y),
+              srcPosition: correctPosition.clone(),
               srcSize: pieceSize,
             ),
-            correctPosition: Vector2(column * pieceSize.x, row * pieceSize.y),
+            correctPosition: correctPosition,
           ),
-    ]..shuffle();
+        );
+      }
+    }
+    return pieces;
+  }
 
+  void _addTray(List<PieceData> pieces, Vector2 pieceSize) {
     final tray = PieceTray(
       pieces: pieces,
       pieceWorldSize: pieceSize,
@@ -91,8 +141,6 @@ class JigsawGame extends FlameGame
     );
     _tray = tray;
     camera.viewport.add(tray);
-
-    _fitCameraToBoard();
   }
 
   @override
@@ -203,6 +251,87 @@ class JigsawGame extends FlameGame
     if (progress.lockPiece()) {
       _showCompletionText();
     }
+    persistProgress();
+  }
+
+  /// Piece indexes still in the tray — exposed for tests.
+  @visibleForTesting
+  List<int> get trayPieceIndexes => _tray?.remainingPieceIndexes ?? const [];
+
+  /// Returns a usable save, or null to start fresh.
+  /// Storage may be disabled, or the save may be missing or invalid.
+  Future<PuzzleSaveState?> _loadSavedProgress(int totalPieces) async {
+    final store = saveStore;
+    final key = saveKey;
+    if (store == null || key == null) {
+      return null;
+    }
+    final state = await store.load(key);
+    if (state == null || !state.isConsistentFor(totalPieces)) {
+      return null;
+    }
+    return state;
+  }
+
+  /// Recreates saved board pieces: locked ones in place, loose ones where
+  /// they were dropped. Tray pieces are handled by the tray itself.
+  void _restoreBoardPieces(
+    PuzzleSaveState state,
+    List<PieceData> allPieces,
+    Vector2 pieceSize,
+  ) {
+    PuzzlePiece createPiece(PieceData data, Vector2 position) => PuzzlePiece(
+      index: data.index,
+      sprite: data.sprite,
+      size: pieceSize.clone(),
+      position: position,
+      correctPosition: data.correctPosition.clone(),
+    );
+
+    for (final index in state.lockedPieceIndexes) {
+      final data = allPieces[index];
+      progress.lockPiece();
+      world.add(
+        createPiece(data, data.correctPosition.clone())..restoreAsLocked(),
+      );
+    }
+    for (final entry in state.loosePiecePositions.entries) {
+      world.add(createPiece(allPieces[entry.key], entry.value.clone()));
+    }
+  }
+
+  /// Writes the current progress; removes the save once the puzzle is done.
+  /// Fire-and-forget: gameplay never waits on storage.
+  void persistProgress() {
+    final store = saveStore;
+    final key = saveKey;
+    if (store == null || key == null) {
+      return;
+    }
+    if (progress.isComplete) {
+      store.delete(key);
+      return;
+    }
+
+    store.save(key, _createSaveState());
+  }
+
+  /// Copies the live board and tray state into a snapshot for storage.
+  PuzzleSaveState _createSaveState() {
+    final lockedPieceIndexes = <int>[];
+    final loosePiecePositions = <int, Vector2>{};
+    for (final piece in world.children.whereType<PuzzlePiece>()) {
+      if (piece.isLocked) {
+        lockedPieceIndexes.add(piece.index);
+      } else {
+        loosePiecePositions[piece.index] = piece.position.clone();
+      }
+    }
+    return PuzzleSaveState(
+      trayPieceIndexes: _tray?.remainingPieceIndexes ?? const [],
+      lockedPieceIndexes: lockedPieceIndexes,
+      loosePiecePositions: loosePiecePositions,
+    );
   }
 
   void _showCompletionText() {

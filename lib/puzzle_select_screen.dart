@@ -9,14 +9,35 @@ import 'package:flutter/material.dart';
 
 import 'game_screen.dart';
 import 'puzzle_catalog.dart';
+import 'puzzle_save.dart';
 
 class PuzzleSelectScreen extends StatelessWidget {
   const PuzzleSelectScreen({super.key});
 
   Future<void> _startPuzzle(BuildContext context, PuzzleImage image) async {
+    // Resolve which sizes have a saved game BEFORE opening the sheet, so the
+    // sheet itself stays plain synchronous UI (an async lookup inside its
+    // build would re-trigger itself on every rebuild).
+    const store = SharedPreferencesSaveStore();
+    final inProgressSizes = <PuzzleSize>{};
+    for (final size in puzzleSizes) {
+      final key = puzzleSaveKey(
+        imageId: image.id,
+        columns: size.columns,
+        rows: size.rows,
+      );
+      if (await store.exists(key)) {
+        inProgressSizes.add(size);
+      }
+    }
+    if (!context.mounted) {
+      return;
+    }
+
     final selectedSize = await showModalBottomSheet<PuzzleSize>(
       context: context,
-      builder: (_) => _PuzzleSizePicker(image: image),
+      builder: (_) =>
+          _PuzzleSizePicker(image: image, inProgressSizes: inProgressSizes),
     );
 
     // The sheet can be dismissed, or this screen removed while it is open.
@@ -133,9 +154,12 @@ class _PuzzleCard extends StatelessWidget {
 }
 
 class _PuzzleSizePicker extends StatelessWidget {
-  const _PuzzleSizePicker({required this.image});
+  const _PuzzleSizePicker({required this.image, required this.inProgressSizes});
 
   final PuzzleImage image;
+
+  /// Sizes of this image that have a saved game to resume.
+  final Set<PuzzleSize> inProgressSizes;
 
   @override
   Widget build(BuildContext context) {
@@ -156,6 +180,15 @@ class _PuzzleSizePicker extends StatelessWidget {
             ListTile(
               title: Text('${size.pieceCount} pieces · ${size.label}'),
               subtitle: Text('${size.columns} × ${size.rows}'),
+              // Shows a resumable game; the e2e tests assert on this text.
+              trailing: inProgressSizes.contains(size)
+                  ? Text(
+                      'In progress',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    )
+                  : null,
               onTap: () => Navigator.pop(context, size),
             ),
         ],

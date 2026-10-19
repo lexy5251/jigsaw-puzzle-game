@@ -4,9 +4,16 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:jigsaw_puzzle/game_screen.dart';
 import 'package:jigsaw_puzzle/jigsaw_game.dart';
 import 'package:jigsaw_puzzle/main.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Covers the select → size picker → game screen navigation flow.
 void main() {
+  setUp(() {
+    // Backs shared_preferences with an in-memory map; without it the real
+    // plugin is missing in tests and storage lookups never complete.
+    SharedPreferences.setMockInitialValues({});
+  });
+
   testWidgets('selecting an image and size opens the game screen', (
     tester,
   ) async {

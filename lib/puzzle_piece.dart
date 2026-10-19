@@ -19,11 +19,15 @@ import 'puzzle_logic.dart';
 class PuzzlePiece extends SpriteComponent
     with DragCallbacks, HasGameReference<JigsawGame> {
   PuzzlePiece({
+    required this.index,
     required super.sprite,
     required super.size,
     required super.position,
     required this.correctPosition,
   });
+
+  /// Canonical piece number (row * columns + column); save files reference it.
+  final int index;
 
   static const _lockedPriority = -1;
   static const _loosePriority = 0;
@@ -83,7 +87,15 @@ class PuzzlePiece extends SpriteComponent
     } else {
       priority = _loosePriority;
       game.keepPieceClearOfTray(this);
+      game.persistProgress(); // the snap path saves via onPieceLocked
     }
+  }
+
+  /// Restores a saved locked piece: no snap animation, no progress count.
+  void restoreAsLocked() {
+    _isLocked = true;
+    position.setFrom(correctPosition);
+    priority = _lockedPriority;
   }
 
   void _snapIntoPlace() {

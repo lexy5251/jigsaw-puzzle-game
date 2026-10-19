@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 
 import 'jigsaw_game.dart';
 import 'puzzle_catalog.dart';
+import 'puzzle_save.dart';
 
 /// Hosts one running puzzle.
 class GameScreen extends StatefulWidget {
@@ -27,6 +28,12 @@ class _GameScreenState extends State<GameScreen> {
     imageAsset: widget.image.fileName,
     columns: widget.size.columns,
     rows: widget.size.rows,
+    saveStore: const SharedPreferencesSaveStore(),
+    saveKey: puzzleSaveKey(
+      imageId: widget.image.id,
+      columns: widget.size.columns,
+      rows: widget.size.rows,
+    ),
   );
 
   @override
