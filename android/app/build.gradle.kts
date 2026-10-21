@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.henrywang.jigsaw_puzzle"
+    namespace = "com.lexy5251.jigsawpuzzle"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -15,8 +15,8 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.henrywang.jigsaw_puzzle"
+        // Permanent once published — must match the iOS bundle ID by choice, not requirement.
+        applicationId = "com.lexy5251.jigsawpuzzle"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

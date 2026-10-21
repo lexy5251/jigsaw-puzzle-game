@@ -11,6 +11,7 @@ import 'package:flame/components.dart';
 import 'package:flame/effects.dart';
 import 'package:flame/events.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'jigsaw_game.dart';
 import 'puzzle_logic.dart';
@@ -38,12 +39,18 @@ class PuzzlePiece extends SpriteComponent
 
   bool _isLocked = false;
 
+  // Set while the snap glide runs: touches are already disabled, but the
+  // piece only counts — and saves — as locked once it reaches its spot.
+  // Otherwise a save written mid-glide could claim a finished board before
+  // the completion record exists.
+  bool _isSnapping = false;
+
   bool get isLocked => _isLocked;
 
-  // Locked pieces let drag gestures pass through to the board.
+  // Locked and snapping pieces let drag gestures pass through to the board.
   @override
   bool containsLocalPoint(Vector2 point) {
-    if (_isLocked) {
+    if (_isLocked || _isSnapping) {
       return false;
     }
 
@@ -58,7 +65,7 @@ class PuzzlePiece extends SpriteComponent
 
   @override
   void onDragUpdate(DragUpdateEvent event) {
-    if (_isLocked || game.isScaling) {
+    if (_isLocked || _isSnapping || game.isScaling) {
       return;
     }
 
@@ -73,7 +80,7 @@ class PuzzlePiece extends SpriteComponent
   void onDragEnd(DragEndEvent event) {
     super.onDragEnd(event);
 
-    if (!_isLocked) {
+    if (!_isLocked && !_isSnapping) {
       settle();
     }
   }
@@ -100,7 +107,7 @@ class PuzzlePiece extends SpriteComponent
 
   void _snapIntoPlace() {
     // Disable touches immediately, while the piece is still moving into place.
-    _isLocked = true;
+    _isSnapping = true;
     add(
       MoveToEffect(
         correctPosition.clone(),
@@ -111,6 +118,11 @@ class PuzzlePiece extends SpriteComponent
   }
 
   void _onSnapComplete() {
+    _isSnapping = false;
+    _isLocked = true;
+    // A small physical "click" when a piece locks. Errors are ignored:
+    // not every device (or test) supports haptics.
+    HapticFeedback.lightImpact().ignore();
     priority = _lockedPriority;
     add(
       ColorEffect(
