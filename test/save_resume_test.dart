@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flame/game.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jigsaw_puzzle/jigsaw_game.dart';
@@ -13,12 +15,16 @@ void main() {
     InMemorySaveStore store, {
     int columns = 6,
     int rows = 4,
+    Future<bool> Function()? onCompleted,
+    void Function(bool resumed)? onBoardLoaded,
   }) => JigsawGame(
     imageAsset: 'test_photo.jpg',
     columns: columns,
     rows: rows,
     saveStore: store,
     saveKey: key,
+    onCompleted: onCompleted,
+    onBoardLoaded: onBoardLoaded,
   );
 
   Future<void> bootGame(WidgetTester tester, JigsawGame game) async {
@@ -27,6 +33,7 @@ void main() {
     await tester.runAsync(() async {
       await tester.pumpWidget(GameWidget(game: game));
       await game.loaded;
+      await game.progressSaved;
     });
     // A few real ticks so queued component additions (tray, board) mount.
     for (var i = 0; i < 3; i++) {
@@ -68,8 +75,9 @@ void main() {
     return Offset(canvas.x, canvas.y);
   }
 
-  testWidgets('a saved game restores locked, loose, and tray pieces',
-      (tester) async {
+  testWidgets('a saved game restores locked, loose, and tray pieces', (
+    tester,
+  ) async {
     final store = InMemorySaveStore();
     final savedTrayOrder = [for (var i = 23; i >= 2; i--) i];
     await store.save(
@@ -81,9 +89,16 @@ void main() {
       ),
     );
 
-    final game = makeGame(store);
+    bool? reportedResumed;
+    final game = makeGame(
+      store,
+      onBoardLoaded: (resumed) {
+        reportedResumed = resumed;
+      },
+    );
     await bootGame(tester, game);
 
+    expect(reportedResumed, isTrue);
     expect(game.progress.lockedCount, 1);
     expect(game.trayPieceIndexes, savedTrayOrder);
 
@@ -97,8 +112,7 @@ void main() {
     expect(loose.position, Vector2(50, 70));
   });
 
-  testWidgets('a save that does not match the grid is ignored',
-      (tester) async {
+  testWidgets('a save that does not match the grid is ignored', (tester) async {
     final store = InMemorySaveStore();
     await store.save(
       key,
@@ -109,16 +123,24 @@ void main() {
       ),
     );
 
-    final game = makeGame(store);
+    bool? reportedResumed;
+    final game = makeGame(
+      store,
+      onBoardLoaded: (resumed) {
+        reportedResumed = resumed;
+      },
+    );
     await bootGame(tester, game);
 
+    expect(reportedResumed, isFalse);
     expect(game.progress.lockedCount, 0);
     expect(game.trayPieceIndexes, hasLength(24));
     expect(game.world.children.whereType<PuzzlePiece>(), isEmpty);
   });
 
-  testWidgets('dropping a piece loose on the board writes a snapshot',
-      (tester) async {
+  testWidgets('dropping a piece loose on the board writes a snapshot', (
+    tester,
+  ) async {
     final store = InMemorySaveStore();
     final game = makeGame(store);
     await bootGame(tester, game);
@@ -128,7 +150,11 @@ void main() {
     final target =
         piece.correctPosition + piece.size / 2 + Vector2(piece.size.x, 0);
     await dragTo(
-        tester, gesture, const Offset(50, 400), canvasPointFor(game, target));
+      tester,
+      gesture,
+      const Offset(50, 400),
+      canvasPointFor(game, target),
+    );
     await gesture.up();
     await tester.pump(const Duration(milliseconds: 16));
 
@@ -140,16 +166,31 @@ void main() {
     expect(saved.loosePiecePositions.keys.single, piece.index);
   });
 
-  testWidgets('completing the puzzle deletes its save', (tester) async {
+  testWidgets('completing the puzzle deletes its save and reports completion', (
+    tester,
+  ) async {
     final store = InMemorySaveStore();
+    var completions = 0;
     // A 1x1 puzzle completes with a single correct drop.
-    final game = makeGame(store, columns: 1, rows: 1);
+    final game = makeGame(
+      store,
+      columns: 1,
+      rows: 1,
+      onCompleted: () async {
+        completions++;
+        return true;
+      },
+    );
     await bootGame(tester, game);
 
     final (gesture, piece) = await liftPieceFromTray(tester, game);
     final target = piece.correctPosition + piece.size / 2;
     await dragTo(
-        tester, gesture, const Offset(50, 400), canvasPointFor(game, target));
+      tester,
+      gesture,
+      const Offset(50, 400),
+      canvasPointFor(game, target),
+    );
     await gesture.up();
     await tester.pump(const Duration(milliseconds: 16));
 
@@ -159,6 +200,202 @@ void main() {
     }
 
     expect(game.progress.isComplete, isTrue);
+    expect(completions, 1);
     expect(await store.exists(key), isFalse);
   });
+
+  testWidgets('a delayed progress write cannot recreate a completed save', (
+    tester,
+  ) async {
+    final store = _DelayedSaveStore();
+    final game = makeGame(
+      store,
+      columns: 1,
+      rows: 1,
+      onCompleted: () async => true,
+    );
+    await bootGame(tester, game);
+    final writeGate = Completer<void>();
+    store.writeGate = writeGate;
+    addTearDown(() {
+      if (!writeGate.isCompleted) {
+        writeGate.complete();
+      }
+    });
+    game.persistProgress();
+    await tester.pump();
+
+    final (gesture, piece) = await liftPieceFromTray(tester, game);
+    final target = piece.correctPosition + piece.size / 2;
+    await dragTo(
+      tester,
+      gesture,
+      const Offset(50, 400),
+      canvasPointFor(game, target),
+    );
+    await gesture.up();
+    for (var i = 0; i < 30; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+
+    expect(game.progress.isComplete, isTrue);
+    expect(await store.exists(key), isTrue);
+    writeGate.complete();
+    await tester.pump();
+    expect(await store.exists(key), isFalse);
+  });
+
+  testWidgets(
+    'a save written while a piece is still snapping stays resumable',
+    (tester) async {
+      final store = _RecordingSaveStore();
+      // Both pieces loose on the board, ready to be dropped on their spots.
+      await store.save(
+        key,
+        PuzzleSaveState(
+          trayPieceIndexes: const [],
+          lockedPieceIndexes: const [],
+          loosePiecePositions: {0: Vector2(10, 40), 1: Vector2(60, 40)},
+        ),
+      );
+      var completions = 0;
+      final game = makeGame(
+        store,
+        columns: 2,
+        rows: 1,
+        onCompleted: () async {
+          completions++;
+          return true;
+        },
+      );
+      await bootGame(tester, game);
+
+      // Drop the second piece while the first one's snap glide (100ms) is
+      // still running: the save written when the first piece locks must not
+      // already count the gliding one.
+      final pieces = game.world.children.whereType<PuzzlePiece>().toList();
+      for (final piece in pieces) {
+        piece.position.setFrom(piece.correctPosition);
+        piece.settle();
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      for (var i = 0; i < 30; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+
+      expect(game.progress.isComplete, isTrue);
+      expect(completions, 1);
+      for (final snapshot in store.written) {
+        expect(snapshot.lockedPieceIndexes, hasLength(lessThan(2)));
+      }
+      expect(await store.exists(key), isFalse);
+    },
+  );
+
+  testWidgets('restoring a fully locked save still records the completion', (
+    tester,
+  ) async {
+    final store = InMemorySaveStore();
+    // Should never be written, but must self-heal if it ever exists:
+    // without a retry the puzzle would stay "in progress" forever.
+    await store.save(
+      key,
+      PuzzleSaveState(
+        trayPieceIndexes: const [],
+        lockedPieceIndexes: const [0, 1],
+        loosePiecePositions: const {},
+      ),
+    );
+    var completions = 0;
+    final game = makeGame(
+      store,
+      columns: 2,
+      rows: 1,
+      onCompleted: () async {
+        completions++;
+        return true;
+      },
+    );
+    await bootGame(tester, game);
+    await tester.pump();
+
+    expect(game.progress.isComplete, isTrue);
+    expect(completions, 1);
+    expect(await store.exists(key), isFalse);
+  });
+
+  testWidgets('a late completion cannot delete a newer session save', (
+    tester,
+  ) async {
+    final store = InMemorySaveStore();
+    await store.save(
+      key,
+      PuzzleSaveState(
+        trayPieceIndexes: const [],
+        lockedPieceIndexes: const [],
+        loosePiecePositions: {0: Vector2(25, 30)},
+      ),
+    );
+    final completionGate = Completer<bool>();
+    addTearDown(() {
+      if (!completionGate.isCompleted) {
+        completionGate.complete(true);
+      }
+    });
+    final oldGame = makeGame(
+      store,
+      columns: 1,
+      rows: 1,
+      onCompleted: () => completionGate.future,
+    );
+    await bootGame(tester, oldGame);
+
+    final piece = oldGame.world.children.whereType<PuzzlePiece>().single;
+    piece.position.setFrom(piece.correctPosition);
+    piece.settle();
+    for (var i = 0; i < 30; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(oldGame.progress.isComplete, isTrue);
+
+    // The player reopens the puzzle while the completion record is still
+    // being written: the new session takes over the save key.
+    final newGame = makeGame(store, columns: 1, rows: 1);
+    await bootGame(tester, newGame);
+    final newPiece = newGame.world.children.whereType<PuzzlePiece>().single;
+    newPiece.position.setValues(40, 50);
+    newGame.persistProgress();
+    await tester.runAsync(() => newGame.progressSaved);
+
+    // The old session's completion finally lands; it must leave the new
+    // session's save alone.
+    completionGate.complete(true);
+    await tester.pump();
+    await tester.pump();
+
+    final saved = await store.load(key);
+    expect(saved, isNotNull);
+    expect(saved!.loosePiecePositions[0], Vector2(40, 50));
+  });
+}
+
+class _DelayedSaveStore extends InMemorySaveStore {
+  Completer<void>? writeGate;
+
+  @override
+  Future<void> save(String key, PuzzleSaveState state) async {
+    await writeGate?.future;
+    await super.save(key, state);
+  }
+}
+
+/// Remembers every snapshot written, so tests can check intermediate saves.
+class _RecordingSaveStore extends InMemorySaveStore {
+  final List<PuzzleSaveState> written = [];
+
+  @override
+  Future<void> save(String key, PuzzleSaveState state) {
+    written.add(state);
+    return super.save(key, state);
+  }
 }

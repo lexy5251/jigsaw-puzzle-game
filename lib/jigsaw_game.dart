@@ -7,20 +7,28 @@
 // 4. Dragging empty space pans the camera; pinching or scrolling zooms
 //    around the fingers or cursor. Camera movement and zoom are limited.
 // 5. keepPieceClearOfTray moves dropped pieces up if they overlap the tray.
-// 6. onPieceLocked counts placed pieces and shows "Puzzle complete!"
-//    when every piece is locked in its correct position.
-// 7. persistProgress saves the board and tray after a move, or deletes the
-//    save when the puzzle is complete.
+// 6. onPieceLocked counts placed pieces. When the last one locks, a glow
+//    washes over the finished image and onCompleted tells the host screen
+//    (which records the completion and shows the celebration UI).
+// 7. persistProgress saves the board and tray once a fresh puzzle has loaded
+//    and after every move. Progress is deleted only after the host confirms
+//    that the completion record was saved successfully — and only while this
+//    game still owns the save key: reopening the same puzzle hands ownership
+//    to the new session, so a lingering old session cannot touch its save.
 //
 // PieceTray and PuzzlePiece handle dragging pieces and snapping them into place.
 
+import 'dart:async';
 import 'dart:math';
 import 'dart:ui' as ui;
 
 import 'package:flame/components.dart';
+import 'package:flame/effects.dart';
 import 'package:flame/events.dart';
 import 'package:flame/game.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'piece_tray.dart';
 import 'puzzle_logic.dart';
@@ -37,7 +45,19 @@ class JigsawGame extends FlameGame
     required this.rows,
     this.saveStore,
     this.saveKey,
+    this.onCompleted,
+    this.onBoardLoaded,
   });
+
+  /// Reports whether this game resumed from a save (true) or started fresh,
+  /// once loading finishes. The host screen exposes it via Semantics so
+  /// end-to-end tests can check that a resume actually restored state.
+  final void Function(bool resumed)? onBoardLoaded;
+
+  /// Fired once, the moment the last piece locks. The host screen records
+  /// the completion and shows the celebration UI. It must return true only
+  /// after the record is saved; false or an error keeps the progress save.
+  final Future<bool> Function()? onCompleted;
 
   /// Image file name under assets/images/ (Flame's default image prefix).
   final String imageAsset;
@@ -54,6 +74,22 @@ class JigsawGame extends FlameGame
   /// Live count of correctly placed pieces, used to detect completion.
   late final PuzzleProgress progress;
 
+  // Serialize progress writes so a delayed write cannot recreate a save
+  // after a successful completion has deleted it.
+  Future<void>? _pendingProgressSave;
+
+  // Which game instance currently owns each save key (this app run). If the
+  // player reopens a puzzle while an older session is still finishing its
+  // completion bookkeeping, the new session claims the key and the old one
+  // must no longer write or delete the save — it could wipe new progress.
+  static final Map<String, Object> _saveKeyOwners = {};
+  final Object _saveOwnerToken = Object();
+
+  bool get _ownsSaveKey {
+    final key = saveKey;
+    return key == null || identical(_saveKeyOwners[key], _saveOwnerToken);
+  }
+
   // Live piece state: the tray holds unused pieces; world holds board pieces.
   PieceTray? _tray;
   late Vector2 _boardSize;
@@ -68,6 +104,11 @@ class JigsawGame extends FlameGame
 
   @override
   Future<void> onLoad() async {
+    final key = saveKey;
+    if (key != null) {
+      _saveKeyOwners[key] = _saveOwnerToken;
+    }
+
     final image = await images.load(imageAsset);
 
     final pieceSize = Vector2(image.width / columns, image.height / rows);
@@ -91,7 +132,13 @@ class JigsawGame extends FlameGame
     }
 
     _addTray(trayPieces, pieceSize);
+    if (savedState == null) {
+      // Save right away: opening a puzzle marks it "in progress", and the
+      // shuffled tray order survives an app restart instead of reshuffling.
+      persistProgress();
+    }
     _fitCameraToBoard();
+    onBoardLoaded?.call(savedState != null);
   }
 
   void _addBoardOutline() {
@@ -249,14 +296,71 @@ class JigsawGame extends FlameGame
 
   void onPieceLocked() {
     if (progress.lockPiece()) {
-      _showCompletionText();
+      _celebrateCompletion();
     }
     persistProgress();
+  }
+
+  void _celebrateCompletion() {
+    unawaited(_recordCompletion());
+    HapticFeedback.heavyImpact().ignore();
+    _playCompletionGlow();
+  }
+
+  Future<void> _recordCompletion() async {
+    final recordCompletion = onCompleted;
+    if (recordCompletion == null) {
+      return;
+    }
+    try {
+      if (!await recordCompletion()) {
+        return;
+      }
+      await _pendingProgressSave;
+      final store = saveStore;
+      final key = saveKey;
+      // Skip the delete if a newer session took over this puzzle meanwhile:
+      // the save on disk is that session's progress, not ours to remove.
+      if (store != null && key != null && _ownsSaveKey) {
+        await store.delete(key);
+      }
+    } on Object catch (error) {
+      if (kDebugMode) {
+        debugPrint('Puzzle completion failed; progress retained: $error');
+      }
+    }
+  }
+
+  /// A soft white pulse over the finished image. The host screen times its
+  /// celebration card to appear as this fades out.
+  void _playCompletionGlow() {
+    final glow = RectangleComponent(
+      size: _boardSize.clone(),
+      priority: 150, // Above every piece.
+      paint: Paint()..color = const Color(0x00FFFFFF),
+    );
+    world.add(glow);
+    glow.add(
+      OpacityEffect.to(
+        0.7,
+        EffectController(
+          duration: 0.45,
+          alternate: true, // Fade in, then back out.
+          curve: Curves.easeOut,
+        ),
+        onComplete: glow.removeFromParent,
+      ),
+    );
   }
 
   /// Piece indexes still in the tray — exposed for tests.
   @visibleForTesting
   List<int> get trayPieceIndexes => _tray?.remainingPieceIndexes ?? const [];
+
+  /// Lets tests wait for queued writes instead of relying on frame timing.
+  @visibleForTesting
+  Future<void> get progressSaved =>
+      _pendingProgressSave ?? Future<void>.value();
 
   /// Returns a usable save, or null to start fresh.
   /// Storage may be disabled, or the save may be missing or invalid.
@@ -290,7 +394,12 @@ class JigsawGame extends FlameGame
 
     for (final index in state.lockedPieceIndexes) {
       final data = allPieces[index];
-      progress.lockPiece();
+      // A finished board should never be saved, but if one slips through,
+      // celebrating here retries the completion record (and the save delete)
+      // instead of leaving the puzzle stuck "in progress" forever.
+      if (progress.lockPiece()) {
+        _celebrateCompletion();
+      }
       world.add(
         createPiece(data, data.correctPosition.clone())..restoreAsLocked(),
       );
@@ -300,20 +409,42 @@ class JigsawGame extends FlameGame
     }
   }
 
-  /// Writes the current progress; removes the save once the puzzle is done.
+  /// Writes progress while playing. Completion retains the last resumable
+  /// snapshot until _recordCompletion confirms the permanent record is saved.
   /// Fire-and-forget: gameplay never waits on storage.
   void persistProgress() {
     final store = saveStore;
     final key = saveKey;
-    if (store == null || key == null) {
+    if (store == null || key == null || !_ownsSaveKey) {
       return;
     }
     if (progress.isComplete) {
-      store.delete(key);
       return;
     }
 
-    store.save(key, _createSaveState());
+    final state = _createSaveState();
+    Future<void> writeSnapshot() async {
+      try {
+        await store.save(key, state);
+      } on Object catch (error) {
+        if (kDebugMode) {
+          debugPrint('Puzzle progress save failed: $error');
+        }
+      }
+    }
+
+    final previousWrite = _pendingProgressSave;
+    final write = previousWrite == null
+        ? writeSnapshot()
+        : previousWrite.then((_) => writeSnapshot());
+    _pendingProgressSave = write;
+    unawaited(
+      write.then((_) {
+        if (identical(_pendingProgressSave, write)) {
+          _pendingProgressSave = null;
+        }
+      }),
+    );
   }
 
   /// Copies the live board and tray state into a snapshot for storage.
@@ -331,24 +462,6 @@ class JigsawGame extends FlameGame
       trayPieceIndexes: _tray?.remainingPieceIndexes ?? const [],
       lockedPieceIndexes: lockedPieceIndexes,
       loosePiecePositions: loosePiecePositions,
-    );
-  }
-
-  void _showCompletionText() {
-    camera.viewport.add(
-      TextComponent(
-        text: 'Puzzle complete!',
-        anchor: Anchor.center,
-        position: size / 2,
-        priority: 200,
-        textRenderer: TextPaint(
-          style: const TextStyle(
-            fontSize: 36,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
-        ),
-      ),
     );
   }
 }

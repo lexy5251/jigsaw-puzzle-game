@@ -1,0 +1,37 @@
+# Week 3 milestone, automated: start a puzzle, kill the app, reopen,
+# and prove the puzzle resumed from its save.
+#
+# Run on the iOS simulator or an Android emulator (same app ID on both):
+#   maestro test .maestro/resume_after_restart.yaml
+#
+# Maestro can't see inside the Flame canvas (one opaque "Puzzle board"
+# element), so drag/snap stays in the Dart tests. This flow asserts resume
+# via the "In progress" label in the size picker, plus the board's own
+# semantics label, which says whether the game restored a save ("resumed")
+# or silently started over ("new puzzle").
+appId: com.lexy5251.jigsawpuzzle
+---
+# Fresh install state so the flow is repeatable.
+- launchApp:
+    clearState: true
+- assertVisible: "Choose a puzzle"
+
+# Pick the first puzzle at the easiest size. No save exists yet,
+# so the board must report a fresh start.
+- tapOn: "Alpine Lakes Panorama"
+- tapOn: ".*24 pieces.*"
+- assertVisible: "Puzzle board, new puzzle"
+
+# Kill the app completely, then relaunch WITHOUT clearing state.
+- stopApp
+- launchApp
+- assertVisible: "Choose a puzzle"
+
+# The save must have survived the kill: the size picker marks it.
+- tapOn: "Alpine Lakes Panorama"
+- assertVisible: ".*In progress.*"
+
+# And it actually reopens into the saved puzzle — "resumed" proves the game
+# restored the save rather than starting a fresh board.
+- tapOn: ".*24 pieces.*"
+- assertVisible: "Puzzle board, resumed"
