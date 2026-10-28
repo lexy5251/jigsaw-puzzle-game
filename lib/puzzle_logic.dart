@@ -33,6 +33,14 @@ class PuzzleProgress {
   }
 }
 
+/// Whether the piece at [index] belongs to the puzzle's outermost ring.
+/// Edge pieces form the frame players usually assemble first.
+bool isEdgePiece(int index, int columns, int rows) {
+  final row = index ~/ columns;
+  final column = index % columns;
+  return row == 0 || row == rows - 1 || column == 0 || column == columns - 1;
+}
+
 /// Clamps a tray scroll offset so the piece strip never scrolls past its ends.
 double clampTrayScroll(double offset, double stripWidth, double trayWidth) {
   final maxOffset = max(0.0, stripWidth - trayWidth);

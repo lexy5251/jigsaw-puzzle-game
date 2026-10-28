@@ -19,13 +19,19 @@ class PieceData {
   PieceData({
     required this.index,
     required this.sprite,
+    required this.renderBleed,
     required this.correctPosition,
   });
 
   /// Canonical piece number (row * columns + column); save files reference it.
   final int index;
 
+  /// The shaped piece image: the base cell plus [renderBleed] margin all
+  /// around, so tabs that stick out past the cell are included.
   final Sprite sprite;
+
+  /// How far [sprite] extends past the base cell on each axis.
+  final Vector2 renderBleed;
 
   /// World position of the piece's top-left corner when solved.
   final Vector2 correctPosition;
@@ -37,6 +43,7 @@ class PieceTray extends PositionComponent
   PieceTray({
     required List<PieceData> pieces,
     required this.pieceWorldSize,
+    required this.isEdgePiece,
     required super.position,
     required super.size,
   }) : _remainingPieces = List.of(pieces);
@@ -47,8 +54,17 @@ class PieceTray extends PositionComponent
   /// Full size on the board; tray previews preserve this aspect ratio.
   final Vector2 pieceWorldSize;
 
+  /// Tells the tray which piece indexes belong to the puzzle border,
+  /// so the edges-only filter can work without knowing the grid size.
+  final bool Function(int pieceIndex) isEdgePiece;
+
   final List<PieceData> _remainingPieces;
+
+  /// Thumbnails currently shown — only the filtered subset when
+  /// edges-only is on. [_remainingPieces] always holds every unused piece.
   final List<_TrayThumbnail> _thumbnails = [];
+  bool _edgesOnly = false;
+  bool _filterRebuildPending = false;
 
   final _thumbnailStrip = PositionComponent();
   double _scrollOffset = 0;
@@ -61,17 +77,35 @@ class PieceTray extends PositionComponent
   late final ClipComponent _trayClip;
 
   double get _thumbnailHeight => size.y - _padding * 2;
-  double get _thumbnailWidth =>
-      _thumbnailHeight * pieceWorldSize.x / pieceWorldSize.y;
+
+  // Previews show the shaped piece images, which carry a transparent bleed
+  // margin around the base cell — use their aspect ratio, not the cell's,
+  // so the shapes aren't stretched.
+  double get _thumbnailAspect {
+    final sprites = _remainingPieces;
+    if (sprites.isEmpty) {
+      return pieceWorldSize.x / pieceWorldSize.y;
+    }
+    final srcSize = sprites.first.sprite.srcSize;
+    return srcSize.x / srcSize.y;
+  }
+
+  double get _thumbnailWidth => _thumbnailHeight * _thumbnailAspect;
   double get _thumbnailSlotWidth => _thumbnailWidth + _padding;
-  double get _stripWidth =>
-      _padding + _remainingPieces.length * _thumbnailSlotWidth;
+  double get _stripWidth => _padding + _thumbnails.length * _thumbnailSlotWidth;
 
   bool get isEmpty => _remainingPieces.isEmpty;
 
   /// Piece indexes still in the tray, in display order (used by saves).
-  List<int> get remainingPieceIndexes =>
-      [for (final data in _remainingPieces) data.index];
+  /// Always the full list, regardless of the edges-only filter.
+  List<int> get remainingPieceIndexes => [
+    for (final data in _remainingPieces) data.index,
+  ];
+
+  /// Piece indexes currently shown in the strip (the filtered subset).
+  List<int> get visiblePieceIndexes => [
+    for (final thumbnail in _thumbnails) thumbnail.data.index,
+  ];
 
   @override
   Future<void> onLoad() async {
@@ -86,7 +120,37 @@ class PieceTray extends PositionComponent
     _trayClip.add(_thumbnailStrip);
     add(_trayClip);
 
+    _rebuildThumbnails();
+  }
+
+  /// Shows only edge pieces (true) or every unused piece (false).
+  void setEdgesOnly(bool enabled) {
+    if (_edgesOnly == enabled) {
+      return;
+    }
+    _edgesOnly = enabled;
+    if (isLoaded) {
+      // Keep the selected thumbnail alive until this pointer releases it.
+      if (_activePointerId != null) {
+        _filterRebuildPending = true;
+      } else {
+        _rebuildThumbnails();
+      }
+    }
+  }
+
+  /// Recreates the thumbnail strip from the current filter and remaining
+  /// pieces. Cheap enough to rebuild wholesale on every filter change.
+  void _rebuildThumbnails() {
+    for (final thumbnail in _thumbnails) {
+      thumbnail.removeFromParent();
+    }
+    _thumbnails.clear();
+
     for (final pieceData in _remainingPieces) {
+      if (_edgesOnly && !isEdgePiece(pieceData.index)) {
+        continue;
+      }
       final thumbnail = _TrayThumbnail(
         data: pieceData,
         size: Vector2(_thumbnailWidth, _thumbnailHeight),
@@ -181,6 +245,10 @@ class PieceTray extends PositionComponent
     _carriedPiece = null;
     _selectedThumbnail = null;
     _activePointerId = null;
+    if (_filterRebuildPending) {
+      _filterRebuildPending = false;
+      _rebuildThumbnails();
+    }
   }
 
   // The tray owns this drag until release, even after the piece leaves it.
@@ -188,6 +256,7 @@ class PieceTray extends PositionComponent
     final piece = PuzzlePiece(
       index: thumbnail.data.index,
       sprite: thumbnail.data.sprite,
+      renderBleed: thumbnail.data.renderBleed,
       size: pieceWorldSize.clone(),
       position: Vector2.zero(),
       correctPosition: thumbnail.data.correctPosition,

@@ -10,6 +10,7 @@
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 
+import 'game_sounds.dart';
 import 'jigsaw_game.dart';
 import 'puzzle_catalog.dart';
 import 'puzzle_completion.dart';
@@ -17,10 +18,19 @@ import 'puzzle_save.dart';
 
 /// Hosts one running puzzle.
 class GameScreen extends StatefulWidget {
-  const GameScreen({super.key, required this.image, required this.size});
+  const GameScreen({
+    super.key,
+    required this.image,
+    required this.size,
+    this.sounds,
+  });
 
   final PuzzleImage image;
   final PuzzleSize size;
+
+  /// Gameplay audio; when omitted the screen uses the real app sounds.
+  /// Tests pass a fake (the audio plugin does not exist there).
+  final GameSounds? sounds;
 
   @override
   State<GameScreen> createState() => _GameScreenState();
@@ -28,6 +38,8 @@ class GameScreen extends StatefulWidget {
 
 class _GameScreenState extends State<GameScreen> {
   bool _showCompletionCard = false;
+  bool _edgesOnly = false;
+  bool _showGhostPreview = false;
 
   /// Null until the game finishes loading, then whether it resumed a save.
   bool? _resumed;
@@ -36,6 +48,7 @@ class _GameScreenState extends State<GameScreen> {
     imageAsset: widget.image.fileName,
     columns: widget.size.columns,
     rows: widget.size.rows,
+    sounds: widget.sounds ?? FlameAudioSounds(),
     saveStore: const SharedPreferencesSaveStore(),
     saveKey: puzzleSaveKey(
       imageId: widget.image.id,
@@ -79,7 +92,31 @@ class _GameScreenState extends State<GameScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(),
+      // Constant tooltips (they double as semantics labels for e2e tests);
+      // the pressed state shows through the buttons' isSelected styling.
+      appBar: AppBar(
+        actions: [
+          IconButton(
+            tooltip: 'Edge pieces only',
+            isSelected: _edgesOnly,
+            icon: const Icon(Icons.border_outer),
+            onPressed: () {
+              setState(() => _edgesOnly = !_edgesOnly);
+              _game.setEdgesOnlyFilter(_edgesOnly);
+            },
+          ),
+          IconButton(
+            tooltip: 'Image preview',
+            isSelected: _showGhostPreview,
+            icon: const Icon(Icons.image_outlined),
+            selectedIcon: const Icon(Icons.image),
+            onPressed: () {
+              setState(() => _showGhostPreview = !_showGhostPreview);
+              _game.setGhostPreview(_showGhostPreview);
+            },
+          ),
+        ],
+      ),
       body: Stack(
         children: [
           // Labeled so e2e tests (and screen readers) can identify the
