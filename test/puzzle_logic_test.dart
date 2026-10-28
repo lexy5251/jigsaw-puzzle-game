@@ -36,6 +36,30 @@ void main() {
     });
   });
 
+  group('isEdgePiece', () {
+    // 4x3 grid: indexes 0-3 top row, 8-11 bottom row, 4/7 side pieces,
+    // 5 and 6 are the only interior pieces.
+    const columns = 4;
+    const rows = 3;
+
+    test('corners and borders are edges', () {
+      for (final index in [0, 1, 2, 3, 4, 7, 8, 9, 10, 11]) {
+        expect(isEdgePiece(index, columns, rows), isTrue, reason: '$index');
+      }
+    });
+
+    test('interior pieces are not edges', () {
+      expect(isEdgePiece(5, columns, rows), isFalse);
+      expect(isEdgePiece(6, columns, rows), isFalse);
+    });
+
+    test('every piece is an edge in a single-row puzzle', () {
+      for (var index = 0; index < 5; index++) {
+        expect(isEdgePiece(index, 5, 1), isTrue, reason: '$index');
+      }
+    });
+  });
+
   group('clampTrayScroll', () {
     test('never scrolls when all pieces fit in the tray', () {
       expect(clampTrayScroll(50, 200, 400), 0);

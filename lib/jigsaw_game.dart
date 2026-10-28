@@ -30,6 +30,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'game_sounds.dart';
+import 'piece_renderer.dart';
+import 'piece_shapes.dart';
 import 'piece_tray.dart';
 import 'puzzle_logic.dart';
 import 'puzzle_piece.dart';
@@ -45,9 +48,13 @@ class JigsawGame extends FlameGame
     required this.rows,
     this.saveStore,
     this.saveKey,
+    this.sounds,
     this.onCompleted,
     this.onBoardLoaded,
   });
+
+  /// Owned by this game and disposed with it; null keeps the game silent.
+  final GameSounds? sounds;
 
   /// Reports whether this game resumed from a save (true) or started fresh,
   /// once loading finishes. The host screen exposes it via Semantics so
@@ -93,6 +100,14 @@ class JigsawGame extends FlameGame
   // Live piece state: the tray holds unused pieces; world holds board pieces.
   PieceTray? _tray;
   late Vector2 _boardSize;
+  final List<ShapedPieceImage> _pieceImages = [];
+  bool _disposed = false;
+
+  // Toggles arrive from the host screen's buttons, possibly before onLoad
+  // finishes, so the desired state is stored and applied once loading is done.
+  SpriteComponent? _ghostPreview;
+  bool _ghostPreviewEnabled = false;
+  bool _edgesOnlyFilter = false;
 
   late double _fitZoom;
   double _zoomAtPinchStart = 1;
@@ -104,20 +119,63 @@ class JigsawGame extends FlameGame
 
   @override
   Future<void> onLoad() async {
+    if (_disposed) {
+      return;
+    }
+    try {
+      await _loadPuzzle();
+    } catch (_) {
+      _disposePieceImages();
+      rethrow;
+    }
+  }
+
+  Future<void> _loadPuzzle() async {
     final key = saveKey;
     if (key != null) {
       _saveKeyOwners[key] = _saveOwnerToken;
     }
 
+    // Warm the sound cache in the background; loading must not wait on it.
+    unawaited(sounds?.preload());
+
     final image = await images.load(imageAsset);
+    if (_disposed) {
+      return;
+    }
 
     final pieceSize = Vector2(image.width / columns, image.height / rows);
     _boardSize = Vector2(image.width.toDouble(), image.height.toDouble());
     progress = PuzzleProgress(totalPieces: columns * rows);
 
     _addBoardOutline();
-    final allPieces = _createPieceData(image, pieceSize);
+    _addGhostPreview(image);
+
+    // Cut the photo into shaped pieces. The seed comes from the save key so
+    // a resumed puzzle is re-cut exactly the same way; without a key (tests)
+    // the image + grid still give one stable cut per puzzle.
+    final shapes = PieceShapeGrid.generate(
+      columns: columns,
+      rows: rows,
+      seed: shapeSeedForKey(saveKey ?? '$imageAsset.${columns}x$rows'),
+    );
+    final shapedImages = await rasterizePieces(
+      source: image,
+      columns: columns,
+      rows: rows,
+      shapes: shapes,
+    );
+    _pieceImages.addAll(shapedImages);
+    // Disposal can happen while the rasterizer is still producing images.
+    if (_disposed) {
+      _disposePieceImages();
+      return;
+    }
+    final allPieces = _createPieceData(shapedImages, pieceSize);
     final savedState = await _loadSavedProgress(allPieces.length);
+    if (_disposed) {
+      return;
+    }
 
     final List<PieceData> trayPieces;
     if (savedState == null) {
@@ -141,6 +199,52 @@ class JigsawGame extends FlameGame
     onBoardLoaded?.call(savedState != null);
   }
 
+  @override
+  void onDispose() {
+    if (_disposed) {
+      return;
+    }
+    _disposed = true;
+    _disposePieceImages();
+    unawaited(sounds?.dispose());
+    super.onDispose();
+  }
+
+  void _disposePieceImages() {
+    for (final image in _pieceImages) {
+      image.dispose();
+    }
+    _pieceImages.clear();
+  }
+
+  /// How visible the ghost hint image is when enabled. Strong enough to
+  /// guide placement, faint enough that locked pieces clearly stand out.
+  static const _ghostOpacity = 0.25;
+
+  /// A dimmed copy of the finished picture, under everything on the board.
+  /// It starts invisible; [setGhostPreview] switches its visibility.
+  void _addGhostPreview(ui.Image image) {
+    final ghost = SpriteComponent(
+      sprite: Sprite(image),
+      size: _boardSize.clone(),
+      priority: -3, // Below the board outline and all pieces.
+    )..opacity = _ghostPreviewEnabled ? _ghostOpacity : 0;
+    _ghostPreview = ghost;
+    world.add(ghost);
+  }
+
+  /// Shows or hides the faint full-image hint on the board.
+  void setGhostPreview(bool enabled) {
+    _ghostPreviewEnabled = enabled;
+    _ghostPreview?.opacity = enabled ? _ghostOpacity : 0;
+  }
+
+  /// Limits the tray to border pieces (true) or shows all pieces (false).
+  void setEdgesOnlyFilter(bool enabled) {
+    _edgesOnlyFilter = enabled;
+    _tray?.setEdgesOnly(enabled);
+  }
+
   void _addBoardOutline() {
     world.add(
       RectangleComponent(
@@ -154,38 +258,34 @@ class JigsawGame extends FlameGame
     );
   }
 
-  /// Cuts the image into pieces with stable indexes for saving and restoring.
-  List<PieceData> _createPieceData(ui.Image image, Vector2 pieceSize) {
-    final pieces = <PieceData>[];
-    for (var row = 0; row < rows; row++) {
-      for (var column = 0; column < columns; column++) {
-        final correctPosition = Vector2(
-          column * pieceSize.x,
-          row * pieceSize.y,
-        );
-        pieces.add(
-          PieceData(
-            index: row * columns + column,
-            sprite: Sprite(
-              image,
-              srcPosition: correctPosition.clone(),
-              srcSize: pieceSize,
-            ),
-            correctPosition: correctPosition,
+  /// Pairs each shaped piece image with stable indexes and solved positions
+  /// for saving and restoring.
+  List<PieceData> _createPieceData(
+    List<ShapedPieceImage> shapedImages,
+    Vector2 pieceSize,
+  ) {
+    return [
+      for (var index = 0; index < shapedImages.length; index++)
+        PieceData(
+          index: index,
+          sprite: shapedImages[index].sprite,
+          renderBleed: shapedImages[index].bleed,
+          correctPosition: Vector2(
+            (index % columns) * pieceSize.x,
+            (index ~/ columns) * pieceSize.y,
           ),
-        );
-      }
-    }
-    return pieces;
+        ),
+    ];
   }
 
   void _addTray(List<PieceData> pieces, Vector2 pieceSize) {
     final tray = PieceTray(
       pieces: pieces,
       pieceWorldSize: pieceSize,
+      isEdgePiece: (pieceIndex) => isEdgePiece(pieceIndex, columns, rows),
       position: Vector2(0, size.y - _trayHeight),
       size: Vector2(size.x, _trayHeight),
-    );
+    )..setEdgesOnly(_edgesOnlyFilter);
     _tray = tray;
     camera.viewport.add(tray);
   }
@@ -303,6 +403,7 @@ class JigsawGame extends FlameGame
 
   void _celebrateCompletion() {
     unawaited(_recordCompletion());
+    sounds?.playComplete();
     HapticFeedback.heavyImpact().ignore();
     _playCompletionGlow();
   }
@@ -357,6 +458,15 @@ class JigsawGame extends FlameGame
   @visibleForTesting
   List<int> get trayPieceIndexes => _tray?.remainingPieceIndexes ?? const [];
 
+  /// Piece indexes shown in the tray after filtering — exposed for tests.
+  @visibleForTesting
+  List<int> get visibleTrayPieceIndexes =>
+      _tray?.visiblePieceIndexes ?? const [];
+
+  /// The ghost hint's current opacity — exposed for tests.
+  @visibleForTesting
+  double get ghostPreviewOpacity => _ghostPreview?.opacity ?? 0;
+
   /// Lets tests wait for queued writes instead of relying on frame timing.
   @visibleForTesting
   Future<void> get progressSaved =>
@@ -387,6 +497,7 @@ class JigsawGame extends FlameGame
     PuzzlePiece createPiece(PieceData data, Vector2 position) => PuzzlePiece(
       index: data.index,
       sprite: data.sprite,
+      renderBleed: data.renderBleed,
       size: pieceSize.clone(),
       position: position,
       correctPosition: data.correctPosition.clone(),

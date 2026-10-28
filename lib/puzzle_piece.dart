@@ -25,10 +25,18 @@ class PuzzlePiece extends SpriteComponent
     required super.size,
     required super.position,
     required this.correctPosition,
-  });
+    Vector2? renderBleed,
+  }) : renderBleed = renderBleed ?? Vector2.zero();
 
   /// Canonical piece number (row * columns + column); save files reference it.
   final int index;
+
+  /// How far the shaped sprite extends past this piece's base rectangle.
+  /// Position, snapping, saves and touch areas all use the base rectangle;
+  /// only the drawing is bigger, shifted up-left by this much. (The base
+  /// rect also stays the touch target on purpose: it is a steadier, more
+  /// finger-friendly area than the exact knobby outline.)
+  final Vector2 renderBleed;
 
   static const _lockedPriority = -1;
   static const _loosePriority = 0;
@@ -46,6 +54,21 @@ class PuzzlePiece extends SpriteComponent
   bool _isSnapping = false;
 
   bool get isLocked => _isLocked;
+
+  // The shaped image is drawn 1:1 around the base rectangle instead of being
+  // squeezed into it. overridePaint keeps opacity and flash effects working.
+  // Deliberately NOT calling super.render: it would draw the sprite a second
+  // time, squeezed into the base rect.
+  @override
+  // ignore: must_call_super
+  void render(Canvas canvas) {
+    sprite!.render(
+      canvas,
+      position: -renderBleed,
+      size: sprite!.srcSize,
+      overridePaint: paint,
+    );
+  }
 
   // Locked and snapping pieces let drag gestures pass through to the board.
   @override
@@ -93,6 +116,7 @@ class PuzzlePiece extends SpriteComponent
       _snapIntoPlace();
     } else {
       priority = _loosePriority;
+      game.sounds?.playDrop();
       game.keepPieceClearOfTray(this);
       game.persistProgress(); // the snap path saves via onPieceLocked
     }
@@ -120,8 +144,9 @@ class PuzzlePiece extends SpriteComponent
   void _onSnapComplete() {
     _isSnapping = false;
     _isLocked = true;
-    // A small physical "click" when a piece locks. Errors are ignored:
-    // not every device (or test) supports haptics.
+    // A small physical "click" when a piece locks, with a matching sound.
+    // Errors are ignored: not every device (or test) supports haptics.
+    game.sounds?.playSnap();
     HapticFeedback.lightImpact().ignore();
     priority = _lockedPriority;
     add(
