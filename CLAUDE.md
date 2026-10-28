@@ -15,6 +15,10 @@ Flutter + Flame jigsaw puzzle for iOS, Android, web. Package name is
 Before finishing any code change: `flutter analyze` and `flutter test` must
 both pass.
 
+Before any commit: run the built-in `/code-review` skill at **high** effort
+on the diff. Report confirmed findings and wait for the owner's decision —
+do not auto-fix.
+
 # Conventions
 
 - Pure game logic (grid math, geometry, clamping) lives in Flame-free files
