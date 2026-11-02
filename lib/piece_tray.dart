@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 import 'jigsaw_game.dart';
 import 'puzzle_logic.dart';
 import 'puzzle_piece.dart';
+import 'studio_theme.dart';
 
 /// The image region and solved position needed to create a board piece.
 class PieceData {
@@ -111,7 +112,7 @@ class PieceTray extends PositionComponent
   Future<void> onLoad() async {
     _background = RectangleComponent(
       size: size.clone(),
-      paint: Paint()..color = const Color(0xE01B2028),
+      paint: Paint()..color = StudioColors.tray,
     );
     add(_background);
 

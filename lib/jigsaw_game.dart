@@ -37,6 +37,7 @@ import 'piece_tray.dart';
 import 'puzzle_logic.dart';
 import 'puzzle_piece.dart';
 import 'puzzle_save.dart';
+import 'studio_theme.dart';
 
 /// The board uses image pixels as world units; the tray stays in screen space.
 /// Gestures on empty space pan and zoom the camera.
@@ -115,7 +116,7 @@ class JigsawGame extends FlameGame
   double get _trayHeight => min(size.y * 0.18, 130);
 
   @override
-  Color backgroundColor() => const Color(0xFF2E3440);
+  Color backgroundColor() => StudioColors.board;
 
   @override
   Future<void> onLoad() async {
@@ -253,7 +254,7 @@ class JigsawGame extends FlameGame
         paint: Paint()
           ..style = PaintingStyle.stroke
           ..strokeWidth = 2
-          ..color = const Color(0x66FFFFFF),
+          ..color = StudioColors.boardOutline,
       ),
     );
   }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'puzzle_select_screen.dart';
+import 'studio_theme.dart';
 
 void main() {
   runApp(const JigsawPuzzleApp());
@@ -14,12 +15,7 @@ class JigsawPuzzleApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Jigsaw Puzzle',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF2E3440), // matches the board background
-          brightness: Brightness.dark,
-        ),
-      ),
+      theme: studioTheme(),
       home: const PuzzleSelectScreen(),
     );
   }
