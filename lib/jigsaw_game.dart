@@ -6,8 +6,8 @@
 // 3. onGameResize adjusts the tray and fits the board above it again.
 // 4. Dragging empty space pans the camera; pinching or scrolling zooms
 //    around the fingers or cursor. Camera movement and zoom are limited.
-// 5. keepPieceClearOfTray moves dropped pieces up if they overlap the tray.
-// 6. onPieceLocked counts placed pieces. When the last one locks, a glow
+// 5. PieceGroups resolves neighbor joins, rigid drags, and whole-chunk locks.
+// 6. After a chunk settles, its placed pieces are counted. At completion a glow
 //    washes over the finished image and onCompleted tells the host screen
 //    (which records the completion and shows the celebration UI).
 // 7. persistProgress saves the board and tray once a fresh puzzle has loaded
@@ -31,6 +31,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'game_sounds.dart';
+import 'piece_groups.dart';
 import 'piece_renderer.dart';
 import 'piece_shapes.dart';
 import 'piece_tray.dart';
@@ -100,6 +101,9 @@ class JigsawGame extends FlameGame
 
   // Live piece state: the tray holds unused pieces; world holds board pieces.
   PieceTray? _tray;
+  late PieceGroups _groups;
+  final Map<int, PuzzlePiece> _boardPieces = {};
+  final Set<int> _busyPieces = {};
   late Vector2 _boardSize;
   final List<ShapedPieceImage> _pieceImages = [];
   bool _disposed = false;
@@ -146,6 +150,12 @@ class JigsawGame extends FlameGame
     }
 
     final pieceSize = Vector2(image.width / columns, image.height / rows);
+    _groups = PieceGroups(
+      columns: columns,
+      rows: rows,
+      cellWidth: pieceSize.x,
+      cellHeight: pieceSize.y,
+    );
     _boardSize = Vector2(image.width.toDouble(), image.height.toDouble());
     progress = PuzzleProgress(totalPieces: columns * rows);
 
@@ -382,23 +392,112 @@ class JigsawGame extends FlameGame
     );
   }
 
-  void keepPieceClearOfTray(PuzzlePiece piece) {
+  /// Registers a new board piece, including a piece just lifted from the tray.
+  void addBoardPiece(PuzzlePiece piece) {
+    _boardPieces[piece.index] = piece;
+    _groups.add(piece.index, Point(piece.x, piece.y), locked: piece.isLocked);
+    world.add(piece);
+  }
+
+  /// Only one pointer can own a chunk. All members rise above loose pieces.
+  bool beginPieceDrag(PuzzlePiece piece) {
+    final members = _groups.membersOf(piece.index);
+    if (_groups.isLocked(piece.index) || members.any(_busyPieces.contains)) {
+      return false;
+    }
+    _groups.moveTo(piece.index, Point(piece.x, piece.y));
+    _busyPieces.addAll(members);
+    for (final index in members) {
+      _boardPieces[index]!.setDragging(true);
+    }
+    return true;
+  }
+
+  void movePieceBy(PuzzlePiece piece, Vector2 delta) {
+    _groups.translate(piece.index, Point(delta.x, delta.y));
+    _syncGroupPositions(piece.index);
+  }
+
+  /// The tray owns its gesture and supplies an absolute pointer position.
+  void movePieceTo(PuzzlePiece piece, Vector2 position) {
+    _groups.moveTo(piece.index, Point(position.x, position.y));
+    _syncGroupPositions(piece.index);
+  }
+
+  void _syncGroupPositions(int member) {
+    for (final index in _groups.membersOf(member)) {
+      final position = _groups.positionOf(index);
+      _boardPieces[index]!.position.setValues(position.x, position.y);
+    }
+  }
+
+  void _keepGroupClearOfTray(int member) {
     const gap = 8.0;
-    final pieceBottomOnScreen = camera
-        .localToGlobal(piece.position + Vector2(0, piece.size.y))
-        .y;
+    final bottom = _groups
+        .membersOf(member)
+        .map((index) => _groups.positionOf(index).y + _groups.cellHeight)
+        .reduce(max);
+    final pieceBottomOnScreen = camera.localToGlobal(Vector2(0, bottom)).y;
     final maxPieceBottomOnScreen = size.y - _trayHeight - gap;
     final overlap = pieceBottomOnScreen - maxPieceBottomOnScreen;
 
     if (overlap > 0) {
-      piece.position.y -= overlap / camera.viewfinder.zoom;
+      _groups.translate(member, Point(0.0, -overlap / camera.viewfinder.zoom));
     }
   }
 
-  void onPieceLocked() {
-    if (progress.lockPiece()) {
-      _celebrateCompletion();
+  /// Both board and tray releases use the same pure chunk rules.
+  void settlePiece(PuzzlePiece piece) {
+    if (piece.isLocked || piece.isSettling) return;
+    _groups.moveTo(piece.index, Point(piece.x, piece.y));
+    _busyPieces.removeAll(_groups.membersOf(piece.index));
+    final result = _groups.drop(
+      piece.index,
+      boardTolerance: piece.size.x * snapToleranceFraction,
+      unavailable: _busyPieces,
+    );
+    if (!result.locked) _keepGroupClearOfTray(piece.index);
+
+    if (!result.joined && !result.locked) {
+      _syncGroupPositions(piece.index);
+      for (final index in result.members) {
+        _boardPieces[index]!.setDragging(false);
+      }
+      sounds?.playDrop();
+      persistProgress();
+      return;
     }
+
+    // Commit exact coordinates now. The settle affects drawing only, so a
+    // snapshot during the animation still reconstructs the whole chunk.
+    _busyPieces.addAll(result.members);
+    var remaining = result.members.length;
+    for (final index in result.members) {
+      final target = _groups.positionOf(index);
+      _boardPieces[index]!.animateSettle(
+        Vector2(target.x, target.y),
+        onComplete: () {
+          if (--remaining == 0) _finishGroupSettle(result);
+        },
+      );
+    }
+    persistProgress();
+  }
+
+  void _finishGroupSettle(GroupDrop result) {
+    if (_disposed) return;
+    _busyPieces.removeAll(result.members);
+    var completed = false;
+    // Set all member flags and count them before saving: no partial lock save.
+    for (final index in result.members) {
+      final piece = _boardPieces[index]!;
+      final newlyLocked = result.locked && !piece.isLocked;
+      piece.finishSettle(locked: result.locked);
+      if (newlyLocked) completed = progress.lockPiece() || completed;
+    }
+    sounds?.playSnap();
+    HapticFeedback.lightImpact().ignore();
+    if (completed) _celebrateCompletion();
     persistProgress();
   }
 
@@ -506,18 +605,33 @@ class JigsawGame extends FlameGame
 
     for (final index in state.lockedPieceIndexes) {
       final data = allPieces[index];
-      // A finished board should never be saved, but if one slips through,
-      // celebrating here retries the completion record (and the save delete)
-      // instead of leaving the puzzle stuck "in progress" forever.
-      if (progress.lockPiece()) {
-        _celebrateCompletion();
-      }
-      world.add(
+      addBoardPiece(
         createPiece(data, data.correctPosition.clone())..restoreAsLocked(),
       );
     }
     for (final entry in state.loosePiecePositions.entries) {
-      world.add(createPiece(allPieces[entry.key], entry.value.clone()));
+      addBoardPiece(createPiece(allPieces[entry.key], entry.value.clone()));
+    }
+    final positions = {
+      for (final piece in _boardPieces.values)
+        piece.index: Point(piece.x, piece.y),
+    };
+    // Flame's Vector2 (including the existing save parser) stores Float32.
+    // Allow only its rounding error when recovering exact relative offsets.
+    // Two relative machine epsilons cover both positions and solved cells.
+    _groups.restore(
+      positions: positions,
+      lockedPieces: state.lockedPieceIndexes,
+      relativePositionRoundoff: 2 * 1.1920928955078125e-7,
+    );
+    for (final piece in _boardPieces.values) {
+      final position = _groups.positionOf(piece.index);
+      piece.position.setValues(position.x, position.y);
+      if (_groups.isLocked(piece.index)) {
+        piece.restoreAsLocked();
+        // Retry completion if a fully locked save ever slips through.
+        if (progress.lockPiece()) _celebrateCompletion();
+      }
     }
   }
 
@@ -563,7 +677,7 @@ class JigsawGame extends FlameGame
   PuzzleSaveState _createSaveState() {
     final lockedPieceIndexes = <int>[];
     final loosePiecePositions = <int, Vector2>{};
-    for (final piece in world.children.whereType<PuzzlePiece>()) {
+    for (final piece in _boardPieces.values) {
       if (piece.isLocked) {
         lockedPieceIndexes.add(piece.index);
       } else {

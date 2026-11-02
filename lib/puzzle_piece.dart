@@ -1,9 +1,6 @@
 // Piece logic overview:
-// 1. Drag a loose piece around the board, accounting for camera zoom.
-// 2. On release, check whether it is close enough to its correct position.
-// 3. If close, disable dragging and animate it into place. Otherwise, leave
-//    it loose and keep it clear of the tray.
-// 4. After snapping, flash the piece and tell the game to count it as locked.
+// Gestures delegate to the game's chunk model; this component owns only its
+// shaped drawing, base-cell hit target, and visual settle feedback.
 //
 // All piece positions use board (world) coordinates.
 
@@ -11,10 +8,8 @@ import 'package:flame/components.dart';
 import 'package:flame/effects.dart';
 import 'package:flame/events.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'jigsaw_game.dart';
-import 'puzzle_logic.dart';
 
 /// A board piece that can be dragged until it snaps into its correct position.
 class PuzzlePiece extends SpriteComponent
@@ -47,13 +42,21 @@ class PuzzlePiece extends SpriteComponent
 
   bool _isLocked = false;
 
-  // Set while the snap glide runs: touches are already disabled, but the
-  // piece only counts — and saves — as locked once it reaches its spot.
-  // Otherwise a save written mid-glide could claim a finished board before
-  // the completion record exists.
+  // Coordinates are exact throughout the visual glide. Counting/saving as
+  // locked waits for the entire chunk's animation to finish.
   bool _isSnapping = false;
+  int? _activePointerId;
+  Vector2 _settleOffset = Vector2.zero();
+  double _settleTime = 0;
+  VoidCallback? _onSettled;
+  static const _settleDuration = 0.1;
 
   bool get isLocked => _isLocked;
+  bool get isSettling => _isSnapping;
+
+  void setDragging(bool dragging) {
+    priority = dragging ? _draggingPriority : _loosePriority;
+  }
 
   // The shaped image is drawn 1:1 around the base rectangle instead of being
   // squeezed into it. overridePaint keeps opacity and flash effects working.
@@ -62,12 +65,35 @@ class PuzzlePiece extends SpriteComponent
   @override
   // ignore: must_call_super
   void render(Canvas canvas) {
+    canvas.save();
+    if (_isSnapping) {
+      final t = (_settleTime / _settleDuration).clamp(0.0, 1.0);
+      final remaining = 1 - Curves.easeOut.transform(t);
+      canvas.translate(
+        _settleOffset.x * remaining,
+        _settleOffset.y * remaining,
+      );
+    }
     sprite!.render(
       canvas,
       position: -renderBleed,
       size: sprite!.srcSize,
       overridePaint: paint,
     );
+    canvas.restore();
+  }
+
+  @override
+  void update(double dt) {
+    super.update(dt);
+    if (_onSettled != null) {
+      _settleTime += dt;
+      if (_settleTime >= _settleDuration) {
+        final callback = _onSettled!;
+        _onSettled = null;
+        callback();
+      }
+    }
   }
 
   // Locked and snapping pieces let drag gestures pass through to the board.
@@ -83,12 +109,17 @@ class PuzzlePiece extends SpriteComponent
   @override
   void onDragStart(DragStartEvent event) {
     super.onDragStart(event);
-    priority = _draggingPriority;
+    if (_activePointerId == null && game.beginPieceDrag(this)) {
+      _activePointerId = event.pointerId;
+    }
   }
 
   @override
   void onDragUpdate(DragUpdateEvent event) {
-    if (_isLocked || _isSnapping || game.isScaling) {
+    if (event.pointerId != _activePointerId ||
+        _isLocked ||
+        _isSnapping ||
+        game.isScaling) {
       return;
     }
 
@@ -96,30 +127,22 @@ class PuzzlePiece extends SpriteComponent
     // With an unrotated camera, dividing by zoom converts to world distance.
     final screenDelta = event.canvasEndPosition - event.canvasStartPosition;
     final worldDelta = screenDelta / game.camera.viewfinder.zoom;
-    position += worldDelta;
+    game.movePieceBy(this, worldDelta);
   }
 
   @override
   void onDragEnd(DragEndEvent event) {
     super.onDragEnd(event);
 
-    if (!_isLocked && !_isSnapping) {
+    if (event.pointerId == _activePointerId) {
+      _activePointerId = null;
       settle();
     }
   }
 
   /// Resolves a drop from either a board drag or a tray drag.
   void settle() {
-    final isNearCorrectPosition = shouldSnap(position, correctPosition, size.x);
-
-    if (isNearCorrectPosition) {
-      _snapIntoPlace();
-    } else {
-      priority = _loosePriority;
-      game.sounds?.playDrop();
-      game.keepPieceClearOfTray(this);
-      game.persistProgress(); // the snap path saves via onPieceLocked
-    }
+    game.settlePiece(this);
   }
 
   /// Restores a saved locked piece: no snap animation, no progress count.
@@ -129,35 +152,26 @@ class PuzzlePiece extends SpriteComponent
     priority = _lockedPriority;
   }
 
-  void _snapIntoPlace() {
-    // Disable touches immediately, while the piece is still moving into place.
+  /// Animate the artwork, never the base cell's canonical/save coordinates.
+  void animateSettle(Vector2 target, {required VoidCallback onComplete}) {
     _isSnapping = true;
-    add(
-      MoveToEffect(
-        correctPosition.clone(),
-        EffectController(duration: 0.1, curve: Curves.easeOut),
-        onComplete: _onSnapComplete,
-      ),
-    );
+    _settleOffset = position - target;
+    position.setFrom(target);
+    _settleTime = 0;
+    _onSettled = onComplete;
+    priority = _draggingPriority;
   }
 
-  void _onSnapComplete() {
+  void finishSettle({required bool locked}) {
     _isSnapping = false;
-    _isLocked = true;
-    // A small physical "click" when a piece locks, with a matching sound.
-    // Errors are ignored: not every device (or test) supports haptics.
-    game.sounds?.playSnap();
-    HapticFeedback.lightImpact().ignore();
-    priority = _lockedPriority;
+    _isLocked = locked;
+    priority = locked ? _lockedPriority : _loosePriority;
     add(
       ColorEffect(
         Colors.white,
         EffectController(duration: 0.12, alternate: true),
-        opacityTo: 0.5,
+        opacityTo: locked ? 0.5 : 0.2,
       ),
     );
-
-    // Count the piece only after it reaches its correct position.
-    game.onPieceLocked();
   }
 }

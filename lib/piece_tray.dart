@@ -262,7 +262,8 @@ class PieceTray extends PositionComponent
       position: Vector2.zero(),
       correctPosition: thumbnail.data.correctPosition,
     )..priority = 100;
-    game.world.add(piece);
+    game.addBoardPiece(piece);
+    game.beginPieceDrag(piece);
     _carriedPiece = piece;
     _movePieceToPointer(piece, canvasPosition);
 
@@ -276,7 +277,7 @@ class PieceTray extends PositionComponent
   void _movePieceToPointer(PuzzlePiece piece, Vector2 canvasPosition) {
     final pointerInWorld = game.camera.globalToLocal(canvasPosition);
     // Piece positions refer to their top-left corner; center it on the pointer.
-    piece.position = pointerInWorld - pieceWorldSize / 2;
+    game.movePieceTo(piece, pointerInWorld - pieceWorldSize / 2);
   }
 
   void _setScrollOffset(double offset) {
