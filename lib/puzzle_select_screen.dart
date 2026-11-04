@@ -1,36 +1,156 @@
 // Puzzle selection overview:
-// 1. Shows the catalog grouped into themed categories; categories with no
-//    images yet are hidden. Images finished at any size get a check badge.
-// 2. Tapping an image opens a sheet with the available puzzle sizes, marking
+// 1. A "Today's painting" card on top shows the daily puzzle with the
+//    streak windowsill — a pot blooms for every day the daily was finished.
+// 2. Below it, the catalog grouped into themed categories; categories with
+//    no images yet are hidden. Images finished at any size get a check badge.
+// 3. Tapping an image opens a sheet with the available puzzle sizes, marking
 //    sizes that are in progress or already completed.
-// 3. Choosing a size opens GameScreen with that image and size.
-// 4. Dismissing the sheet leaves the user on the selection screen.
+// 4. Choosing a size opens GameScreen with that image and size.
+// 5. Dismissing the sheet leaves the user on the selection screen.
 
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import 'daily_puzzle.dart';
+import 'daily_puzzle_card.dart';
+import 'daily_streak.dart';
 import 'game_screen.dart';
 import 'puzzle_catalog.dart';
 import 'puzzle_completion.dart';
 import 'puzzle_save.dart';
 
 class PuzzleSelectScreen extends StatefulWidget {
-  const PuzzleSelectScreen({super.key});
+  const PuzzleSelectScreen({super.key, this.clock});
+
+  /// Returns "now"; tests fix the date to make the daily puzzle
+  /// deterministic. Defaults to [DateTime.now].
+  final DateTime Function()? clock;
 
   @override
   State<PuzzleSelectScreen> createState() => _PuzzleSelectScreenState();
 }
 
-class _PuzzleSelectScreenState extends State<PuzzleSelectScreen> {
+class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
+    with WidgetsBindingObserver {
   static const _saveStore = SharedPreferencesSaveStore();
   static const _completionStore = SharedPreferencesCompletionStore();
+  static const _dailyStore = SharedPreferencesDailyStreakStore();
 
   /// Images finished at least once, at any size.
   var _completedImageIds = <String>{};
 
+  /// Days on which the daily puzzle was finished (streak input).
+  var _completedDailyDays = <String>{};
+
+  /// Whether today's daily image has a resumable save at any size.
+  var _dailyInProgress = false;
+
+  /// Keep the displayed date and its asynchronously loaded status together.
+  late DateTime _dailyDate;
+  Timer? _midnightTimer;
+
+  DateTime get _now => (widget.clock ?? DateTime.now)();
+
   @override
   void initState() {
     super.initState();
+    _dailyDate = _now;
+    WidgetsBinding.instance.addObserver(this);
     _refreshCompletedImages();
+    _refreshDailyStatus();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_refreshDailyStatus());
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _midnightTimer?.cancel();
+    super.dispose();
+  }
+
+  /// Whether today's daily has a resumable run that would still credit a
+  /// pot: a save of its image whose stamped start day is inside the one-day
+  /// credit window. An old abandoned save of the same image does not count —
+  /// finishing it would not bloom anything, so showing "In progress" for it
+  /// would mislead.
+  Future<bool> _dailyRunInProgress(PuzzleImage daily, DateTime now) async {
+    final today = utcMidnight(now);
+    final creditableDays = {
+      dayKey(today),
+      dayKey(today.subtract(const Duration(days: 1))),
+    };
+    for (final size in puzzleSizes) {
+      final save = await _saveStore.load(
+        puzzleSaveKey(imageId: daily.id, columns: size.columns, rows: size.rows),
+      );
+      if (creditableDays.contains(save?.startedDay)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  Future<Set<PuzzleSize>> _savedSizesFor(PuzzleImage image) async {
+    final savedSizes = <PuzzleSize>{};
+    for (final size in puzzleSizes) {
+      final key = puzzleSaveKey(
+        imageId: image.id,
+        columns: size.columns,
+        rows: size.rows,
+      );
+      if (await _saveStore.exists(key)) {
+        savedSizes.add(size);
+      }
+    }
+    return savedSizes;
+  }
+
+  void _scheduleMidnightRefresh(DateTime now) {
+    // Construct the next calendar midnight instead of adding 24 hours:
+    // local days can be shorter or longer around daylight-saving changes.
+    final nextMidnight = now.isUtc
+        ? DateTime.utc(now.year, now.month, now.day + 1)
+        : DateTime(now.year, now.month, now.day + 1);
+    _midnightTimer?.cancel();
+    _midnightTimer = Timer(
+      nextMidnight.difference(now),
+      () => unawaited(_refreshDailyStatus()),
+    );
+  }
+
+  Future<void> _refreshDailyStatus() async {
+    if (!mounted) {
+      return;
+    }
+    final now = _now;
+    _scheduleMidnightRefresh(now);
+
+    final days = await _dailyStore.completedDays();
+    final daily = dailyPuzzleFor(now);
+    final inProgress = await _dailyRunInProgress(daily, now);
+    // A read started before midnight must not overwrite the next day's data.
+    if (!mounted || dayKey(now) != dayKey(_now)) {
+      return;
+    }
+    // This runs on every app resume; skip the rebuild when nothing changed.
+    if (dayKey(_dailyDate) == dayKey(now) &&
+        setEquals(_completedDailyDays, days) &&
+        _dailyInProgress == inProgress) {
+      return;
+    }
+    setState(() {
+      _dailyDate = now;
+      _completedDailyDays = days;
+      _dailyInProgress = inProgress;
+    });
   }
 
   Future<void> _refreshCompletedImages() async {
@@ -48,35 +168,35 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen> {
         }
       }
     }
-    if (mounted) {
+    if (mounted && !setEquals(_completedImageIds, completed)) {
       setState(() => _completedImageIds = completed);
     }
   }
 
-  Future<void> _startPuzzle(BuildContext context, PuzzleImage image) async {
-    // Resolve each size's state BEFORE opening the sheet, so the sheet
-    // itself stays plain synchronous UI (an async lookup inside its build
-    // would re-trigger itself on every rebuild).
-    final inProgressSizes = <PuzzleSize>{};
+  Future<Set<PuzzleSize>> _completedSizesFor(PuzzleImage image) async {
     final completedSizes = <PuzzleSize>{};
     for (final size in puzzleSizes) {
-      final saveKey = puzzleSaveKey(
+      final key = puzzleCompletionKey(
         imageId: image.id,
         columns: size.columns,
         rows: size.rows,
       );
-      final completionKey = puzzleCompletionKey(
-        imageId: image.id,
-        columns: size.columns,
-        rows: size.rows,
-      );
-      if (await _saveStore.exists(saveKey)) {
-        inProgressSizes.add(size);
-      }
-      if (await _completionStore.isCompleted(completionKey)) {
+      if (await _completionStore.isCompleted(key)) {
         completedSizes.add(size);
       }
     }
+    return completedSizes;
+  }
+
+  Future<void> _startPuzzle(BuildContext context, PuzzleImage image) async {
+    // The run belongs to the day the player tapped, even if the size sheet
+    // below stays open across midnight.
+    final startedDay = dayKey(_now);
+    // Resolve each size's state BEFORE opening the sheet, so the sheet
+    // itself stays plain synchronous UI (an async lookup inside its build
+    // would re-trigger itself on every rebuild).
+    final inProgressSizes = await _savedSizesFor(image);
+    final completedSizes = await _completedSizesFor(image);
     if (!context.mounted) {
       return;
     }
@@ -98,21 +218,36 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen> {
     await Navigator.push<void>(
       context,
       MaterialPageRoute<void>(
-        builder: (_) => GameScreen(image: image, size: selectedSize),
+        builder: (_) => GameScreen(
+          image: image,
+          size: selectedSize,
+          clock: widget.clock,
+          startedDay: startedDay,
+        ),
       ),
     );
 
-    // A puzzle may have been finished while the game screen was open.
-    await _refreshCompletedImages();
+    // A puzzle (possibly today's daily) may have been finished while the
+    // game screen was open. The two reads are independent.
+    await Future.wait([_refreshCompletedImages(), _refreshDailyStatus()]);
   }
 
   @override
   Widget build(BuildContext context) {
+    final daily = dailyPuzzleFor(_dailyDate);
     return Scaffold(
       appBar: AppBar(title: const Text('Choose a puzzle')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          DailyPuzzleCard(
+            image: daily,
+            now: _dailyDate,
+            completedDays: _completedDailyDays,
+            inProgress: _dailyInProgress,
+            onPlay: () => _startPuzzle(context, daily),
+          ),
+          const SizedBox(height: 16),
           for (final category in puzzleCategories)
             _CategorySection(
               category: category,
@@ -213,15 +348,23 @@ class _PuzzleCard extends StatelessWidget {
                     cacheWidth: 640,
                   ),
                   if (isCompleted)
-                    const Positioned(top: 8, right: 8, child: _CompletedBadge()),
+                    const Positioned(
+                      top: 8,
+                      right: 8,
+                      child: _CompletedBadge(),
+                    ),
                 ],
               ),
             ),
             Padding(
               padding: const EdgeInsets.all(12),
-              child: Text(
-                image.title,
-                style: Theme.of(context).textTheme.titleMedium,
+              child: Semantics(
+                // Distinguish this catalog tile from the daily card in e2e tests.
+                identifier: 'catalog-puzzle-${image.id}',
+                child: Text(
+                  image.title,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
               ),
             ),
           ],
@@ -283,7 +426,11 @@ class _PuzzleSizePicker extends StatelessWidget {
           ),
           for (final size in puzzleSizes)
             ListTile(
-              title: Text('${size.pieceCount} pieces · ${size.label}'),
+              title: Semantics(
+                identifier:
+                    'puzzle-size-${image.id}-${size.columns}x${size.rows}',
+                child: Text('${size.pieceCount} pieces · ${size.label}'),
+              ),
               subtitle: Text('${size.columns} × ${size.rows}'),
               trailing: _statusLabel(context, size),
               onTap: () => Navigator.pop(context, size),
@@ -297,9 +444,14 @@ class _PuzzleSizePicker extends StatelessWidget {
   /// The e2e tests assert on these texts.
   Widget? _statusLabel(BuildContext context, PuzzleSize size) {
     if (inProgressSizes.contains(size)) {
-      return Text(
-        'In progress',
-        style: TextStyle(color: Theme.of(context).colorScheme.primary),
+      return Semantics(
+        // Identify this size's status independently of the daily card's status.
+        identifier:
+            'puzzle-in-progress-${image.id}-${size.columns}x${size.rows}',
+        child: Text(
+          'In progress',
+          style: TextStyle(color: Theme.of(context).colorScheme.primary),
+        ),
       );
     }
     if (completedSizes.contains(size)) {

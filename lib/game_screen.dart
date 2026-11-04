@@ -7,9 +7,13 @@
 //    celebration card timed to appear as the in-game glow fades out.
 // JigsawGame handles the puzzle gameplay.
 
+import 'dart:async';
+
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 
+import 'daily_puzzle.dart';
+import 'daily_streak.dart';
 import 'game_sounds.dart';
 import 'jigsaw_game.dart';
 import 'puzzle_catalog.dart';
@@ -23,6 +27,8 @@ class GameScreen extends StatefulWidget {
     required this.image,
     required this.size,
     this.sounds,
+    this.clock,
+    this.startedDay,
   });
 
   final PuzzleImage image;
@@ -31,6 +37,16 @@ class GameScreen extends StatefulWidget {
   /// Gameplay audio; when omitted the screen uses the real app sounds.
   /// Tests pass a fake (the audio plugin does not exist there).
   final GameSounds? sounds;
+
+  /// Returns "now"; tests fix the date to make the daily puzzle
+  /// deterministic. Defaults to [DateTime.now].
+  final DateTime Function()? clock;
+
+  /// Day key stamped on a FRESH board's save — the day the player committed
+  /// to this run. The select screen passes the day its card was tapped, so
+  /// a size sheet left open across midnight cannot shift the credited day.
+  /// Defaults to the day this screen opens.
+  final String? startedDay;
 
   @override
   State<GameScreen> createState() => _GameScreenState();
@@ -55,6 +71,7 @@ class _GameScreenState extends State<GameScreen> {
       columns: widget.size.columns,
       rows: widget.size.rows,
     ),
+    startedDay: widget.startedDay ?? dayKey((widget.clock ?? DateTime.now)()),
     onCompleted: _onPuzzleCompleted,
     onBoardLoaded: (resumed) {
       if (mounted) {
@@ -71,7 +88,7 @@ class _GameScreenState extends State<GameScreen> {
     false => 'Puzzle board, new puzzle',
   };
 
-  Future<bool> _onPuzzleCompleted() {
+  Future<bool> _onPuzzleCompleted() async {
     // Let the in-game glow (0.9s) finish before the card appears.
     Future.delayed(const Duration(milliseconds: 950), () {
       if (mounted) {
@@ -79,14 +96,40 @@ class _GameScreenState extends State<GameScreen> {
       }
     });
 
-    // The game keeps its progress save until this write reports success.
-    return const SharedPreferencesCompletionStore().markCompleted(
-      puzzleCompletionKey(
-        imageId: widget.image.id,
-        columns: widget.size.columns,
-        rows: widget.size.rows,
-      ),
+    // The streak credits what the player saw happen, so it runs first and
+    // unconditionally. Sequencing (not racing) the two writes also keeps
+    // their reads from interleaving in the shared preferences cache.
+    final dailyRecorded = await _recordDailyCompletion();
+
+    // The game keeps its progress save until BOTH records are stored, so a
+    // failed daily credit gets the same retry as a failed completion write:
+    // resume the save and finish again. A day-late retry still credits via
+    // the resumed-save grace, and re-marking an already-stored day is a
+    // no-op success.
+    final completionRecorded = await const SharedPreferencesCompletionStore()
+        .markCompleted(
+          puzzleCompletionKey(
+            imageId: widget.image.id,
+            columns: widget.size.columns,
+            rows: widget.size.rows,
+          ),
+        );
+    return dailyRecorded && completionRecorded;
+  }
+
+  /// Finishing a daily image at any size blooms the pot of the day the run
+  /// began — the save's stamp (see [dailyCreditDay]).
+  /// False means a credit was due but could not be stored.
+  Future<bool> _recordDailyCompletion() async {
+    final day = dailyCreditDay(
+      widget.image.id,
+      (widget.clock ?? DateTime.now)(),
+      startedDay: _game.runStartedDay,
     );
+    if (day == null) {
+      return true;
+    }
+    return const SharedPreferencesDailyStreakStore().markCompleted(day);
   }
 
   @override

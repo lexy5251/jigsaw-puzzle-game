@@ -26,6 +26,7 @@ class PuzzleSaveState {
     required this.trayPieceIndexes,
     required this.lockedPieceIndexes,
     required this.loosePiecePositions,
+    this.startedDay,
   });
 
   /// Pieces still in the tray, in display order.
@@ -36,6 +37,12 @@ class PuzzleSaveState {
 
   /// Loose pieces lying on the board: piece index -> world position.
   final Map<int, Vector2> loosePiecePositions;
+
+  /// Day key ("2026-11-02") of the day this run STARTED, carried unchanged
+  /// across re-saves. The daily streak credits a run by this day, so a save
+  /// cannot claim a day it was not actually begun on. Null for saves written
+  /// before the field existed — those credit nothing.
+  final String? startedDay;
 
   /// True when every piece appears exactly once. Guards against loading a
   /// snapshot written for a different grid size, or corrupted data.
@@ -62,6 +69,7 @@ class PuzzleSaveState {
       for (final entry in loosePiecePositions.entries)
         '${entry.key}': [entry.value.x, entry.value.y],
     },
+    if (startedDay != null) 'started': startedDay,
   });
 
   /// Returns null when [raw] is not a valid snapshot.
@@ -75,6 +83,7 @@ class PuzzleSaveState {
         loosePiecePositions: _parseLoosePiecePositions(
           data['loose'] as Map<String, dynamic>,
         ),
+        startedDay: data['started'] as String?,
       );
     } on Object {
       return null; // Malformed data: treat as "no save".
