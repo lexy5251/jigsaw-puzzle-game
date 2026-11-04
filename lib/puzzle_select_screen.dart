@@ -20,6 +20,8 @@ import 'game_screen.dart';
 import 'puzzle_catalog.dart';
 import 'puzzle_completion.dart';
 import 'puzzle_save.dart';
+import 'studio_surfaces.dart';
+import 'studio_theme.dart';
 
 class PuzzleSelectScreen extends StatefulWidget {
   const PuzzleSelectScreen({super.key, this.clock});
@@ -283,9 +285,17 @@ class _CategorySection extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.only(top: 8, bottom: 12),
-          child: Text(
-            category.title,
-            style: Theme.of(context).textTheme.titleLarge,
+          child: Row(
+            children: [
+              PaintedSwatch(color: categoryStyleFor(category.id).accent),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  category.title,
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+              ),
+            ],
           ),
         ),
         GridView.builder(
@@ -303,6 +313,8 @@ class _CategorySection extends StatelessWidget {
             final image = images[index];
             return _PuzzleCard(
               image: image,
+              // Grid position, so side-by-side cards get different wobbles.
+              variant: index,
               isCompleted: completedImageIds.contains(image.id),
               onTap: () => onImageTap(image),
             );
@@ -317,11 +329,15 @@ class _CategorySection extends StatelessWidget {
 class _PuzzleCard extends StatelessWidget {
   const _PuzzleCard({
     required this.image,
+    required this.variant,
     required this.isCompleted,
     required this.onTap,
   });
 
   final PuzzleImage image;
+
+  /// Wobble preset for [PaintedCard]; the grid passes its item index.
+  final int variant;
 
   /// Finished at least once, at any size: shows the check badge.
   final bool isCompleted;
@@ -330,45 +346,48 @@ class _PuzzleCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  Image.asset(
+    return PaintedCard(
+      variant: variant,
+      onTap: onTap,
+      padding: const EdgeInsets.fromLTRB(9, 9, 9, 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                FramedArt(
+                  child: Image.asset(
                     image.assetPath,
                     fit: BoxFit.cover,
                     // Decode smaller previews to reduce memory use.
                     cacheWidth: 640,
                   ),
-                  if (isCompleted)
-                    const Positioned(
-                      top: 8,
-                      right: 8,
-                      child: _CompletedBadge(),
-                    ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Semantics(
-                // Distinguish this catalog tile from the daily card in e2e tests.
-                identifier: 'catalog-puzzle-${image.id}',
-                child: Text(
-                  image.title,
-                  style: Theme.of(context).textTheme.titleMedium,
                 ),
+                if (isCompleted)
+                  const Positioned(
+                    top: 8,
+                    right: 8,
+                    child: _CompletedBadge(),
+                  ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(2, 8, 2, 0),
+            child: Semantics(
+              // Distinguish this catalog tile from the daily card in e2e tests.
+              identifier: 'catalog-puzzle-${image.id}',
+              child: Text(
+                image.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleMedium,
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

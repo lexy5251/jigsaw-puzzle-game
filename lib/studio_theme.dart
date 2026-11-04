@@ -14,6 +14,12 @@ abstract final class StudioColors {
   /// Linen card surface.
   static const card = Color(0xFFF9F3E3);
 
+  /// Soft warm shadow under painted cards (mockup: rgba(40,25,10,.35)).
+  static const cardShadow = Color(0x5928190A);
+
+  /// Light mat ring painted over framed artwork.
+  static const matRing = Color(0x8CFFFFFF);
+
   /// Warm near-black used for all text and icons.
   static const ink = Color(0xFF423528);
 
@@ -43,7 +49,64 @@ abstract final class StudioColors {
   /// Piece tray wood; keeps a hint of translucency so dragged pieces
   /// passing under its edge stay faintly visible.
   static const tray = Color(0xF2E0CFA9);
+
+  /// Card ground variants — some cards sit on blush or moss instead of
+  /// linen ("cards may sit on cream/blush/moss grounds").
+  static const blushGround = Color(0xFFF4DDCD);
+  static const mossGround = Color(0xFFE5E4C8);
 }
+
+/// Per-category personality (mockup section F): only two things change per
+/// category — the accent and its tint. One table over the shared theme,
+/// never six themes.
+class StudioCategoryStyle {
+  const StudioCategoryStyle({required this.accent, required this.tint});
+
+  /// Saturated color for the category's swatch, kickers, and CTAs.
+  final Color accent;
+
+  /// Pale wash for the category's hero band (used by the category screens
+  /// when their layout lands).
+  final Color tint;
+}
+
+/// Keys match `PuzzleCategory.id` in puzzle_catalog.dart; a test keeps the
+/// two in sync.
+const studioCategoryStyles = <String, StudioCategoryStyle>{
+  'landscapes': StudioCategoryStyle(
+    accent: Color(0xFF7B8456),
+    tint: Color(0xFFDFE3C9),
+  ),
+  'cozy': StudioCategoryStyle(
+    accent: Color(0xFFC06A45),
+    tint: Color(0xFFF0D9C8),
+  ),
+  'animals': StudioCategoryStyle(
+    accent: Color(0xFFC98977),
+    tint: Color(0xFFF4DDD3),
+  ),
+  'flowers': StudioCategoryStyle(
+    accent: Color(0xFFC9962E),
+    tint: Color(0xFFF0E4BC),
+  ),
+  'cities': StudioCategoryStyle(
+    accent: Color(0xFF71908B),
+    tint: Color(0xFFDAE3DF),
+  ),
+  'art': StudioCategoryStyle(
+    accent: Color(0xFF9D6A80),
+    tint: Color(0xFFEAD9E0),
+  ),
+};
+
+/// Falls back to the app-wide accent so an unstyled new category degrades
+/// gracefully instead of crashing the select screen.
+StudioCategoryStyle categoryStyleFor(String categoryId) =>
+    studioCategoryStyles[categoryId] ??
+    const StudioCategoryStyle(
+      accent: StudioColors.terracotta,
+      tint: StudioColors.chip,
+    );
 
 /// The app-wide theme: light, warm, rounded. Fredoka carries headings,
 /// Nunito carries everything else.

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jigsaw_puzzle/daily_puzzle.dart';
+import 'package:jigsaw_puzzle/daily_puzzle_card.dart';
 import 'package:jigsaw_puzzle/puzzle_catalog.dart';
 import 'package:jigsaw_puzzle/puzzle_save.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -124,7 +125,7 @@ void main() {
     await pumpSelectScreen(tester, clock: () => now);
     await tester.pumpAndSettle();
 
-    final card = find.byType(Card).first;
+    final card = find.byType(DailyPuzzleCard);
     expect(find.text('Done today ✓'), findsOneWidget);
     expect(find.byIcon(Icons.local_florist), findsNWidgets(2));
 
@@ -184,7 +185,7 @@ void main() {
 
     expect(
       find.descendant(
-        of: find.byType(Card).first,
+        of: find.byType(DailyPuzzleCard),
         matching: find.text(dailyPuzzleFor(now).title),
       ),
       findsOneWidget,
