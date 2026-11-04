@@ -9,6 +9,7 @@ void main() {
       trayPieceIndexes: const [3, 1, 2],
       lockedPieceIndexes: const [0],
       loosePiecePositions: {4: Vector2(12.5, -7.0), 5: Vector2(0, 300)},
+      startedDay: '2026-11-06',
     );
 
     final restored = PuzzleSaveState.fromJsonString(state.toJsonString())!;
@@ -17,6 +18,17 @@ void main() {
     expect(restored.lockedPieceIndexes, [0]);
     expect(restored.loosePiecePositions[4], Vector2(12.5, -7.0));
     expect(restored.loosePiecePositions[5], Vector2(0, 300));
+    expect(restored.startedDay, '2026-11-06');
+  });
+
+  test('a save from before the start-day stamp still loads', () {
+    // Players upgrading mid-puzzle have saves without the field.
+    const legacy = '{"tray":[1,0],"locked":[],"loose":{}}';
+
+    final restored = PuzzleSaveState.fromJsonString(legacy)!;
+
+    expect(restored.trayPieceIndexes, [1, 0]);
+    expect(restored.startedDay, isNull);
   });
 
   test('malformed data reads as "no save"', () {

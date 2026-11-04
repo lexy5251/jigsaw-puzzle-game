@@ -50,6 +50,7 @@ class JigsawGame extends FlameGame
     required this.rows,
     this.saveStore,
     this.saveKey,
+    this.startedDay,
     this.sounds,
     this.onCompleted,
     this.onBoardLoaded,
@@ -79,6 +80,16 @@ class JigsawGame extends FlameGame
   /// Identifies this image and grid size in storage.
   /// Saving and loading require both [saveStore] and [saveKey].
   final String? saveKey;
+
+  /// Day key stamped on saves of a FRESH board; a resumed board keeps the
+  /// day its save carries. The daily streak reads [runStartedDay] to decide
+  /// which day a finished run credits.
+  final String? startedDay;
+
+  /// The day this run actually began: [startedDay] for a fresh board, the
+  /// restored save's stamp (possibly null for pre-stamp saves) for a resume.
+  String? get runStartedDay => _runStartedDay;
+  String? _runStartedDay;
 
   /// Live count of correctly placed pieces, used to detect completion.
   late final PuzzleProgress progress;
@@ -190,10 +201,13 @@ class JigsawGame extends FlameGame
 
     final List<PieceData> trayPieces;
     if (savedState == null) {
+      _runStartedDay = startedDay;
       // Start fresh: every piece goes into the tray in a random order.
       trayPieces = List.of(allPieces)..shuffle();
     } else {
-      // Resume: restore the board and preserve the remaining tray order.
+      // Resume: the run keeps the day it was actually begun on.
+      _runStartedDay = savedState.startedDay;
+      // Restore the board and preserve the remaining tray order.
       _restoreBoardPieces(savedState, allPieces, pieceSize);
       trayPieces = [
         for (final index in savedState.trayPieceIndexes) allPieces[index],
@@ -688,6 +702,7 @@ class JigsawGame extends FlameGame
       trayPieceIndexes: _tray?.remainingPieceIndexes ?? const [],
       lockedPieceIndexes: lockedPieceIndexes,
       loosePiecePositions: loosePiecePositions,
+      startedDay: _runStartedDay,
     );
   }
 }

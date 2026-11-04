@@ -1,10 +1,6 @@
 # Shared ignore rules for this Flutter app and its platform projects.
 
-# Local planning notes
-/docs/puzzle-game-notes.md
-/docs/puzzle-game-mvp-plan.md
-/docs/claude-notes.md
-/docs/ui-references
+/docs/
 
 # Operating system files
 .DS_Store

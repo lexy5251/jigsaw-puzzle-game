@@ -16,10 +16,19 @@ appId: com.lexy5251.jigsawpuzzle
     clearState: true
 - assertVisible: "Choose a puzzle"
 
-# Pick the first puzzle at the easiest size. No save exists yet,
-# so the board must report a fresh start.
-- tapOn: "Alpine Lakes Panorama"
-- tapOn: ".*24 pieces.*"
+# Scroll to the catalog title, even if the daily card repeats that image.
+- scrollUntilVisible:
+    element:
+      id: "catalog-puzzle-alpine-lakes-panorama"
+    direction: DOWN
+- tapOn:
+    id: "catalog-puzzle-alpine-lakes-panorama"
+
+# Pick the easiest size. No save exists yet, so the board must start fresh.
+- assertNotVisible:
+    id: "puzzle-in-progress-alpine-lakes-panorama-6x4"
+- tapOn:
+    id: "puzzle-size-alpine-lakes-panorama-6x4"
 - assertVisible: "Puzzle board, new puzzle"
 
 # Kill the app completely, then relaunch WITHOUT clearing state.
@@ -28,10 +37,18 @@ appId: com.lexy5251.jigsawpuzzle
 - assertVisible: "Choose a puzzle"
 
 # The save must have survived the kill: the size picker marks it.
-- tapOn: "Alpine Lakes Panorama"
-- assertVisible: ".*In progress.*"
+- scrollUntilVisible:
+    element:
+      id: "catalog-puzzle-alpine-lakes-panorama"
+    direction: DOWN
+- tapOn:
+    id: "catalog-puzzle-alpine-lakes-panorama"
+- assertVisible:
+    id: "puzzle-in-progress-alpine-lakes-panorama-6x4"
+    text: "In progress"
 
 # And it actually reopens into the saved puzzle — "resumed" proves the game
 # restored the save rather than starting a fresh board.
-- tapOn: ".*24 pieces.*"
+- tapOn:
+    id: "puzzle-size-alpine-lakes-panorama-6x4"
 - assertVisible: "Puzzle board, resumed"

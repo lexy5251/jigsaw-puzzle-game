@@ -2,14 +2,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jigsaw_puzzle/puzzle_save.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
+import 'test_helpers.dart';
 
 void main() {
-  TestWidgetsFlutterBinding.ensureInitialized();
-
-  const channel = MethodChannel('plugins.flutter.io/shared_preferences');
-  final messenger =
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
   const store = SharedPreferencesSaveStore();
   const key = 'save.test.2x2';
   const state = PuzzleSaveState(
@@ -19,9 +15,10 @@ void main() {
   );
   final messages = <String>[];
   late DebugPrintCallback originalDebugPrint;
+  late MockSharedPreferences prefs;
 
   setUp(() {
-    SharedPreferences.resetStatic();
+    prefs = MockSharedPreferences()..install();
     messages.clear();
     originalDebugPrint = debugPrint;
     debugPrint = (String? message, {int? wrapWidth}) {
@@ -33,14 +30,10 @@ void main() {
 
   tearDown(() {
     debugPrint = originalDebugPrint;
-    messenger.setMockMethodCallHandler(channel, null);
-    SharedPreferences.resetStatic();
   });
 
   test('storage exceptions are logged without escaping to gameplay', () async {
-    messenger.setMockMethodCallHandler(channel, (_) async {
-      throw PlatformException(code: 'storage_unavailable');
-    });
+    prefs.readError = PlatformException(code: 'storage_unavailable');
 
     expect(await store.load(key), isNull);
     await expectLater(store.save(key, state), completes);
@@ -63,12 +56,7 @@ void main() {
   });
 
   test('rejected writes and deletions are logged without throwing', () async {
-    messenger.setMockMethodCallHandler(channel, (call) async {
-      if (call.method == 'getAll') {
-        return <String, Object>{};
-      }
-      return false;
-    });
+    prefs.onWrite = (_) => false;
 
     await expectLater(store.save(key, state), completes);
     await expectLater(store.delete(key), completes);
@@ -80,9 +68,7 @@ void main() {
   });
 
   test('missing saves are quiet and malformed saves are logged', () async {
-    messenger.setMockMethodCallHandler(channel, (_) async {
-      return <String, Object>{'flutter.$key': 'invalid JSON'};
-    });
+    prefs.storage['flutter.$key'] = 'invalid JSON';
 
     expect(await store.load('save.missing.2x2'), isNull);
     expect(messages, isEmpty);
