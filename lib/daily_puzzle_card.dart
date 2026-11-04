@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'daily_puzzle.dart';
 import 'puzzle_catalog.dart';
+import 'studio_surfaces.dart';
 
 /// The daily-puzzle card: today's image, its status, and the windowsill.
 class DailyPuzzleCard extends StatelessWidget {
@@ -31,91 +32,84 @@ class DailyPuzzleCard extends StatelessWidget {
     final longest = longestStreak(completedDays);
     final fadedInk = theme.colorScheme.onSurface.withValues(alpha: 0.6);
 
-    return Card(
-      child: InkWell(
-        onTap: onPlay,
-        // Match the card's rounded shape so the tap ripple clips to it.
-        borderRadius: BorderRadius.circular(20),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+    return PaintedCard(
+      onTap: onPlay,
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
             children: [
-              Row(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Image.asset(
-                      image.assetPath,
-                      width: 72,
-                      height: 72,
-                      fit: BoxFit.cover,
-                      // Same decode width as the catalog tiles, so the daily
-                      // image shares their ImageCache entry instead of
-                      // decoding the asset a second time.
-                      cacheWidth: 640,
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          "TODAY'S PAINTING",
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: theme.colorScheme.primary,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 1.1,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          image.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          _statusText(doneToday),
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: fadedInk,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Icon(
-                    doneToday ? Icons.check_circle : Icons.arrow_forward,
-                    color: doneToday
-                        ? theme.colorScheme.secondary
-                        : theme.colorScheme.primary,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              _Windowsill(now: now, completedDays: completedDays),
-              const SizedBox(height: 10),
-              Text(
-                streak == 0
-                    ? 'A pot blooms for every quiet day.'
-                    : '$streak-day streak',
-                textAlign: TextAlign.center,
-                style: streak == 0
-                    ? theme.textTheme.bodySmall?.copyWith(color: fadedInk)
-                    : theme.textTheme.titleMedium,
-              ),
-              if (longest > 0)
-                Text(
-                  'longest: $longest · pots regrow, no pressure',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodySmall?.copyWith(color: fadedInk),
+              FramedArt(
+                child: Image.asset(
+                  image.assetPath,
+                  width: 72,
+                  height: 72,
+                  fit: BoxFit.cover,
+                  // Same decode width as the catalog tiles, so the daily
+                  // image shares their ImageCache entry instead of
+                  // decoding the asset a second time.
+                  cacheWidth: 640,
                 ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "TODAY'S PAINTING",
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.primary,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.1,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      image.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _statusText(doneToday),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: fadedInk,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(
+                doneToday ? Icons.check_circle : Icons.arrow_forward,
+                color: doneToday
+                    ? theme.colorScheme.secondary
+                    : theme.colorScheme.primary,
+              ),
             ],
           ),
-        ),
+          const SizedBox(height: 14),
+          _Windowsill(now: now, completedDays: completedDays),
+          const SizedBox(height: 10),
+          Text(
+            streak == 0
+                ? 'A pot blooms for every quiet day.'
+                : '$streak-day streak',
+            textAlign: TextAlign.center,
+            style: streak == 0
+                ? theme.textTheme.bodySmall?.copyWith(color: fadedInk)
+                : theme.textTheme.titleMedium,
+          ),
+          if (longest > 0)
+            Text(
+              'longest: $longest · pots regrow, no pressure',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall?.copyWith(color: fadedInk),
+            ),
+        ],
       ),
     );
   }
