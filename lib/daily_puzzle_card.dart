@@ -30,7 +30,6 @@ class DailyPuzzleCard extends StatelessWidget {
     final doneToday = completedDays.contains(dayKey(now));
     final streak = currentStreak(completedDays, now);
     final longest = longestStreak(completedDays);
-    final fadedInk = theme.colorScheme.onSurface.withValues(alpha: 0.6);
 
     return PaintedCard(
       onTap: onPlay,
@@ -75,9 +74,7 @@ class DailyPuzzleCard extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       _statusText(doneToday),
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: fadedInk,
-                      ),
+                      style: theme.textTheme.bodySmall,
                     ),
                   ],
                 ),
@@ -100,14 +97,14 @@ class DailyPuzzleCard extends StatelessWidget {
                 : '$streak-day streak',
             textAlign: TextAlign.center,
             style: streak == 0
-                ? theme.textTheme.bodySmall?.copyWith(color: fadedInk)
+                ? theme.textTheme.bodySmall
                 : theme.textTheme.titleMedium,
           ),
           if (longest > 0)
             Text(
               'longest: $longest · pots regrow, no pressure',
               textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall?.copyWith(color: fadedInk),
+              style: theme.textTheme.bodySmall,
             ),
         ],
       ),

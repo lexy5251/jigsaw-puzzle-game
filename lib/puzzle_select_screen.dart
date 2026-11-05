@@ -13,10 +13,12 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import 'app_settings.dart';
 import 'daily_puzzle.dart';
 import 'daily_puzzle_card.dart';
 import 'daily_streak.dart';
 import 'game_screen.dart';
+import 'settings_screen.dart';
 import 'puzzle_catalog.dart';
 import 'puzzle_completion.dart';
 import 'puzzle_save.dart';
@@ -39,6 +41,7 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
   static const _saveStore = SharedPreferencesSaveStore();
   static const _completionStore = SharedPreferencesCompletionStore();
   static const _dailyStore = SharedPreferencesDailyStreakStore();
+  static const _settingsStore = SharedPreferencesAppSettingsStore();
 
   /// Images finished at least once, at any size.
   var _completedImageIds = <String>{};
@@ -199,6 +202,9 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
     // would re-trigger itself on every rebuild).
     final inProgressSizes = await _savedSizesFor(image);
     final completedSizes = await _completedSizesFor(image);
+    // Read once here so GameScreen stays synchronous; mid-game settings
+    // changes apply from the next puzzle on.
+    final settings = await _settingsStore.load();
     if (!context.mounted) {
       return;
     }
@@ -225,6 +231,7 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
           size: selectedSize,
           clock: widget.clock,
           startedDay: startedDay,
+          settings: settings,
         ),
       ),
     );
@@ -238,7 +245,20 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
   Widget build(BuildContext context) {
     final daily = dailyPuzzleFor(_dailyDate);
     return Scaffold(
-      appBar: AppBar(title: const Text('Choose a puzzle')),
+      appBar: AppBar(
+        title: const Text('Choose a puzzle'),
+        actions: [
+          IconButton(
+            // Constant tooltip doubles as the semantics label for e2e tests.
+            tooltip: 'Settings',
+            icon: const Icon(Icons.settings_outlined),
+            onPressed: () => Navigator.push<void>(
+              context,
+              MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
+            ),
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [

@@ -129,6 +129,9 @@ ThemeData studioTheme() {
   final textTheme = base.textTheme
       .apply(bodyColor: StudioColors.ink, displayColor: StudioColors.ink)
       .copyWith(
+        bodySmall: base.textTheme.bodySmall?.copyWith(
+          color: scheme.onSurface.withValues(alpha: 0.6),
+        ),
         headlineSmall: base.textTheme.headlineSmall?.copyWith(
           fontFamily: 'Fredoka',
           fontWeight: FontWeight.w600,

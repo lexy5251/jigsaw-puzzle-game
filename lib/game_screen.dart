@@ -12,6 +12,7 @@ import 'dart:async';
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 
+import 'app_settings.dart';
 import 'daily_puzzle.dart';
 import 'daily_streak.dart';
 import 'game_sounds.dart';
@@ -26,17 +27,21 @@ class GameScreen extends StatefulWidget {
     super.key,
     required this.image,
     required this.size,
-    this.sounds,
+    this.soundsFactory,
     this.clock,
     this.startedDay,
+    this.settings = const AppSettings(),
   });
 
   final PuzzleImage image;
   final PuzzleSize size;
 
-  /// Gameplay audio; when omitted the screen uses the real app sounds.
-  /// Tests pass a fake (the audio plugin does not exist there).
-  final GameSounds? sounds;
+  /// Player preferences, read by the caller before this screen opens.
+  final AppSettings settings;
+
+  /// Each game owns its audio, so restarts need a fresh instance.
+  /// When omitted the screen uses the real app sounds; tests supply fakes.
+  final GameSounds Function()? soundsFactory;
 
   /// Returns "now"; tests fix the date to make the daily puzzle
   /// deterministic. Defaults to [DateTime.now].
@@ -53,32 +58,94 @@ class GameScreen extends StatefulWidget {
 }
 
 class _GameScreenState extends State<GameScreen> {
+  static const _saveStore = SharedPreferencesSaveStore();
+
   bool _showCompletionCard = false;
+  bool _restarting = false;
+  Timer? _completionTimer;
   bool _edgesOnly = false;
-  bool _showGhostPreview = false;
+  late bool _showGhostPreview = widget.settings.ghostPreviewDefault;
 
   /// Null until the game finishes loading, then whether it resumed a save.
   bool? _resumed;
 
-  late final JigsawGame _game = JigsawGame(
-    imageAsset: widget.image.fileName,
+  late JigsawGame _game = _createGame();
+
+  String get _saveKey => puzzleSaveKey(
+    imageId: widget.image.id,
     columns: widget.size.columns,
     rows: widget.size.rows,
-    sounds: widget.sounds ?? FlameAudioSounds(),
-    saveStore: const SharedPreferencesSaveStore(),
-    saveKey: puzzleSaveKey(
-      imageId: widget.image.id,
+  );
+
+  JigsawGame _createGame() {
+    late final JigsawGame game;
+    game = JigsawGame(
+      imageAsset: widget.image.fileName,
       columns: widget.size.columns,
       rows: widget.size.rows,
-    ),
-    startedDay: widget.startedDay ?? dayKey((widget.clock ?? DateTime.now)()),
-    onCompleted: _onPuzzleCompleted,
-    onBoardLoaded: (resumed) {
-      if (mounted) {
-        setState(() => _resumed = resumed);
-      }
-    },
-  );
+      // The game owns and disposes its sounds, so a restart needs a fresh
+      // instance — hence created here, not stored on the state.
+      sounds:
+          widget.soundsFactory?.call() ??
+          FlameAudioSounds(volumeScale: widget.settings.effectsVolume),
+      saveStore: _saveStore,
+      saveKey: _saveKey,
+      startedDay: widget.startedDay ?? dayKey((widget.clock ?? DateTime.now)()),
+      onCompleted: () => _onPuzzleCompleted(game),
+      onBoardLoaded: (resumed) {
+        if (mounted && !_restarting && identical(_game, game)) {
+          setState(() => _resumed = resumed);
+        }
+      },
+    );
+    // Both setters are safe before the game loads: they store the flag,
+    // and loading applies it.
+    game.setEdgesOnlyFilter(_edgesOnly);
+    game.setGhostPreview(_showGhostPreview);
+    return game;
+  }
+
+  /// Confirms, forgets the stored progress, and boots a fresh board.
+  Future<void> _confirmRestart() async {
+    if (_restarting) return;
+    final restart = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Start over?'),
+        content: const Text("This puzzle's progress will be cleared."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Keep going'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Start over'),
+          ),
+        ],
+      ),
+    );
+    if (restart != true || !mounted || _restarting) {
+      return;
+    }
+    _completionTimer?.cancel();
+    setState(() {
+      _restarting = true;
+      _showCompletionCard = false;
+    });
+    // Stop new writes before awaiting any old ones. An already-held finger
+    // can still deliver a release after the dialog closes.
+    await _game.discardProgress();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _resumed = null;
+      _restarting = false;
+      // The GameWidget's ObjectKey ensures the old widget is disposed too.
+      _game = _createGame();
+    });
+  }
 
   /// "resumed" vs "new puzzle" lets the Maestro flow verify that reopening
   /// actually restored the save instead of silently starting over.
@@ -88,10 +155,12 @@ class _GameScreenState extends State<GameScreen> {
     false => 'Puzzle board, new puzzle',
   };
 
-  Future<bool> _onPuzzleCompleted() async {
+  Future<bool> _onPuzzleCompleted(JigsawGame game) async {
+    if (!mounted || _restarting || !identical(_game, game)) return false;
     // Let the in-game glow (0.9s) finish before the card appears.
-    Future.delayed(const Duration(milliseconds: 950), () {
-      if (mounted) {
+    _completionTimer?.cancel();
+    _completionTimer = Timer(const Duration(milliseconds: 950), () {
+      if (mounted && !_restarting && identical(_game, game)) {
         setState(() => _showCompletionCard = true);
       }
     });
@@ -99,7 +168,7 @@ class _GameScreenState extends State<GameScreen> {
     // The streak credits what the player saw happen, so it runs first and
     // unconditionally. Sequencing (not racing) the two writes also keeps
     // their reads from interleaving in the shared preferences cache.
-    final dailyRecorded = await _recordDailyCompletion();
+    final dailyRecorded = await _recordDailyCompletion(game.runStartedDay);
 
     // The game keeps its progress save until BOTH records are stored, so a
     // failed daily credit gets the same retry as a failed completion write:
@@ -120,16 +189,22 @@ class _GameScreenState extends State<GameScreen> {
   /// Finishing a daily image at any size blooms the pot of the day the run
   /// began — the save's stamp (see [dailyCreditDay]).
   /// False means a credit was due but could not be stored.
-  Future<bool> _recordDailyCompletion() async {
+  Future<bool> _recordDailyCompletion(String? startedDay) async {
     final day = dailyCreditDay(
       widget.image.id,
       (widget.clock ?? DateTime.now)(),
-      startedDay: _game.runStartedDay,
+      startedDay: startedDay,
     );
     if (day == null) {
       return true;
     }
     return const SharedPreferencesDailyStreakStore().markCompleted(day);
+  }
+
+  @override
+  void dispose() {
+    _completionTimer?.cancel();
+    super.dispose();
   }
 
   @override
@@ -139,6 +214,11 @@ class _GameScreenState extends State<GameScreen> {
       // the pressed state shows through the buttons' isSelected styling.
       appBar: AppBar(
         actions: [
+          IconButton(
+            tooltip: 'Restart puzzle',
+            icon: const Icon(Icons.replay),
+            onPressed: _restarting ? null : _confirmRestart,
+          ),
           IconButton(
             tooltip: 'Edge pieces only',
             isSelected: _edgesOnly,
@@ -166,7 +246,10 @@ class _GameScreenState extends State<GameScreen> {
           // game screen — Flame's canvas exposes no semantics of its own.
           Semantics(
             label: _boardSemanticsLabel,
-            child: GameWidget(game: _game),
+            child: IgnorePointer(
+              ignoring: _restarting,
+              child: GameWidget(key: ObjectKey(_game), game: _game),
+            ),
           ),
           if (_showCompletionCard)
             _CompletionCard(

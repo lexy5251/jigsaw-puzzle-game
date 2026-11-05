@@ -31,27 +31,40 @@ abstract class GameSounds {
 
 /// Plays the bundled synthesized WAVs via flame_audio.
 class FlameAudioSounds implements GameSounds {
+  /// [volumeScale] is the player's effects-volume setting (0–1); it scales
+  /// all cues equally so the mix below keeps its balance.
   FlameAudioSounds({
+    double volumeScale = 1,
     AudioPlayer Function()? playerFactory,
     AudioCache? audioCache,
-  }) : _drop = _SoundCue(
-         'piece_drop.wav',
-         0.4,
-         playerFactory ?? AudioPlayer.new,
-         audioCache ?? FlameAudio.audioCache,
-       ),
-       _snap = _SoundCue(
-         'piece_snap.wav',
-         0.55,
-         playerFactory ?? AudioPlayer.new,
-         audioCache ?? FlameAudio.audioCache,
-       ),
-       _complete = _SoundCue(
-         'puzzle_complete.wav',
-         0.8,
+  }) : this._(
+         volumeScale.clamp(0, 1),
          playerFactory ?? AudioPlayer.new,
          audioCache ?? FlameAudio.audioCache,
        );
+
+  FlameAudioSounds._(
+    double volumeScale,
+    AudioPlayer Function() playerFactory,
+    AudioCache audioCache,
+  ) : _drop = _SoundCue(
+        'piece_drop.wav',
+        0.4 * volumeScale,
+        playerFactory,
+        audioCache,
+      ),
+      _snap = _SoundCue(
+        'piece_snap.wav',
+        0.55 * volumeScale,
+        playerFactory,
+        audioCache,
+      ),
+      _complete = _SoundCue(
+        'puzzle_complete.wav',
+        0.8 * volumeScale,
+        playerFactory,
+        audioCache,
+      );
 
   final _SoundCue _drop;
   final _SoundCue _snap;
