@@ -75,11 +75,22 @@ void main() {
   });
 
   group('clampZoom', () {
-    test('limits zoom to 0.5x-4x of the fit zoom', () {
+    test('limits zoom to fit-4x of the fit zoom', () {
       const fit = 2.0;
-      expect(clampZoom(0.1, fit), 1.0);
+      // Zooming out never goes below the fitted view.
+      expect(clampZoom(0.1, fit), 2.0);
       expect(clampZoom(100, fit), 8.0);
       expect(clampZoom(3, fit), 3.0);
+    });
+  });
+
+  group('isZoomedBeyondFit', () {
+    test('treats anything within 1% of the fit zoom as fitted', () {
+      const fit = 2.0;
+      expect(isZoomedBeyondFit(fit, fit), isFalse);
+      expect(isZoomedBeyondFit(fit * 1.005, fit), isFalse);
+      expect(isZoomedBeyondFit(fit * 0.9, fit), isFalse);
+      expect(isZoomedBeyondFit(fit * 1.02, fit), isTrue);
     });
   });
 }

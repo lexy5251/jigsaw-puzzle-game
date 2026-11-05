@@ -4,8 +4,9 @@
 // 2. The camera controls which part of the board is visible and its zoom.
 //    The tray stays fixed on screen while the board view moves or zooms.
 // 3. onGameResize adjusts the tray and fits the board above it again.
-// 4. Dragging empty space pans the camera; pinching or scrolling zooms
-//    around the fingers or cursor. Camera movement and zoom are limited.
+// 4. Pinching or scrolling zooms around the fingers or cursor; dragging
+//    empty space pans only while zoomed in. At the fitted view the board
+//    stays put, and zooming back out snaps the camera home to it.
 // 5. PieceGroups resolves neighbor joins, rigid drags, and whole-chunk locks.
 // 6. After a chunk settles, its placed pieces are counted. At completion a glow
 //    washes over the finished image and onCompleted tells the host screen
@@ -41,7 +42,8 @@ import 'puzzle_save.dart';
 import 'studio_theme.dart';
 
 /// The board uses image pixels as world units; the tray stays in screen space.
-/// Gestures on empty space pan and zoom the camera.
+/// Pinching zooms the camera; dragging empty space pans it, but only while
+/// zoomed in — at the fitted view the board never moves.
 class JigsawGame extends FlameGame
     with DragCallbacks, ScaleCallbacks, ScrollCallbacks {
   JigsawGame({
@@ -127,7 +129,9 @@ class JigsawGame extends FlameGame
   bool _ghostPreviewEnabled = false;
   bool _edgesOnlyFilter = false;
 
-  late double _fitZoom;
+  // Starts at the camera's default zoom so gestures arriving before the
+  // first fit (mid-load) read "not zoomed in" instead of crashing.
+  double _fitZoom = 1;
   double _zoomAtPinchStart = 1;
 
   double get _trayHeight => min(size.y * 0.18, 130);
@@ -353,10 +357,7 @@ class JigsawGame extends FlameGame
     if (isScaling) {
       return;
     }
-
-    final dragDelta = event.canvasEndPosition - event.canvasStartPosition;
-    camera.viewfinder.position -= dragDelta / camera.viewfinder.zoom;
-    _clampCamera();
+    panBy(event.canvasEndPosition - event.canvasStartPosition);
   }
 
   @override
@@ -367,14 +368,9 @@ class JigsawGame extends FlameGame
 
   @override
   void onScaleUpdate(ScaleUpdateEvent event) {
-    camera.viewfinder.position -=
-        event.focalPointDelta / camera.viewfinder.zoom;
-
+    panBy(event.focalPointDelta);
     // event.scale is cumulative since the gesture started.
-    _zoomAroundCanvasPoint(
-      clampZoom(_zoomAtPinchStart * event.scale, _fitZoom),
-      event.canvasEndPosition,
-    );
+    zoomTo(_zoomAtPinchStart * event.scale, event.canvasEndPosition);
   }
 
   @override
@@ -384,11 +380,34 @@ class JigsawGame extends FlameGame
       2,
       -event.scrollDelta.y / scrollPixelsPerZoomDoubling,
     ).toDouble();
-    _zoomAroundCanvasPoint(
-      clampZoom(camera.viewfinder.zoom * zoomFactor, _fitZoom),
-      event.canvasPosition,
-    );
+    zoomTo(camera.viewfinder.zoom * zoomFactor, event.canvasPosition);
   }
+
+  /// Moves the camera opposite to a finger drag of [canvasDelta] pixels.
+  /// Ignored at the fitted view: a missed piece grab must not shove the
+  /// board around — panning is earned by zooming in first.
+  void panBy(Vector2 canvasDelta) {
+    if (!isZoomedBeyondFit(camera.viewfinder.zoom, _fitZoom)) {
+      return;
+    }
+    camera.viewfinder.position -= canvasDelta / camera.viewfinder.zoom;
+    _clampCamera();
+  }
+
+  /// Zooms toward [canvasFocalPoint], keeping it fixed on screen. Zooming
+  /// back to (or below) the fit zoom snaps the camera home to the centered
+  /// fitted view, so pinching out is always a way back to "board stays put".
+  void zoomTo(double requestedZoom, Vector2 canvasFocalPoint) {
+    final newZoom = clampZoom(requestedZoom, _fitZoom);
+    if (!isZoomedBeyondFit(newZoom, _fitZoom)) {
+      _fitCameraToBoard();
+      return;
+    }
+    _zoomAroundCanvasPoint(newZoom, canvasFocalPoint);
+  }
+
+  /// Returns the camera to the centered fitted view (the AppBar button).
+  void resetView() => _fitCameraToBoard();
 
   /// Keeps the world point under [canvasPoint] fixed on screen while zooming.
   void _zoomAroundCanvasPoint(double newZoom, Vector2 canvasPoint) {
