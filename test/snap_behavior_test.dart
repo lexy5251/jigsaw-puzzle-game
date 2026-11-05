@@ -57,18 +57,46 @@ void main() {
     return (gesture, piece);
   }
 
-  testWidgets('dragging empty board pans the camera',
-      (tester) async {
+  testWidgets('dragging empty board at the fitted view leaves the camera put', (
+    tester,
+  ) async {
     final game = await bootGame(tester);
+    final cameraBefore = game.camera.viewfinder.position.clone();
+    final zoomBefore = game.camera.viewfinder.zoom;
+    final gesture = await tester.startGesture(const Offset(400, 100));
+    await tester.pump(const Duration(milliseconds: 16));
+    await dragTo(
+      tester,
+      gesture,
+      const Offset(400, 100),
+      const Offset(300, 100),
+    );
+    await gesture.up();
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(game.camera.viewfinder.position, cameraBefore);
+    expect(game.camera.viewfinder.zoom, zoomBefore);
+  });
+
+  testWidgets('dragging empty board pans the camera once zoomed in', (
+    tester,
+  ) async {
+    final game = await bootGame(tester);
+    game.zoomTo(game.camera.viewfinder.zoom * 2, Vector2(400, 246));
     final cameraBefore = game.camera.viewfinder.position.clone();
     final gesture = await tester.startGesture(const Offset(400, 100));
     await tester.pump(const Duration(milliseconds: 16));
     await dragTo(
-        tester, gesture, const Offset(400, 100), const Offset(300, 100));
+      tester,
+      gesture,
+      const Offset(400, 100),
+      const Offset(300, 100),
+    );
     await gesture.up();
     await tester.pump(const Duration(milliseconds: 16));
-    expect(game.camera.viewfinder.position.distanceTo(cameraBefore),
-        greaterThan(0.01));
+    expect(
+      game.camera.viewfinder.position.distanceTo(cameraBefore),
+      greaterThan(0.01),
+    );
   });
 
   /// Canvas point that puts the carried piece's center on [worldTarget].
@@ -77,8 +105,9 @@ void main() {
     return Offset(canvas.x, canvas.y);
   }
 
-  testWidgets('piece dropped on its correct spot locks and snaps exactly',
-      (tester) async {
+  testWidgets('piece dropped on its correct spot locks and snaps exactly', (
+    tester,
+  ) async {
     final game = await bootGame(tester);
     final (gesture, piece) = await liftPieceFromTray(tester, game);
 
@@ -97,8 +126,9 @@ void main() {
     expect(game.progress.lockedCount, 1);
   });
 
-  testWidgets('piece dropped a full piece-width away stays loose',
-      (tester) async {
+  testWidgets('piece dropped a full piece-width away stays loose', (
+    tester,
+  ) async {
     final game = await bootGame(tester);
     final (gesture, piece) = await liftPieceFromTray(tester, game);
 

@@ -48,7 +48,15 @@ double clampTrayScroll(double offset, double stripWidth, double trayWidth) {
 }
 
 /// Camera zoom limits, relative to the zoom that fits the whole board:
-/// out to half the board's size, in to 4x.
+/// never below the fitted view (the board always fills the screen), in to 4x.
 double clampZoom(double zoom, double fitZoom) {
-  return zoom.clamp(fitZoom * 0.5, fitZoom * 4.0).toDouble();
+  return zoom.clamp(fitZoom, fitZoom * 4.0).toDouble();
+}
+
+/// Whether the camera is meaningfully zoomed in past the fitted view.
+/// Within 1% of the fit zoom counts as fitted: panning stays disabled and
+/// the camera snaps home. The tolerance absorbs rounding from cumulative
+/// pinch scale factors, which rarely land exactly on the fit zoom.
+bool isZoomedBeyondFit(double zoom, double fitZoom) {
+  return zoom > fitZoom * 1.01;
 }

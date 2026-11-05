@@ -215,6 +215,11 @@ class _GameScreenState extends State<GameScreen> {
       appBar: AppBar(
         actions: [
           IconButton(
+            tooltip: 'Fit board to screen',
+            icon: const Icon(Icons.fit_screen),
+            onPressed: () => _game.resetView(),
+          ),
+          IconButton(
             tooltip: 'Restart puzzle',
             icon: const Icon(Icons.replay),
             onPressed: _restarting ? null : _confirmRestart,
