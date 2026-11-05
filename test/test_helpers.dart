@@ -4,13 +4,45 @@ import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:jigsaw_puzzle/app_settings.dart';
 import 'package:jigsaw_puzzle/game_screen.dart';
+import 'package:jigsaw_puzzle/game_sounds.dart';
 import 'package:jigsaw_puzzle/jigsaw_game.dart';
 import 'package:jigsaw_puzzle/puzzle_catalog.dart';
+import 'package:jigsaw_puzzle/puzzle_completion.dart';
 import 'package:jigsaw_puzzle/puzzle_piece.dart';
+import 'package:jigsaw_puzzle/puzzle_save.dart';
 import 'package:jigsaw_puzzle/puzzle_select_screen.dart';
 import 'package:jigsaw_puzzle/studio_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+/// Small fixture shared by game-screen, settings, and restart tests.
+const singlePieceImage = PuzzleImage(
+  id: 'test',
+  title: 'Test puzzle',
+  categoryId: 'test',
+  fileName: 'test_photo.jpg',
+);
+const singlePieceSize = PuzzleSize(label: 'Test', columns: 1, rows: 1);
+
+// The channel-backed mock uses the plugin's prefixed storage keys.
+final singlePieceProgressKey =
+    'flutter.${puzzleSaveKey(imageId: singlePieceImage.id, columns: singlePieceSize.columns, rows: singlePieceSize.rows)}';
+final singlePieceCompletionKey =
+    'flutter.${puzzleCompletionKey(imageId: singlePieceImage.id, columns: singlePieceSize.columns, rows: singlePieceSize.rows)}';
+
+/// One loose piece at its target; a settle completes the puzzle.
+PuzzleSaveState singleLoosePieceSave({String? startedDay}) => PuzzleSaveState(
+  trayPieceIndexes: const [],
+  lockedPieceIndexes: const [],
+  loosePiecePositions: {0: Vector2.zero()},
+  startedDay: startedDay,
+);
+
+/// Extracts the game currently hosted by the screen, including after restart.
+JigsawGame currentGame(WidgetTester tester) => tester
+    .widget<GameWidget<JigsawGame>>(find.byType(GameWidget<JigsawGame>))
+    .game!;
 
 /// Channel-backed preferences with controllable storage failures.
 class MockSharedPreferences {
@@ -80,7 +112,10 @@ Future<void> pumpSelectScreen(
   required DateTime Function() clock,
 }) {
   return tester.pumpWidget(
-    MaterialApp(theme: studioTheme(), home: PuzzleSelectScreen(clock: clock)),
+    MaterialApp(
+      theme: studioTheme(),
+      home: PuzzleSelectScreen(clock: clock),
+    ),
   );
 }
 
@@ -107,17 +142,23 @@ Future<JigsawGame> bootGameScreen(
   required PuzzleImage image,
   required PuzzleSize size,
   DateTime Function()? clock,
+  AppSettings settings = const AppSettings(),
+  GameSounds Function()? soundsFactory,
 }) async {
   late JigsawGame game;
   await tester.runAsync(() async {
     await tester.pumpWidget(
       MaterialApp(
-        home: GameScreen(image: image, size: size, clock: clock),
+        home: GameScreen(
+          image: image,
+          size: size,
+          clock: clock,
+          settings: settings,
+          soundsFactory: soundsFactory,
+        ),
       ),
     );
-    game = tester
-        .widget<GameWidget<JigsawGame>>(find.byType(GameWidget<JigsawGame>))
-        .game!;
+    game = currentGame(tester);
     await game.loaded;
   });
   for (var i = 0; i < 3; i++) {

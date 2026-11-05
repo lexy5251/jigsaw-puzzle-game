@@ -97,6 +97,8 @@ class JigsawGame extends FlameGame
   // Serialize progress writes so a delayed write cannot recreate a save
   // after a successful completion has deleted it.
   Future<void>? _pendingProgressSave;
+  Future<void>? _pendingProgressDelete;
+  bool _discardingProgress = false;
 
   // Which game instance currently owns each save key (this app run). If the
   // player reopens a puzzle while an older session is still finishing its
@@ -135,7 +137,7 @@ class JigsawGame extends FlameGame
 
   @override
   Future<void> onLoad() async {
-    if (_disposed) {
+    if (_disposed || _discardingProgress) {
       return;
     }
     try {
@@ -156,7 +158,7 @@ class JigsawGame extends FlameGame
     unawaited(sounds?.preload());
 
     final image = await images.load(imageAsset);
-    if (_disposed) {
+    if (_disposed || _discardingProgress) {
       return;
     }
 
@@ -189,13 +191,13 @@ class JigsawGame extends FlameGame
     );
     _pieceImages.addAll(shapedImages);
     // Disposal can happen while the rasterizer is still producing images.
-    if (_disposed) {
+    if (_disposed || _discardingProgress) {
       _disposePieceImages();
       return;
     }
     final allPieces = _createPieceData(shapedImages, pieceSize);
     final savedState = await _loadSavedProgress(allPieces.length);
-    if (_disposed) {
+    if (_disposed || _discardingProgress) {
       return;
     }
 
@@ -462,6 +464,7 @@ class JigsawGame extends FlameGame
 
   /// Both board and tray releases use the same pure chunk rules.
   void settlePiece(PuzzlePiece piece) {
+    if (_disposed || _discardingProgress) return;
     if (piece.isLocked || piece.isSettling) return;
     _groups.moveTo(piece.index, Point(piece.x, piece.y));
     _busyPieces.removeAll(_groups.membersOf(piece.index));
@@ -499,7 +502,7 @@ class JigsawGame extends FlameGame
   }
 
   void _finishGroupSettle(GroupDrop result) {
-    if (_disposed) return;
+    if (_disposed || _discardingProgress) return;
     _busyPieces.removeAll(result.members);
     var completed = false;
     // Set all member flags and count them before saving: no partial lock save.
@@ -536,8 +539,11 @@ class JigsawGame extends FlameGame
       final key = saveKey;
       // Skip the delete if a newer session took over this puzzle meanwhile:
       // the save on disk is that session's progress, not ours to remove.
-      if (store != null && key != null && _ownsSaveKey) {
-        await store.delete(key);
+      if (store != null &&
+          key != null &&
+          _ownsSaveKey &&
+          !_discardingProgress) {
+        await (_pendingProgressDelete = store.delete(key));
       }
     } on Object catch (error) {
       if (kDebugMode) {
@@ -581,10 +587,26 @@ class JigsawGame extends FlameGame
   @visibleForTesting
   double get ghostPreviewOpacity => _ghostPreview?.opacity ?? 0;
 
-  /// Lets tests wait for queued writes instead of relying on frame timing.
-  @visibleForTesting
+  /// Completes when the currently queued progress writes have landed.
+  /// Use [discardProgress] to stop further writes before deleting a save.
   Future<void> get progressSaved =>
       _pendingProgressSave ?? Future<void>.value();
+
+  /// Permanently stops this run and clears its progress before replacement.
+  /// Late gesture releases and loads must not create any more snapshots.
+  Future<void> discardProgress() async {
+    _discardingProgress = true;
+    pauseEngine();
+    await progressSaved;
+    // Completion may already have issued a delete before restart began.
+    // Drain that too, so it cannot erase the replacement game's first save.
+    await _pendingProgressDelete;
+    final store = saveStore;
+    final key = saveKey;
+    if (store != null && key != null && _ownsSaveKey) {
+      await store.delete(key);
+    }
+  }
 
   /// Returns a usable save, or null to start fresh.
   /// Storage may be disabled, or the save may be missing or invalid.
@@ -653,6 +675,7 @@ class JigsawGame extends FlameGame
   /// snapshot until _recordCompletion confirms the permanent record is saved.
   /// Fire-and-forget: gameplay never waits on storage.
   void persistProgress() {
+    if (_disposed || _discardingProgress) return;
     final store = saveStore;
     final key = saveKey;
     if (store == null || key == null || !_ownsSaveKey) {

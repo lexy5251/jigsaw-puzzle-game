@@ -1,4 +1,3 @@
-import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jigsaw_puzzle/daily_puzzle.dart';
@@ -54,9 +53,7 @@ void main() {
         for (var i = 0; i < 10; i++) {
           await tester.pump(const Duration(milliseconds: 60));
         }
-        game = tester
-            .widget<GameWidget<JigsawGame>>(find.byType(GameWidget<JigsawGame>))
-            .game!;
+        game = currentGame(tester);
         await game.loaded;
       });
       await tester.pump();

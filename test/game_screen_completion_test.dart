@@ -4,7 +4,6 @@ import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:jigsaw_puzzle/puzzle_catalog.dart';
 import 'package:jigsaw_puzzle/puzzle_completion.dart';
 import 'package:jigsaw_puzzle/puzzle_piece.dart';
 import 'package:jigsaw_puzzle/puzzle_save.dart';
@@ -13,24 +12,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'test_helpers.dart';
 
 void main() {
-  const image = PuzzleImage(
-    id: 'test',
-    title: 'Test puzzle',
-    categoryId: 'test',
-    fileName: 'test_photo.jpg',
-  );
-  const size = PuzzleSize(label: 'Test', columns: 1, rows: 1);
-  const progressKey = 'flutter.save.test.1x1';
-  const completionKey = 'flutter.done.test.1x1';
   late MockSharedPreferences prefs;
 
   setUp(() {
     prefs = MockSharedPreferences()..install();
-    prefs.storage[progressKey] = PuzzleSaveState(
-      trayPieceIndexes: const [],
-      lockedPieceIndexes: const [],
-      loosePiecePositions: {0: Vector2.zero()},
-    ).toJsonString();
+    prefs.storage[singlePieceProgressKey] = singleLoosePieceSave()
+        .toJsonString();
   });
 
   testWidgets('keeps progress until completion is stored successfully', (
@@ -38,25 +25,29 @@ void main() {
   ) async {
     final completionWrite = Completer<bool>();
     prefs.onWrite = (key) =>
-        key == completionKey ? completionWrite.future : true;
+        key == singlePieceCompletionKey ? completionWrite.future : true;
     addTearDown(() {
       if (!completionWrite.isCompleted) {
         completionWrite.complete(false);
       }
     });
-    final game = await bootGameScreen(tester, image: image, size: size);
-    final previousProgress = prefs.storage[progressKey];
+    final game = await bootGameScreen(
+      tester,
+      image: singlePieceImage,
+      size: singlePieceSize,
+    );
+    final previousProgress = prefs.storage[singlePieceProgressKey];
     await completePuzzle(tester, game);
 
     expect(find.text('Puzzle complete!'), findsOneWidget);
-    expect(prefs.storage[progressKey], previousProgress);
-    expect(prefs.storage.containsKey(completionKey), isFalse);
+    expect(prefs.storage[singlePieceProgressKey], previousProgress);
+    expect(prefs.storage.containsKey(singlePieceCompletionKey), isFalse);
 
     completionWrite.complete(true);
     await tester.pump();
 
-    expect(prefs.storage.containsKey(completionKey), isTrue);
-    expect(prefs.storage.containsKey(progressKey), isFalse);
+    expect(prefs.storage.containsKey(singlePieceCompletionKey), isTrue);
+    expect(prefs.storage.containsKey(singlePieceProgressKey), isFalse);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -65,7 +56,7 @@ void main() {
       'keeps resumable progress when completion ${throwsError ? 'throws' : 'is rejected'}',
       (tester) async {
         prefs.onWrite = (key) {
-          if (key != completionKey) {
+          if (key != singlePieceCompletionKey) {
             return true;
           }
           if (throwsError) {
@@ -73,13 +64,17 @@ void main() {
           }
           return false;
         };
-        final game = await bootGameScreen(tester, image: image, size: size);
-        final previousProgress = prefs.storage[progressKey];
+        final game = await bootGameScreen(
+          tester,
+          image: singlePieceImage,
+          size: singlePieceSize,
+        );
+        final previousProgress = prefs.storage[singlePieceProgressKey];
         await completePuzzle(tester, game);
 
         expect(tester.takeException(), isNull);
-        expect(prefs.storage[progressKey], previousProgress);
-        expect(prefs.storage.containsKey(completionKey), isFalse);
+        expect(prefs.storage[singlePieceProgressKey], previousProgress);
+        expect(prefs.storage.containsKey(singlePieceCompletionKey), isFalse);
         expect(
           await const SharedPreferencesCompletionStore().isCompleted(
             'done.test.1x1',
@@ -89,7 +84,11 @@ void main() {
 
         await tester.pumpWidget(const SizedBox.shrink());
         SharedPreferences.resetStatic();
-        final resumed = await bootGameScreen(tester, image: image, size: size);
+        final resumed = await bootGameScreen(
+          tester,
+          image: singlePieceImage,
+          size: singlePieceSize,
+        );
         expect(resumed.progress.isComplete, isFalse);
         expect(resumed.world.children.whereType<PuzzlePiece>(), hasLength(1));
         await tester.pumpWidget(const SizedBox.shrink());
@@ -105,7 +104,11 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
-    final game = await bootGameScreen(tester, image: image, size: size);
+    final game = await bootGameScreen(
+      tester,
+      image: singlePieceImage,
+      size: singlePieceSize,
+    );
     await completePuzzle(tester, game);
 
     expect(find.text('Puzzle complete!'), findsOneWidget);
@@ -116,17 +119,21 @@ void main() {
   testWidgets('leaving an unfinished puzzle keeps its progress', (
     tester,
   ) async {
-    final game = await bootGameScreen(tester, image: image, size: size);
+    final game = await bootGameScreen(
+      tester,
+      image: singlePieceImage,
+      size: singlePieceSize,
+    );
     final piece = game.world.children.whereType<PuzzlePiece>().single;
     piece.position.setValues(25, 30);
     game.persistProgress();
     await tester.pump();
     await tester.pumpWidget(const SizedBox.shrink());
 
-    expect(prefs.storage.containsKey(progressKey), isTrue);
-    expect(prefs.storage.containsKey(completionKey), isFalse);
+    expect(prefs.storage.containsKey(singlePieceProgressKey), isTrue);
+    expect(prefs.storage.containsKey(singlePieceCompletionKey), isFalse);
     final saved = PuzzleSaveState.fromJsonString(
-      prefs.storage[progressKey] as String,
+      prefs.storage[singlePieceProgressKey] as String,
     )!;
     expect(saved.loosePiecePositions[0], Vector2(25, 30));
   });

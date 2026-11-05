@@ -1,11 +1,9 @@
-import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jigsaw_puzzle/daily_puzzle.dart';
 import 'package:jigsaw_puzzle/jigsaw_game.dart';
 import 'package:jigsaw_puzzle/puzzle_catalog.dart';
 import 'package:jigsaw_puzzle/puzzle_completion.dart';
-import 'package:jigsaw_puzzle/puzzle_save.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'test_helpers.dart';
@@ -27,7 +25,6 @@ void main() {
     categoryId: 'test',
     fileName: 'test_photo.jpg',
   );
-  const size = PuzzleSize(label: 'Test', columns: 1, rows: 1);
   const dailyDaysKey = 'flutter.daily.days';
   late MockSharedPreferences prefs;
 
@@ -44,17 +41,14 @@ void main() {
     // Seed a save with the single piece loose on the board, so completing
     // the puzzle is one settle() call instead of a tray drag. The stamp
     // says which day the run began — the day a finish credits.
-    prefs.storage['flutter.save.${image.id}.1x1'] = PuzzleSaveState(
-      trayPieceIndexes: const [],
-      lockedPieceIndexes: const [],
-      loosePiecePositions: {0: Vector2.zero()},
+    prefs.storage['flutter.save.${image.id}.1x1'] = singleLoosePieceSave(
       startedDay: savedStartedDay ?? dayKey((clock ?? fixedNow)()),
     ).toJsonString();
 
     return bootGameScreen(
       tester,
       image: image,
-      size: size,
+      size: singlePieceSize,
       clock: clock ?? fixedNow,
     );
   }
@@ -93,11 +87,7 @@ void main() {
   ) async {
     // An abandoned run from an earlier rotation of the same image: its
     // stamp is weeks old, so finishing it must not bloom any pot.
-    final game = await boot(
-      tester,
-      dailyImage,
-      savedStartedDay: '2026-10-01',
-    );
+    final game = await boot(tester, dailyImage, savedStartedDay: '2026-10-01');
     await completePuzzle(tester, game);
 
     expect(prefs.storage.containsKey(dailyDaysKey), isFalse);
@@ -150,7 +140,7 @@ void main() {
     final resumed = await bootGameScreen(
       tester,
       image: dailyImage,
-      size: size,
+      size: singlePieceSize,
       clock: fixedNow,
     );
     await completePuzzle(tester, resumed);
