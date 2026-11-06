@@ -339,7 +339,7 @@ void main() {
       game.setGhostPreview(true);
       await tester.pump(const Duration(milliseconds: 16));
       final visibleBefore = game.visibleTrayPieceIndexes.toSet();
-      const start = Offset(50, 550);
+      const start = Offset(50, 460);
       const lifted = Offset(50, 400);
       final gesture = await tester.startGesture(start);
       await drag(tester, gesture, start, lifted);

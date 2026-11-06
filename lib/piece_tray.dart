@@ -1,5 +1,6 @@
 // Tray logic overview:
-// 1. Show the remaining pieces as a horizontal row of small previews.
+// 1. Show the remaining pieces as two stacked rows of small previews,
+//    filling each column top-to-bottom before moving right.
 // 2. Drag sideways to scroll, or drag a preview above the tray to lift it.
 // 3. Replace the preview with a board piece that follows the pointer.
 // 4. On release or cancellation, ask the piece to settle and clear drag state.
@@ -49,7 +50,8 @@ class PieceTray extends PositionComponent
     required super.size,
   }) : _remainingPieces = List.of(pieces);
 
-  static const _padding = 10.0;
+  // Row count, column density, and spacing live in puzzle_logic.dart
+  // (trayRows, trayVisibleColumns, trayPadding, traySlotGap).
   static const _liftDistanceAboveTray = 4.0;
 
   /// Full size on the board; tray previews preserve this aspect ratio.
@@ -77,7 +79,9 @@ class PieceTray extends PositionComponent
   late final RectangleComponent _background;
   late final ClipComponent _trayClip;
 
-  double get _thumbnailHeight => size.y - _padding * 2;
+  double get _thumbnailHeight =>
+      trayThumbnailHeight(size.x, size.y, _thumbnailAspect);
+  double get _rowSlotHeight => _thumbnailHeight + trayPadding;
 
   // Previews show the shaped piece images, which carry a transparent bleed
   // margin around the base cell — use their aspect ratio, not the cell's,
@@ -92,8 +96,9 @@ class PieceTray extends PositionComponent
   }
 
   double get _thumbnailWidth => _thumbnailHeight * _thumbnailAspect;
-  double get _thumbnailSlotWidth => _thumbnailWidth + _padding;
-  double get _stripWidth => _padding + _thumbnails.length * _thumbnailSlotWidth;
+  double get _thumbnailSlotWidth => _thumbnailWidth + traySlotGap;
+  int get _columnCount => (_thumbnails.length + trayRows - 1) ~/ trayRows;
+  double get _stripWidth => trayPadding + _columnCount * _thumbnailSlotWidth;
 
   bool get isEmpty => _remainingPieces.isEmpty;
 
@@ -288,8 +293,8 @@ class PieceTray extends PositionComponent
   void _layoutThumbnails() {
     for (final (index, thumbnail) in _thumbnails.indexed) {
       thumbnail.position = Vector2(
-        _padding + index * _thumbnailSlotWidth,
-        _padding,
+        trayPadding + (index ~/ trayRows) * _thumbnailSlotWidth,
+        trayPadding + (index % trayRows) * _rowSlotHeight,
       );
     }
 
@@ -299,14 +304,37 @@ class PieceTray extends PositionComponent
 
   _TrayThumbnail? _thumbnailAtCanvasPoint(Vector2 canvasPosition) {
     final positionInStrip = canvasPosition.x - position.x + _scrollOffset;
-    final thumbnailIndex = (positionInStrip - _padding) ~/ _thumbnailSlotWidth;
+    final column = (positionInStrip - trayPadding) ~/ _thumbnailSlotWidth;
 
-    if (thumbnailIndex < 0 || thumbnailIndex >= _thumbnails.length) {
+    // Split each padding gap at its midpoint so touches pick the nearest row.
+    // Clamping keeps touches in the outer padding forgiving too.
+    final rawRow =
+        (canvasPosition.y - position.y - trayPadding / 2) ~/ _rowSlotHeight;
+    final row = rawRow < 0 ? 0 : (rawRow >= trayRows ? trayRows - 1 : rawRow);
+
+    final thumbnailIndex = column * trayRows + row;
+    if (column < 0 ||
+        thumbnailIndex < 0 ||
+        thumbnailIndex >= _thumbnails.length) {
       return null;
     }
 
     return _thumbnails[thumbnailIndex];
   }
+
+  /// Strip-local top-left corners of the visible thumbnails, in order.
+  @visibleForTesting
+  List<Vector2> get thumbnailPositions => [
+    for (final thumbnail in _thumbnails) thumbnail.position.clone(),
+  ];
+
+  /// Current thumbnail sprite-box size.
+  @visibleForTesting
+  Vector2 get thumbnailSize => Vector2(_thumbnailWidth, _thumbnailHeight);
+
+  /// How far the strip is scrolled to the right.
+  @visibleForTesting
+  double get scrollOffset => _scrollOffset;
 }
 
 class _TrayThumbnail extends SpriteComponent {

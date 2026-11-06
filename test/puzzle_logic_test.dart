@@ -74,6 +74,21 @@ void main() {
     });
   });
 
+  group('tray geometry', () {
+    test('thumbnail height is bounded by rows and by visible columns', () {
+      // Wide tray: the row height binds — (180 - 30) / 2.
+      expect(trayThumbnailHeight(800, 180, 1), 75);
+      // Narrow tray: the six-column rule binds — (390 / 6) - 4.
+      expect(trayThumbnailHeight(400, 400, 1), 61);
+    });
+
+    test('preferred height is exactly what the two rows need', () {
+      final height = preferredTrayHeight(400, 1);
+      expect(height, 2 * 61 + 30);
+      expect(trayThumbnailHeight(400, height, 1), closeTo(61, 1e-9));
+    });
+  });
+
   group('clampZoom', () {
     test('limits zoom to fit-4x of the fit zoom', () {
       const fit = 2.0;

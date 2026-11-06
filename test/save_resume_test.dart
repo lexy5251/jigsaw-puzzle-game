@@ -55,13 +55,13 @@ void main() {
     }
   }
 
-  /// Drags a piece out of the tray (test surface is 800x600; the tray starts
-  /// at y=492 and the first thumbnail sits around x=10..98).
+  /// Drags a piece out of the tray (test surface is 800x600; the two-row
+  /// tray starts at y=420 and (50, 460) is the first top-row thumbnail).
   Future<(TestGesture, PuzzlePiece)> liftPieceFromTray(
     WidgetTester tester,
     JigsawGame game,
   ) async {
-    const trayThumbTouch = Offset(50, 550);
+    const trayThumbTouch = Offset(50, 460);
     const liftedTouch = Offset(50, 400);
     final gesture = await tester.startGesture(trayThumbTouch);
     await tester.pump(const Duration(milliseconds: 16));

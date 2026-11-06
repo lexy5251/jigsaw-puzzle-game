@@ -32,23 +32,21 @@ class PuzzleImage {
 }
 
 class PuzzleSize {
-  const PuzzleSize({
-    required this.label,
-    required this.columns,
-    required this.rows,
-  });
+  const PuzzleSize({required this.columns, required this.rows});
 
-  final String label;
   final int columns;
   final int rows;
 
   int get pieceCount => columns * rows;
 }
 
+// Catalog images are 3:2, so columns:rows stays 3:2 — pieces are square
+// only on such grids (6x4, 12x8, 15x10, ...). Counts follow from that.
 const puzzleSizes = [
-  PuzzleSize(label: 'Easy', columns: 6, rows: 4),
-  PuzzleSize(label: 'Medium', columns: 10, rows: 6),
-  PuzzleSize(label: 'Hard', columns: 12, rows: 10),
+  PuzzleSize(columns: 6, rows: 4),
+  PuzzleSize(columns: 12, rows: 8),
+  PuzzleSize(columns: 15, rows: 10),
+  PuzzleSize(columns: 18, rows: 12),
 ];
 
 const puzzleCategories = [

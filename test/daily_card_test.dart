@@ -89,7 +89,7 @@ void main() {
     await tester.tap(find.text("TODAY'S PAINTING"));
     await tester.pumpAndSettle();
 
-    expect(find.text('24 pieces · Easy'), findsOneWidget);
+    expect(find.text('24 pieces'), findsOneWidget);
     // The sheet repeats the daily image's title above the size list.
     expect(
       find.descendant(

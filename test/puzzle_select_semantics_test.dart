@@ -58,7 +58,7 @@ void main() {
         'puzzle-size-alpine-lakes-panorama-6x4',
       );
       expect(easyOption.hitTestable(), findsOneWidget);
-      expect(tester.getSemantics(easyOption).label, '24 pieces · Easy');
+      expect(tester.getSemantics(easyOption).label, '24 pieces');
       expect(easyStatus, easyInProgress ? findsOneWidget : findsNothing);
       if (easyInProgress) {
         expect(tester.getSemantics(easyStatus).label, 'In progress');

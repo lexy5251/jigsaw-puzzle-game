@@ -89,8 +89,8 @@ void main() {
             saveKey: 'filter-drag',
           ),
         );
-        final gesture = await tester.startGesture(const Offset(50, 550));
-        await gesture.moveTo(const Offset(75, 550));
+        final gesture = await tester.startGesture(const Offset(50, 460));
+        await gesture.moveTo(const Offset(75, 460));
         await tester.pump(const Duration(milliseconds: 16));
 
         // Another finger can toggle the toolbar while the first holds a piece.
@@ -104,7 +104,7 @@ void main() {
           await gesture.cancel();
         } else {
           for (var i = 1; i <= 8; i++) {
-            await gesture.moveTo(Offset(75, 550 - 150 * i / 8));
+            await gesture.moveTo(Offset(75, 460 - 150 * i / 8));
             await tester.pump(const Duration(milliseconds: 16));
           }
           await gesture.up();

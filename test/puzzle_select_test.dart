@@ -4,12 +4,25 @@ import 'package:jigsaw_puzzle/daily_puzzle.dart';
 import 'package:jigsaw_puzzle/daily_streak.dart';
 import 'package:jigsaw_puzzle/game_screen.dart';
 import 'package:jigsaw_puzzle/jigsaw_game.dart';
+import 'package:jigsaw_puzzle/puzzle_catalog.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'test_helpers.dart';
 
 /// Covers the select → size picker → game screen navigation flow.
 void main() {
+  test('every catalog size keeps columns:rows = 3:2 so pieces stay square', () {
+    // Catalog images are 1536x1024 (3:2); any other grid ratio stretches
+    // the pieces (the 2026-11-05 phone-test finding).
+    for (final size in puzzleSizes) {
+      expect(
+        size.columns / size.rows,
+        1.5,
+        reason: '${size.columns}x${size.rows}',
+      );
+    }
+  });
+
   setUp(() {
     // Backs shared_preferences with an in-memory map; without it the real
     // plugin is missing in tests and storage lookups never complete.
@@ -40,11 +53,12 @@ void main() {
       await tester.tap(firstImage);
       await tester.pumpAndSettle();
 
-      expect(find.text('24 pieces · Easy'), findsOneWidget);
-      expect(find.text('60 pieces · Medium'), findsOneWidget);
-      expect(find.text('120 pieces · Hard'), findsOneWidget);
+      expect(find.text('24 pieces'), findsOneWidget);
+      expect(find.text('96 pieces'), findsOneWidget);
+      expect(find.text('150 pieces'), findsOneWidget);
+      expect(find.text('216 pieces'), findsOneWidget);
 
-      await tester.tap(find.text('24 pieces · Easy'));
+      await tester.tap(find.text('24 pieces'));
       // runAsync lets the real photo load + decode finish while the sheet-close
       // and route animations play. pumpAndSettle would hang here: Flame's game
       // loop keeps scheduling frames forever once the GameWidget mounts.
@@ -111,7 +125,7 @@ void main() {
 
       final hardOption = find.descendant(
         of: sheet,
-        matching: find.text('120 pieces · Hard'),
+        matching: find.text('150 pieces'),
       );
       expect(hardOption.hitTestable(), findsNothing);
       await tester.scrollUntilVisible(
