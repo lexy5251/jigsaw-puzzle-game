@@ -14,6 +14,13 @@ void main() {
   DateTime fixedNow() => DateTime(2026, 11, 6, 14);
   final daily = dailyPuzzleFor(fixedNow());
 
+  // The category cards reuse some icons (e.g. the Flowers mascot), so icon
+  // counts must stay scoped to the daily card itself.
+  Finder dailyCardIcon(IconData icon) => find.descendant(
+    of: find.byType(DailyPuzzleCard),
+    matching: find.byIcon(icon),
+  );
+
   testWidgets('shows a live streak that today has not broken yet', (
     tester,
   ) async {
@@ -28,8 +35,9 @@ void main() {
     expect(find.text('Not started'), findsOneWidget);
     expect(find.text('2-day streak'), findsOneWidget);
     expect(find.text('longest: 2 · pots regrow, no pressure'), findsOneWidget);
-    // Two bloomed pots on the windowsill.
-    expect(find.byIcon(Icons.local_florist), findsNWidgets(2));
+    // Two bloomed pots on the windowsill (scoped: the Flowers category
+    // card uses the same icon as its mascot).
+    expect(dailyCardIcon(Icons.local_florist), findsNWidgets(2));
   });
 
   testWidgets('the windowsill reads day states to screen readers', (
@@ -66,7 +74,7 @@ void main() {
 
     expect(find.text('A pot blooms for every quiet day.'), findsOneWidget);
     expect(find.textContaining('longest'), findsNothing);
-    expect(find.byIcon(Icons.local_florist), findsNothing);
+    expect(dailyCardIcon(Icons.local_florist), findsNothing);
   });
 
   testWidgets('shows the done state after finishing today', (tester) async {
@@ -127,7 +135,7 @@ void main() {
 
     final card = find.byType(DailyPuzzleCard);
     expect(find.text('Done today ✓'), findsOneWidget);
-    expect(find.byIcon(Icons.local_florist), findsNWidgets(2));
+    expect(dailyCardIcon(Icons.local_florist), findsNWidgets(2));
 
     now = monday;
     await tester.pump(const Duration(seconds: 1));
@@ -140,7 +148,7 @@ void main() {
     expect(find.text('In progress'), findsOneWidget);
     expect(find.text('Done today ✓'), findsNothing);
     expect(find.text('2-day streak'), findsOneWidget);
-    expect(find.byIcon(Icons.local_florist), findsNothing);
+    expect(dailyCardIcon(Icons.local_florist), findsNothing);
 
     // A second rollover checks that the timer was rearmed and that the
     // previous daily's progress does not carry over to the new image.

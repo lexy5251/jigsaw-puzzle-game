@@ -40,13 +40,14 @@ void main() {
       );
       await pumpSelectScreen(tester, clock: () => now);
 
-      expect(find.text('Landscapes'), findsOneWidget);
+      // Categories live on their own pages now: open Landscapes first.
+      final landscapesCard = find.text('Landscapes');
+      await scrollSelectScreenTo(tester, landscapesCard);
+      await tester.tap(landscapesCard);
+      await tester.pumpAndSettle();
 
-      // Scope to the catalog grids: the daily card can repeat this title.
-      final firstImage = find.descendant(
-        of: find.byType(GridView),
-        matching: find.text('Alpine Lakes Panorama'),
-      );
+      // No daily card here, so the title appears exactly once.
+      final firstImage = find.text('Alpine Lakes Panorama');
       // The tile may start below the fold. Bring it fully on-screen before
       // tapping, even if it has already been built by the grid.
       await scrollSelectScreenTo(tester, firstImage);
@@ -104,10 +105,13 @@ void main() {
       final now = DateTime(2026, 11, 20, 14);
       expect(dailyPuzzleFor(now).title, 'Alpine Lakes Panorama');
       await pumpSelectScreen(tester, clock: () => now);
-      final catalogImage = find.descendant(
-        of: find.byType(GridView),
-        matching: find.text('Alpine Lakes Panorama'),
-      );
+
+      final landscapesCard = find.text('Landscapes');
+      await scrollSelectScreenTo(tester, landscapesCard);
+      await tester.tap(landscapesCard);
+      await tester.pumpAndSettle();
+
+      final catalogImage = find.text('Alpine Lakes Panorama');
       await scrollSelectScreenTo(tester, catalogImage);
       await tester.tap(catalogImage);
       await tester.pumpAndSettle();

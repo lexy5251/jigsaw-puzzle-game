@@ -35,6 +35,23 @@ void main() {
     });
   }
 
+  test('a removed piece leaves others alone and can be added again', () {
+    final groups = board();
+    addAtOffset(groups, 0, const Point(300.0, 200.0));
+    addAtOffset(groups, 5, const Point(500.0, 100.0));
+
+    groups.remove(0); // Returned to the tray.
+    expect(
+      groups.positionOf(5),
+      groups.correctPosition(5) + const Point(500.0, 100.0),
+    );
+
+    // Lifting it out of the tray again re-registers the same index.
+    groups.add(0, const Point(10.0, 20.0));
+    expect(groups.membersOf(0), {0});
+    expect(groups.positionOf(0), const Point(10.0, 20.0));
+  });
+
   test('rejects a correct neighbor on the wrong side', () {
     final groups = board();
     groups.add(0, const Point(500.0, 200.0));

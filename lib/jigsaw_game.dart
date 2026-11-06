@@ -481,6 +481,40 @@ class JigsawGame extends FlameGame
     }
   }
 
+  /// A lone piece released with its center over the tray goes back into it
+  /// (players clear a messy board this way). Chunks and locked pieces stay:
+  /// the tray holds single pieces only.
+  bool _shouldReturnToTray(PuzzlePiece piece) {
+    final tray = _tray;
+    if (tray == null || _groups.membersOf(piece.index).length > 1) {
+      return false;
+    }
+    final centerOnScreen = camera.localToGlobal(
+      piece.position + piece.size / 2,
+    );
+    return centerOnScreen.y >= tray.position.y;
+  }
+
+  void _returnPieceToTray(PuzzlePiece piece) {
+    final centerOnScreen = camera.localToGlobal(
+      piece.position + piece.size / 2,
+    );
+    _groups.remove(piece.index);
+    _boardPieces.remove(piece.index);
+    piece.removeFromParent();
+    _tray!.returnPiece(
+      PieceData(
+        index: piece.index,
+        sprite: piece.sprite!,
+        renderBleed: piece.renderBleed,
+        correctPosition: piece.correctPosition.clone(),
+      ),
+      canvasPoint: centerOnScreen,
+    );
+    sounds?.playDrop();
+    persistProgress();
+  }
+
   void _keepGroupClearOfTray(int member) {
     const gap = 8.0;
     final bottom = _groups
@@ -502,6 +536,10 @@ class JigsawGame extends FlameGame
     if (piece.isLocked || piece.isSettling) return;
     _groups.moveTo(piece.index, Point(piece.x, piece.y));
     _busyPieces.removeAll(_groups.membersOf(piece.index));
+    if (_shouldReturnToTray(piece)) {
+      _returnPieceToTray(piece);
+      return;
+    }
     final result = _groups.drop(
       piece.index,
       boardTolerance: piece.size.x * snapToleranceFraction,

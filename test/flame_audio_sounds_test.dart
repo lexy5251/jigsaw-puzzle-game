@@ -193,29 +193,32 @@ void main() {
     },
   );
 
-  test('the effects-volume setting scales every cue, keeping the mix', () async {
-    final players = <_FakePlayer>[];
-    final sounds = FlameAudioSounds(
-      volumeScale: 0.5,
-      audioCache: _FakeCache(),
-      playerFactory: () {
-        final player = _FakePlayer();
-        players.add(player);
-        return player;
-      },
-    );
-    addTearDown(sounds.dispose);
-    await sounds.preload();
+  test(
+    'the effects-volume setting scales every cue, keeping the mix',
+    () async {
+      final players = <_FakePlayer>[];
+      final sounds = FlameAudioSounds(
+        volumeScale: 0.5,
+        audioCache: _FakeCache(),
+        playerFactory: () {
+          final player = _FakePlayer();
+          players.add(player);
+          return player;
+        },
+      );
+      addTearDown(sounds.dispose);
+      await sounds.preload();
 
-    expect(
-      {for (final p in players) p.file: p.configuredVolume},
-      {
-        'piece_drop.wav': 0.2,
-        'piece_snap.wav': 0.275,
-        'puzzle_complete.wav': 0.4,
-      },
-    );
-  });
+      expect(
+        {for (final p in players) p.file: p.configuredVolume},
+        {
+          'piece_drop.wav': 0.2,
+          'piece_snap.wav': 0.275,
+          'puzzle_complete.wav': 0.4,
+        },
+      );
+    },
+  );
 
   test('an out-of-range volume scale is clamped', () async {
     final players = <_FakePlayer>[];

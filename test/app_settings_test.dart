@@ -6,7 +6,10 @@ import 'test_helpers.dart';
 void main() {
   group('AppSettings json', () {
     test('round-trips both fields', () {
-      const settings = AppSettings(effectsVolume: 0.3, ghostPreviewDefault: true);
+      const settings = AppSettings(
+        effectsVolume: 0.3,
+        ghostPreviewDefault: true,
+      );
       expect(AppSettings.fromJsonString(settings.toJsonString()), settings);
     });
 

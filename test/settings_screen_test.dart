@@ -13,7 +13,10 @@ Future<InMemorySettingsStore> pumpSettings(
 }) async {
   final store = InMemorySettingsStore()..settings = initial;
   await tester.pumpWidget(
-    MaterialApp(theme: studioTheme(), home: SettingsScreen(store: store)),
+    MaterialApp(
+      theme: studioTheme(),
+      home: SettingsScreen(store: store),
+    ),
   );
   await tester.pumpAndSettle();
   return store;
