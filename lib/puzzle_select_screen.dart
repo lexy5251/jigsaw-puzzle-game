@@ -21,6 +21,7 @@ import 'puzzle_catalog.dart';
 import 'puzzle_launcher.dart';
 import 'puzzle_save.dart';
 import 'settings_screen.dart';
+import 'studio_mascots.dart';
 import 'studio_surfaces.dart';
 import 'studio_theme.dart';
 
@@ -93,7 +94,9 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
           rows: size.rows,
         ),
       );
-      if (creditableDays.contains(save?.startedDay)) {
+      if (save != null &&
+          save.isConsistentFor(size.pieceCount) &&
+          creditableDays.contains(save.startedDay)) {
         return true;
       }
     }
@@ -226,20 +229,23 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
 
 /// The category's mascot on a small painted disc over the cover's corner.
 class _MascotChip extends StatelessWidget {
-  const _MascotChip({required this.icon, required this.color});
+  const _MascotChip({required this.mascot});
 
-  final IconData icon;
-  final Color color;
+  final StudioMascot mascot;
 
   @override
   Widget build(BuildContext context) {
     return Container(
+      // A fixed disc, so wide mascots (mountains, houses) and tall ones
+      // (daisy) all read as the same-size chip; FittedBox scales each into it.
+      width: 30,
+      height: 30,
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         shape: BoxShape.circle,
       ),
-      child: Icon(icon, size: 18, color: color),
+      child: FittedBox(child: MascotArt(mascot, height: 64)),
     );
   }
 }
@@ -259,18 +265,6 @@ class _CategoryCard extends StatelessWidget {
   final int variant;
 
   final VoidCallback onOpen;
-
-  /// Material stand-ins until the painted mascots land with the
-  /// studio-world costume pass (mountains, mug, cat, daisies, houses,
-  /// palette).
-  static const _mascots = <String, IconData>{
-    'landscapes': Icons.terrain,
-    'cozy': Icons.coffee,
-    'animals': Icons.pets,
-    'flowers': Icons.local_florist,
-    'cities': Icons.holiday_village,
-    'art': Icons.palette,
-  };
 
   @override
   Widget build(BuildContext context) {
@@ -308,10 +302,7 @@ class _CategoryCard extends StatelessWidget {
                   Positioned(
                     top: 8,
                     right: 8,
-                    child: _MascotChip(
-                      icon: _mascots[category.id] ?? Icons.image_outlined,
-                      color: style.accent,
-                    ),
+                    child: _MascotChip(mascot: mascotForCategory(category.id)),
                   ),
                 ],
               ),

@@ -358,7 +358,13 @@ class PieceTray extends PositionComponent
 
 class _TrayThumbnail extends SpriteComponent {
   _TrayThumbnail({required this.data, required super.size})
-    : super(sprite: data.sprite);
+    : super(sprite: data.sprite) {
+    // Thumbnails show the sprite at ~25% size; the default FilterQuality.none
+    // picks single texels, so pieces' bright antialiased rims read as a white
+    // edge on device. Mipmapped sampling averages the shrink properly.
+    paint.filterQuality = FilterQuality.medium;
+    paint.isAntiAlias = true;
+  }
 
   final PieceData data;
 }

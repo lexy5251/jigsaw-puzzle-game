@@ -51,8 +51,8 @@ Future<List<ShapedPieceImage>> rasterizePieces({
 
   final outline = ui.Paint()
     ..style = ui.PaintingStyle.stroke
-    ..strokeWidth = 1.5
-    ..color = const ui.Color(0x59000000);
+    ..strokeWidth = 1.0
+    ..color = const ui.Color(0x33423528);
 
   Future<ShapedPieceImage> cutPiece(int index) async {
     final row = index ~/ columns;

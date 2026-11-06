@@ -36,11 +36,15 @@ void main() {
       image: singlePieceImage,
       size: singlePieceSize,
     );
-    final previousProgress = prefs.storage[singlePieceProgressKey];
     await completePuzzle(tester, game);
 
-    expect(find.text('Puzzle complete!'), findsOneWidget);
-    expect(prefs.storage[singlePieceProgressKey], previousProgress);
+    expect(find.textContaining('hung in your gallery'), findsOneWidget);
+    expect(
+      PuzzleSaveState.fromJsonString(
+        prefs.storage[singlePieceProgressKey] as String,
+      )!.lockedPieceIndexes,
+      [0],
+    );
     expect(prefs.storage.containsKey(singlePieceCompletionKey), isFalse);
 
     completionWrite.complete(true);
@@ -69,11 +73,15 @@ void main() {
           image: singlePieceImage,
           size: singlePieceSize,
         );
-        final previousProgress = prefs.storage[singlePieceProgressKey];
         await completePuzzle(tester, game);
 
         expect(tester.takeException(), isNull);
-        expect(prefs.storage[singlePieceProgressKey], previousProgress);
+        expect(
+          PuzzleSaveState.fromJsonString(
+            prefs.storage[singlePieceProgressKey] as String,
+          )!.lockedPieceIndexes,
+          [0],
+        );
         expect(prefs.storage.containsKey(singlePieceCompletionKey), isFalse);
         expect(
           await const SharedPreferencesCompletionStore().isCompleted(
@@ -89,7 +97,11 @@ void main() {
           image: singlePieceImage,
           size: singlePieceSize,
         );
-        expect(resumed.progress.isComplete, isFalse);
+        await tester.runAsync(() => resumed.completionFinished);
+        expect(resumed.progress.isComplete, isTrue);
+        expect(resumed.placedCount.value, 1);
+        expect(prefs.storage.containsKey(singlePieceProgressKey), isTrue);
+        expect(prefs.storage.containsKey(singlePieceCompletionKey), isFalse);
         expect(resumed.world.children.whereType<PuzzlePiece>(), hasLength(1));
         await tester.pumpWidget(const SizedBox.shrink());
       },
@@ -111,7 +123,7 @@ void main() {
     );
     await completePuzzle(tester, game);
 
-    expect(find.text('Puzzle complete!'), findsOneWidget);
+    expect(find.textContaining('hung in your gallery'), findsOneWidget);
     expect(tester.takeException(), isNull); // no RenderFlex overflow
     await tester.pumpWidget(const SizedBox.shrink());
   });

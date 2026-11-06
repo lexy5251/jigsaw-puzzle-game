@@ -127,13 +127,14 @@ void main() {
       );
       expect(tester.takeException(), isNull);
 
-      final hardOption = find.descendant(
+      // The last option starts below the short sheet's fold.
+      final lastOption = find.descendant(
         of: sheet,
-        matching: find.text('150 pieces'),
+        matching: find.text('216 pieces'),
       );
-      expect(hardOption.hitTestable(), findsNothing);
+      expect(lastOption.hitTestable(), findsNothing);
       await tester.scrollUntilVisible(
-        hardOption,
+        lastOption,
         80,
         scrollable: find.descendant(
           of: sheet,
@@ -141,7 +142,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(hardOption.hitTestable(), findsOneWidget);
+      expect(lastOption.hitTestable(), findsOneWidget);
     },
   );
 }

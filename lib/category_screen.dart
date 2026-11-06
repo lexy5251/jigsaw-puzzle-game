@@ -1,5 +1,5 @@
 // One collection's page: its puzzles in a responsive grid under the
-// category's accent header. Tapping a painting opens the shared size
+// category's mascot header. Tapping a painting opens the shared size
 // sheet → game flow.
 
 import 'package:flutter/foundation.dart';
@@ -8,8 +8,9 @@ import 'package:flutter/material.dart';
 import 'puzzle_catalog.dart';
 import 'puzzle_completion.dart';
 import 'puzzle_launcher.dart';
+import 'puzzle_save.dart';
+import 'studio_mascots.dart';
 import 'studio_surfaces.dart';
-import 'studio_theme.dart';
 
 class CategoryScreen extends StatefulWidget {
   const CategoryScreen({super.key, required this.category, this.clock});
@@ -26,42 +27,65 @@ class CategoryScreen extends StatefulWidget {
 
 class _CategoryScreenState extends State<CategoryScreen> {
   static const _completionStore = SharedPreferencesCompletionStore();
+  static const _saveStore = SharedPreferencesSaveStore();
 
   /// Images in this category finished at least once, at any size.
   var _completedImageIds = <String>{};
+
+  /// Images with a resumable save at any size (the sprout badge; the player
+  /// must be able to spot a started puzzle without opening its size sheet).
+  var _inProgressImageIds = <String>{};
 
   List<PuzzleImage> get _images => imagesInCategory(widget.category.id);
 
   @override
   void initState() {
     super.initState();
-    _refreshCompletedImages();
+    _refreshPuzzleStates();
   }
 
-  Future<void> _refreshCompletedImages() async {
+  Future<void> _refreshPuzzleStates() async {
     final completed = <String>{};
+    final inProgress = <String>{};
     for (final image in _images) {
       for (final size in puzzleSizes) {
-        final key = puzzleCompletionKey(
+        final completionKey = puzzleCompletionKey(
           imageId: image.id,
           columns: size.columns,
           rows: size.rows,
         );
-        if (await _completionStore.isCompleted(key)) {
+        // One size in either state is enough for that badge.
+        if (!completed.contains(image.id) &&
+            await _completionStore.isCompleted(completionKey)) {
           completed.add(image.id);
-          break; // One completed size is enough for the badge.
+        }
+        final saveKey = puzzleSaveKey(
+          imageId: image.id,
+          columns: size.columns,
+          rows: size.rows,
+        );
+        if (!inProgress.contains(image.id)) {
+          final save = await _saveStore.load(saveKey);
+          if (save?.isConsistentFor(size.pieceCount) ?? false) {
+            inProgress.add(image.id);
+          }
         }
       }
     }
-    if (mounted && !setEquals(_completedImageIds, completed)) {
-      setState(() => _completedImageIds = completed);
+    if (mounted &&
+        (!setEquals(_completedImageIds, completed) ||
+            !setEquals(_inProgressImageIds, inProgress))) {
+      setState(() {
+        _completedImageIds = completed;
+        _inProgressImageIds = inProgress;
+      });
     }
   }
 
   Future<void> _open(PuzzleImage image) async {
     await startPuzzleFlow(context, image, clock: widget.clock);
-    // A puzzle may have been finished while the game screen was open.
-    await _refreshCompletedImages();
+    // The puzzle may have been started or finished while the game was open.
+    await _refreshPuzzleStates();
   }
 
   @override
@@ -72,7 +96,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            PaintedSwatch(color: categoryStyleFor(widget.category.id).accent),
+            MascotArt(mascotForCategory(widget.category.id), height: 22),
             const SizedBox(width: 10),
             // Flexible: long titles ellipsize on narrow phones instead of
             // overflowing the AppBar.
@@ -104,6 +128,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
             // Grid position, so side-by-side cards get different wobbles.
             variant: index,
             isCompleted: _completedImageIds.contains(image.id),
+            isInProgress: _inProgressImageIds.contains(image.id),
             onTap: () => _open(image),
           );
         },
@@ -117,6 +142,7 @@ class _PuzzleCard extends StatelessWidget {
     required this.image,
     required this.variant,
     required this.isCompleted,
+    required this.isInProgress,
     required this.onTap,
   });
 
@@ -127,6 +153,9 @@ class _PuzzleCard extends StatelessWidget {
 
   /// Finished at least once, at any size: shows the check badge.
   final bool isCompleted;
+
+  /// Has a resumable save at any size: shows the sprout badge.
+  final bool isInProgress;
 
   final VoidCallback onTap;
 
@@ -153,6 +182,8 @@ class _PuzzleCard extends StatelessWidget {
                 ),
                 if (isCompleted)
                   const Positioned(top: 8, right: 8, child: _CompletedBadge()),
+                if (isInProgress)
+                  const Positioned(top: 8, left: 8, child: _InProgressBadge()),
               ],
             ),
           ),
@@ -170,6 +201,29 @@ class _PuzzleCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// The growing stem — the "continue progress" costume: a started puzzle's
+/// painting has a young sprout on its corner until it blooms (completion).
+class _InProgressBadge extends StatelessWidget {
+  const _InProgressBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'In progress',
+      child: Container(
+        width: 28,
+        height: 28,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          shape: BoxShape.circle,
+        ),
+        child: const MascotArt(StudioMascot.sprout, height: 20),
       ),
     );
   }

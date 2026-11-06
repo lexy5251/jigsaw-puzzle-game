@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'daily_puzzle.dart';
 import 'puzzle_catalog.dart';
+import 'studio_mascots.dart';
 import 'studio_surfaces.dart';
 
 /// The daily-puzzle card: today's image, its status, and the windowsill.
@@ -143,11 +144,32 @@ class _Windowsill extends StatelessWidget {
   Widget build(BuildContext context) {
     final today = utcMidnight(now);
     final monday = today.subtract(Duration(days: now.weekday - 1));
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+    return Column(
       children: [
-        for (var i = 0; i < 7; i++)
-          _pot(Theme.of(context), monday.add(Duration(days: i)), today),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            for (var i = 0; i < 7; i++)
+              _pot(Theme.of(context), monday.add(Duration(days: i)), today),
+          ],
+        ),
+        // The wooden shelf the pots stand on (mockup .shelfline).
+        Container(
+          height: 6,
+          margin: const EdgeInsets.fromLTRB(8, 3, 8, 0),
+          decoration: const BoxDecoration(
+            color: Color(0xFFC9A36A),
+            borderRadius: BorderRadius.all(Radius.circular(3)),
+            boxShadow: [
+              BoxShadow(
+                color: Color(0x405A3C1E),
+                offset: Offset(0, 2),
+                blurRadius: 4,
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -155,26 +177,30 @@ class _Windowsill extends StatelessWidget {
   Widget _pot(ThemeData theme, DateTime day, DateTime today) {
     final done = completedDays.contains(dayKey(day));
     final isToday = day == today;
-    final color = done
-        ? theme.colorScheme.secondary
+    // The painted motifs carry their own colors, so day states live in the
+    // motif (bloomed cactus vs empty pot), size, and opacity instead of tint.
+    final opacity = done
+        ? (isToday ? 1.0 : 0.75)
         : isToday
-        ? theme.colorScheme.primary
-        : theme.colorScheme.onSurface.withValues(
-            // Days still to come sit fainter than missed ones.
-            alpha: day.isAfter(today) ? 0.15 : 0.3,
-          );
-    // The pot's state lives in icon fill, size, and color — invisible to
-    // screen readers. One label per day replaces the bare weekday letter.
+        ? 1.0
+        // Days still to come sit fainter than missed ones.
+        : day.isAfter(today)
+        ? 0.25
+        : 0.45;
+    // The pot's state is invisible to screen readers. One label per day
+    // replaces the bare weekday letter.
     return Semantics(
       label: _potSemantics(day, today, done),
       excludeSemantics: true,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            done ? Icons.local_florist : Icons.local_florist_outlined,
-            size: isToday ? 30 : 24,
-            color: color,
+          Opacity(
+            opacity: opacity,
+            child: MascotArt(
+              done ? StudioMascot.cactus : StudioMascot.pot,
+              height: isToday ? 42 : 33,
+            ),
           ),
           const SizedBox(height: 2),
           Text(

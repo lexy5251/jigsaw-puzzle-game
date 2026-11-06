@@ -3,8 +3,8 @@
 // 2. Holds the running game for as long as this puzzle screen is open.
 // 3. Displays the puzzle using Flame's GameWidget.
 // 4. Keeps a back button to return to puzzle selection.
-// 5. When the game reports completion, records it permanently and shows a
-//    celebration card timed to appear as the in-game glow fades out.
+// 5. When the game reports completion, records it permanently and hangs the
+//    painting on a gallery wall, timed to appear as the in-game glow fades.
 // JigsawGame handles the puzzle gameplay.
 
 import 'dart:async';
@@ -20,6 +20,9 @@ import 'jigsaw_game.dart';
 import 'puzzle_catalog.dart';
 import 'puzzle_completion.dart';
 import 'puzzle_save.dart';
+import 'studio_mascots.dart';
+import 'studio_surfaces.dart';
+import 'studio_theme.dart';
 
 /// Hosts one running puzzle.
 class GameScreen extends StatefulWidget {
@@ -172,7 +175,7 @@ class _GameScreenState extends State<GameScreen> {
 
     // The game keeps its progress save until BOTH records are stored, so a
     // failed daily credit gets the same retry as a failed completion write:
-    // resume the save and finish again. A day-late retry still credits via
+    // resuming the finished save retries it. A day-late retry still credits via
     // the resumed-save grace, and re-marking an already-stored day is a
     // no-op success.
     final completionRecorded = await const SharedPreferencesCompletionStore()
@@ -209,41 +212,66 @@ class _GameScreenState extends State<GameScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final textScaler = MediaQuery.textScalerOf(context);
+    final separateTools =
+        MediaQuery.sizeOf(context).width < 480 || textScaler.scale(16) > 24;
+    final counterHeight =
+        19 + textScaler.scale(16) * 1.1 + textScaler.scale(9) * 1.1;
+    final tools = <Widget>[
+      IconButton(
+        tooltip: 'Fit board to screen',
+        icon: const Icon(Icons.fit_screen),
+        onPressed: () => _game.resetView(),
+      ),
+      IconButton(
+        tooltip: 'Restart puzzle',
+        icon: const Icon(Icons.replay),
+        onPressed: _restarting ? null : _confirmRestart,
+      ),
+      IconButton(
+        tooltip: 'Edge pieces only',
+        isSelected: _edgesOnly,
+        icon: const Icon(Icons.border_outer),
+        onPressed: () {
+          setState(() => _edgesOnly = !_edgesOnly);
+          _game.setEdgesOnlyFilter(_edgesOnly);
+        },
+      ),
+      IconButton(
+        tooltip: 'Image preview',
+        isSelected: _showGhostPreview,
+        icon: const Icon(Icons.image_outlined),
+        selectedIcon: const Icon(Icons.image),
+        onPressed: () {
+          setState(() => _showGhostPreview = !_showGhostPreview);
+          _game.setGhostPreview(_showGhostPreview);
+        },
+      ),
+    ];
     return Scaffold(
       // Constant tooltips (they double as semantics labels for e2e tests);
       // the pressed state shows through the buttons' isSelected styling.
       appBar: AppBar(
-        actions: [
-          IconButton(
-            tooltip: 'Fit board to screen',
-            icon: const Icon(Icons.fit_screen),
-            onPressed: () => _game.resetView(),
-          ),
-          IconButton(
-            tooltip: 'Restart puzzle',
-            icon: const Icon(Icons.replay),
-            onPressed: _restarting ? null : _confirmRestart,
-          ),
-          IconButton(
-            tooltip: 'Edge pieces only',
-            isSelected: _edgesOnly,
-            icon: const Icon(Icons.border_outer),
-            onPressed: () {
-              setState(() => _edgesOnly = !_edgesOnly);
-              _game.setEdgesOnlyFilter(_edgesOnly);
-            },
-          ),
-          IconButton(
-            tooltip: 'Image preview',
-            isSelected: _showGhostPreview,
-            icon: const Icon(Icons.image_outlined),
-            selectedIcon: const Icon(Icons.image),
-            onPressed: () {
-              setState(() => _showGhostPreview = !_showGhostPreview);
-              _game.setGhostPreview(_showGhostPreview);
-            },
-          ),
-        ],
+        toolbarHeight: counterHeight > kToolbarHeight
+            ? counterHeight
+            : kToolbarHeight,
+        title: ValueListenableBuilder<int>(
+          valueListenable: _game.placedCount,
+          builder: (context, placed, _) =>
+              _PaletteCounter(placed: placed, total: widget.size.pieceCount),
+        ),
+        actions: separateTools ? null : tools,
+        // Preserve direct access to every tool while giving the count room
+        // alongside the back button on phones and with enlarged text.
+        bottom: separateTools
+            ? PreferredSize(
+                preferredSize: const Size.fromHeight(48),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: tools,
+                ),
+              )
+            : null,
       ),
       body: Stack(
         children: [
@@ -257,10 +285,11 @@ class _GameScreenState extends State<GameScreen> {
             ),
           ),
           if (_showCompletionCard)
-            _CompletionCard(
-              imageTitle: widget.image.title,
+            _GalleryWall(
+              image: widget.image,
               pieceCount: widget.size.pieceCount,
-              onBackToPuzzles: () => Navigator.pop(context),
+              completedOn: (widget.clock ?? DateTime.now)(),
+              onBackToGallery: () => Navigator.pop(context),
             ),
         ],
       ),
@@ -268,66 +297,269 @@ class _GameScreenState extends State<GameScreen> {
   }
 }
 
-/// The celebration shown over the finished image.
-class _CompletionCard extends StatelessWidget {
-  const _CompletionCard({
-    required this.imageTitle,
-    required this.pieceCount,
-    required this.onBackToPuzzles,
-  });
+/// The placed-piece counter dressed as the painter's palette (mockup:
+/// "the counter is a palette") — a linen daub with paint dots in the corner.
+class _PaletteCounter extends StatelessWidget {
+  const _PaletteCounter({required this.placed, required this.total});
 
-  final String imageTitle;
-  final int pieceCount;
-  final VoidCallback onBackToPuzzles;
+  final int placed;
+  final int total;
+
+  /// The four studio paint colors, as on the mockup's palette.
+  static const _paintDots = [
+    Color(0xFFC06A45),
+    Color(0xFF7B8456),
+    Color(0xFFD9A33F),
+    Color(0xFFD79B86),
+  ];
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      // Scrollable so the card stays usable on short landscape screens
-      // instead of overflowing.
-      child: SingleChildScrollView(
-        // Fade and scale in gently as the glow fades out.
-        child: TweenAnimationBuilder<double>(
-          tween: Tween(begin: 0, end: 1),
-          duration: const Duration(milliseconds: 350),
-          curve: Curves.easeOutBack,
-          builder: (context, value, child) => Opacity(
-            opacity: value.clamp(0, 1),
-            child: Transform.scale(scale: 0.8 + 0.2 * value, child: child),
+    final theme = Theme.of(context);
+    return Semantics(
+      label: '$placed of $total pieces placed',
+      excludeSemantics: true,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        decoration: const BoxDecoration(
+          color: StudioColors.card,
+          // Uneven ellipses make the chip read as a palette-shaped daub.
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.elliptical(26, 20),
+            topRight: Radius.elliptical(20, 26),
+            bottomLeft: Radius.elliptical(22, 24),
+            bottomRight: Radius.elliptical(28, 18),
           ),
-          child: Card(
-            margin: const EdgeInsets.all(32),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.check_circle,
-                    size: 56,
-                    color: Theme.of(context).colorScheme.primary,
+          boxShadow: [
+            BoxShadow(
+              color: StudioColors.cardShadow,
+              offset: Offset(0, 3),
+              blurRadius: 10,
+              spreadRadius: -5,
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final color in _paintDots)
+                  Container(
+                    width: 5,
+                    height: 5,
+                    margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                    decoration: BoxDecoration(
+                      color: color,
+                      shape: BoxShape.circle,
+                    ),
                   ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Puzzle complete!',
-                    style: Theme.of(context).textTheme.headlineSmall,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '$imageTitle · $pieceCount pieces',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: 20),
-                  FilledButton(
-                    onPressed: onBackToPuzzles,
-                    child: const Text('Back to puzzles'),
-                  ),
-                ],
+              ],
+            ),
+            const SizedBox(height: 2),
+            Text(
+              '$placed / $total',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                height: 1.1,
               ),
             ),
+            Text(
+              'pieces placed',
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontSize: 9,
+                height: 1.1,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The celebration: the finished painting is hung on a gallery wall —
+/// nail, gold frame, plaque, a potted sunflower (mockup "Done · hung in
+/// your gallery").
+class _GalleryWall extends StatelessWidget {
+  const _GalleryWall({
+    required this.image,
+    required this.pieceCount,
+    required this.completedOn,
+    required this.onBackToGallery,
+  });
+
+  final PuzzleImage image;
+  final int pieceCount;
+  final DateTime completedOn;
+  final VoidCallback onBackToGallery;
+
+  static const _months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final date = '${_months[completedOn.month - 1]} ${completedOn.day}';
+    // Fade the wall in as the in-game glow fades out.
+    return Positioned.fill(
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0, end: 1),
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeOut,
+        builder: (context, value, child) =>
+            Opacity(opacity: value, child: child),
+        child: Container(
+          color: StudioColors.galleryWall,
+          child: Stack(
+            children: [
+              ..._paintSpecks(),
+              SafeArea(
+                // Scrollable so the scene stays usable on short landscape
+                // screens instead of overflowing.
+                child: Center(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _nail(),
+                        const SizedBox(height: 8),
+                        _hungFrame(context),
+                        const SizedBox(height: 12),
+                        _plaque(theme, date),
+                        const SizedBox(height: 6),
+                        const MascotArt(StudioMascot.sprig, height: 60),
+                        const SizedBox(height: 16),
+                        FilledButton(
+                          onPressed: onBackToGallery,
+                          child: const Text('Back to the gallery'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
     );
+  }
+
+  Widget _nail() => Container(
+    width: 7,
+    height: 7,
+    decoration: const BoxDecoration(
+      color: Color(0xFF8A6B43),
+      shape: BoxShape.circle,
+    ),
+  );
+
+  /// The finished painting in a gold frame with a pale inner mat line.
+  Widget _hungFrame(BuildContext context) {
+    final screen = MediaQuery.sizeOf(context);
+    // Bounded by both axes so the frame also fits short landscape screens.
+    final artWidth = [
+      screen.width * 0.72,
+      screen.height * 0.62,
+      320.0,
+    ].reduce((a, b) => a < b ? a : b);
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFFD9A33F), Color(0xFFC08437)],
+        ),
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x80462D0F),
+            offset: Offset(0, 14),
+            blurRadius: 28,
+            spreadRadius: -12,
+          ),
+        ],
+      ),
+      child: Container(
+        foregroundDecoration: BoxDecoration(
+          border: Border.all(color: const Color(0xCCFFFAEB), width: 3),
+          borderRadius: BorderRadius.circular(3),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(3),
+          child: Image.asset(
+            image.assetPath,
+            width: artWidth,
+            // Catalog images are 3:2 (the grid-ladder invariant relies on it).
+            height: artWidth / 1.5,
+            fit: BoxFit.cover,
+            cacheWidth: 640,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _plaque(ThemeData theme, String date) => PaintedCard(
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+    child: Column(
+      children: [
+        Text(
+          image.title,
+          textAlign: TextAlign.center,
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        Text(
+          '$pieceCount pieces · $date · hung in your gallery',
+          textAlign: TextAlign.center,
+          style: theme.textTheme.bodySmall,
+        ),
+      ],
+    ),
+  );
+
+  /// Flecks of studio paint celebrating around the frame.
+  List<Widget> _paintSpecks() {
+    Widget speck(
+      double size,
+      int argb, {
+      double? top,
+      double? left,
+      double? right,
+    }) => Positioned(
+      top: top,
+      left: left,
+      right: right,
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(color: Color(argb), shape: BoxShape.circle),
+      ),
+    );
+    return [
+      speck(9, 0xFFD9A33F, top: 90, left: 48),
+      speck(7, 0xFFC06A45, top: 60, right: 70),
+      speck(8, 0xFF7B8456, top: 150, right: 36),
+      speck(6, 0xFFD79B86, top: 170, left: 32),
+    ];
   }
 }
