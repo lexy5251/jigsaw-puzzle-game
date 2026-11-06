@@ -134,7 +134,19 @@ class JigsawGame extends FlameGame
   double _fitZoom = 1;
   double _zoomAtPinchStart = 1;
 
-  double get _trayHeight => min(size.y * 0.18, 130);
+  // The tray takes exactly what its two rows need (six columns always fit —
+  // see the tray geometry in puzzle_logic.dart), capped so the board keeps
+  // most of the screen. Until the pieces are cut, the cap stands in.
+  double get _trayHeight {
+    final cap = min(size.y * 0.30, 200.0);
+    final aspect = _traySpriteAspect;
+    if (aspect == null) {
+      return cap;
+    }
+    return min(cap, preferredTrayHeight(size.x, aspect));
+  }
+
+  double? _traySpriteAspect;
 
   @override
   Color backgroundColor() => StudioColors.board;
@@ -194,6 +206,9 @@ class JigsawGame extends FlameGame
       shapes: shapes,
     );
     _pieceImages.addAll(shapedImages);
+    // The tray's preferred height depends on the cut pieces' aspect ratio.
+    final pieceSrcSize = shapedImages.first.sprite.srcSize;
+    _traySpriteAspect = pieceSrcSize.x / pieceSrcSize.y;
     // Disposal can happen while the rasterizer is still producing images.
     if (_disposed || _discardingProgress) {
       _disposePieceImages();

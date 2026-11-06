@@ -29,7 +29,7 @@ class _FakeSounds implements GameSounds {
 }
 
 void main() {
-  const trayThumbTouch = Offset(50, 550);
+  const trayThumbTouch = Offset(50, 460);
   const liftedTouch = Offset(50, 400);
 
   Future<JigsawGame> bootGame(WidgetTester tester, GameSounds sounds) async {

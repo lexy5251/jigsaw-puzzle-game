@@ -23,7 +23,7 @@ const singlePieceImage = PuzzleImage(
   categoryId: 'test',
   fileName: 'test_photo.jpg',
 );
-const singlePieceSize = PuzzleSize(label: 'Test', columns: 1, rows: 1);
+const singlePieceSize = PuzzleSize(columns: 1, rows: 1);
 
 // The channel-backed mock uses the plugin's prefixed storage keys.
 final singlePieceProgressKey =

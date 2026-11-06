@@ -94,7 +94,11 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
     };
     for (final size in puzzleSizes) {
       final save = await _saveStore.load(
-        puzzleSaveKey(imageId: daily.id, columns: size.columns, rows: size.rows),
+        puzzleSaveKey(
+          imageId: daily.id,
+          columns: size.columns,
+          rows: size.rows,
+        ),
       );
       if (creditableDays.contains(save?.startedDay)) {
         return true;
@@ -386,11 +390,7 @@ class _PuzzleCard extends StatelessWidget {
                   ),
                 ),
                 if (isCompleted)
-                  const Positioned(
-                    top: 8,
-                    right: 8,
-                    child: _CompletedBadge(),
-                  ),
+                  const Positioned(top: 8, right: 8, child: _CompletedBadge()),
               ],
             ),
           ),
@@ -468,7 +468,17 @@ class _PuzzleSizePicker extends StatelessWidget {
               title: Semantics(
                 identifier:
                     'puzzle-size-${image.id}-${size.columns}x${size.rows}',
-                child: Text('${size.pieceCount} pieces · ${size.label}'),
+                child: Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(
+                        text: '${size.pieceCount}',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const TextSpan(text: ' pieces'),
+                    ],
+                  ),
+                ),
               ),
               subtitle: Text('${size.columns} × ${size.rows}'),
               trailing: _statusLabel(context, size),

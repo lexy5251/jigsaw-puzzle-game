@@ -47,6 +47,33 @@ double clampTrayScroll(double offset, double stripWidth, double trayWidth) {
   return offset.clamp(0.0, maxOffset).toDouble();
 }
 
+// Tray geometry. Thumbnails show the full sprite box (base cell plus the
+// transparent tab margins), and slots advance by that whole box — so pieces
+// can never overlap. Density comes from sizing thumbnails to always fit
+// [trayVisibleColumns] columns across the tray (2026-11-05 phone rulings:
+// ~12 pieces visible, zero overlap).
+const trayRows = 2;
+const trayVisibleColumns = 6;
+const trayPadding = 10.0;
+const traySlotGap = 4.0;
+
+/// Thumbnail (sprite box) height inside a tray of the given size: bounded
+/// by the row height, and by the width needed to fit the visible columns.
+double trayThumbnailHeight(double width, double height, double spriteAspect) {
+  final heightDriven = (height - trayPadding * (trayRows + 1)) / trayRows;
+  final widthDriven =
+      ((width - trayPadding) / trayVisibleColumns - traySlotGap) / spriteAspect;
+  return min(heightDriven, widthDriven);
+}
+
+/// The tray height at which both constraints above agree — any taller just
+/// adds empty background below the rows. Callers still cap it.
+double preferredTrayHeight(double width, double spriteAspect) {
+  final widthDriven =
+      ((width - trayPadding) / trayVisibleColumns - traySlotGap) / spriteAspect;
+  return trayRows * widthDriven + trayPadding * (trayRows + 1);
+}
+
 /// Camera zoom limits, relative to the zoom that fits the whole board:
 /// never below the fitted view (the board always fills the screen), in to 4x.
 double clampZoom(double zoom, double fitZoom) {
