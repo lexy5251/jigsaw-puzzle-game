@@ -66,12 +66,15 @@ void main() {
     });
   });
 
-  test('a wrong-typed stored value is not destroyed by a failed read', () async {
-    prefs.storage[prefsKey] = 12345; // getString throws before any write.
+  test(
+    'a wrong-typed stored value is not destroyed by a failed read',
+    () async {
+      prefs.storage[prefsKey] = 12345; // getString throws before any write.
 
-    expect(await store.markCompleted('2026-11-02'), isFalse);
-    expect(prefs.storage[prefsKey], 12345);
-  });
+      expect(await store.markCompleted('2026-11-02'), isFalse);
+      expect(prefs.storage[prefsKey], 12345);
+    },
+  );
 
   test('a failed write leaves no ghost day in the live cache', () async {
     await store.completedDays(); // Warm the preferences singleton first.

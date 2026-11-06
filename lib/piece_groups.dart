@@ -45,6 +45,14 @@ class PieceGroups {
     );
   }
 
+  /// Removes a lone, unlocked piece — e.g. one returned to the tray, which
+  /// holds single pieces only. The index can be re-added later.
+  void remove(int index) {
+    final group = _groups[index]!;
+    assert(!group.locked && group.members.length == 1);
+    _groups.remove(index);
+  }
+
   /// Reconstructs connectivity from exact relative offsets in existing saves.
   /// Sorting makes the result independent of JSON/map insertion order.
   /// [relativePositionRoundoff] accommodates a caller's coordinate storage

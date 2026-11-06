@@ -16,7 +16,14 @@ appId: com.lexy5251.jigsawpuzzle
     clearState: true
 - assertVisible: "Choose a puzzle"
 
-# Scroll to the catalog title, even if the daily card repeats that image.
+# Catalog images live on per-category pages: open Landscapes first, then
+# scroll its grid to the image.
+- scrollUntilVisible:
+    element:
+      id: "category-landscapes"
+    direction: DOWN
+- tapOn:
+    id: "category-landscapes"
 - scrollUntilVisible:
     element:
       id: "catalog-puzzle-alpine-lakes-panorama"
@@ -37,6 +44,12 @@ appId: com.lexy5251.jigsawpuzzle
 - assertVisible: "Choose a puzzle"
 
 # The save must have survived the kill: the size picker marks it.
+- scrollUntilVisible:
+    element:
+      id: "category-landscapes"
+    direction: DOWN
+- tapOn:
+    id: "category-landscapes"
 - scrollUntilVisible:
     element:
       id: "catalog-puzzle-alpine-lakes-panorama"

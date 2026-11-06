@@ -98,12 +98,13 @@ void main() {
     final sounds = _FakeSounds();
     final game = await bootGame(tester, sounds);
 
-    // 1. Drop the first piece a full piece-width from home: a loose drop.
+    // 1. Drop the first piece half a piece-width from home: a loose drop.
+    // (Sideways, not below — a piece released over the tray returns to it.)
     final first = await liftAndDropAt(
       tester,
       game,
       (piece) =>
-          piece.correctPosition + piece.size / 2 + Vector2(0, piece.size.y),
+          piece.correctPosition + piece.size / 2 + Vector2(piece.size.x / 2, 0),
     );
     expect(first.isLocked, isFalse);
     expect(sounds.drops, 1);

@@ -129,6 +129,20 @@ class PieceTray extends PositionComponent
     _rebuildThumbnails();
   }
 
+  /// Takes a piece back from the board, inserting it at the slot under
+  /// [canvasPoint] — the piece must reappear where the player dropped it,
+  /// not at the strip's (possibly scrolled-off) far end.
+  void returnPiece(PieceData data, {required Vector2 canvasPoint}) {
+    final slot = _slotIndexAt(canvasPoint);
+    final insertAt = slot < 0
+        ? 0
+        : slot >= _thumbnails.length
+        ? _remainingPieces.length
+        : _remainingPieces.indexOf(_thumbnails[slot].data);
+    _remainingPieces.insert(insertAt, data);
+    _rebuildThumbnails();
+  }
+
   /// Shows only edge pieces (true) or every unused piece (false).
   void setEdgesOnly(bool enabled) {
     if (_edgesOnly == enabled) {
@@ -302,23 +316,28 @@ class PieceTray extends PositionComponent
     _setScrollOffset(_scrollOffset);
   }
 
-  _TrayThumbnail? _thumbnailAtCanvasPoint(Vector2 canvasPosition) {
+  /// Column-major grid slot under a canvas point. Negative left of the
+  /// strip; may exceed the current thumbnail count on the right.
+  int _slotIndexAt(Vector2 canvasPosition) {
     final positionInStrip = canvasPosition.x - position.x + _scrollOffset;
     final column = (positionInStrip - trayPadding) ~/ _thumbnailSlotWidth;
+    if (column < 0) {
+      return -1;
+    }
 
     // Split each padding gap at its midpoint so touches pick the nearest row.
     // Clamping keeps touches in the outer padding forgiving too.
     final rawRow =
         (canvasPosition.y - position.y - trayPadding / 2) ~/ _rowSlotHeight;
     final row = rawRow < 0 ? 0 : (rawRow >= trayRows ? trayRows - 1 : rawRow);
+    return column * trayRows + row;
+  }
 
-    final thumbnailIndex = column * trayRows + row;
-    if (column < 0 ||
-        thumbnailIndex < 0 ||
-        thumbnailIndex >= _thumbnails.length) {
+  _TrayThumbnail? _thumbnailAtCanvasPoint(Vector2 canvasPosition) {
+    final thumbnailIndex = _slotIndexAt(canvasPosition);
+    if (thumbnailIndex < 0 || thumbnailIndex >= _thumbnails.length) {
       return null;
     }
-
     return _thumbnails[thumbnailIndex];
   }
 

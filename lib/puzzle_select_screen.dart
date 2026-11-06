@@ -1,27 +1,26 @@
 // Puzzle selection overview:
 // 1. A "Today's painting" card on top shows the daily puzzle with the
 //    streak windowsill — a pot blooms for every day the daily was finished.
-// 2. Below it, the catalog grouped into themed categories; categories with
-//    no images yet are hidden. Images finished at any size get a check badge.
-// 3. Tapping an image opens a sheet with the available puzzle sizes, marking
-//    sizes that are in progress or already completed.
-// 4. Choosing a size opens GameScreen with that image and size.
-// 5. Dismissing the sheet leaves the user on the selection screen.
+// 2. Below it, one painted card per themed category (accent, mascot,
+//    painting count); categories with no images yet are hidden. Tapping a
+//    card opens that category's own screen with its puzzle grid.
+// 3. Starting a puzzle (daily card or category screen) goes through the
+//    shared size-sheet flow in puzzle_launcher.dart.
 
 import 'dart:async';
+import 'dart:math' show max;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import 'app_settings.dart';
+import 'category_screen.dart';
 import 'daily_puzzle.dart';
 import 'daily_puzzle_card.dart';
 import 'daily_streak.dart';
-import 'game_screen.dart';
-import 'settings_screen.dart';
 import 'puzzle_catalog.dart';
-import 'puzzle_completion.dart';
+import 'puzzle_launcher.dart';
 import 'puzzle_save.dart';
+import 'settings_screen.dart';
 import 'studio_surfaces.dart';
 import 'studio_theme.dart';
 
@@ -39,12 +38,7 @@ class PuzzleSelectScreen extends StatefulWidget {
 class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
     with WidgetsBindingObserver {
   static const _saveStore = SharedPreferencesSaveStore();
-  static const _completionStore = SharedPreferencesCompletionStore();
   static const _dailyStore = SharedPreferencesDailyStreakStore();
-  static const _settingsStore = SharedPreferencesAppSettingsStore();
-
-  /// Images finished at least once, at any size.
-  var _completedImageIds = <String>{};
 
   /// Days on which the daily puzzle was finished (streak input).
   var _completedDailyDays = <String>{};
@@ -63,7 +57,6 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
     super.initState();
     _dailyDate = _now;
     WidgetsBinding.instance.addObserver(this);
-    _refreshCompletedImages();
     _refreshDailyStatus();
   }
 
@@ -107,21 +100,6 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
     return false;
   }
 
-  Future<Set<PuzzleSize>> _savedSizesFor(PuzzleImage image) async {
-    final savedSizes = <PuzzleSize>{};
-    for (final size in puzzleSizes) {
-      final key = puzzleSaveKey(
-        imageId: image.id,
-        columns: size.columns,
-        rows: size.rows,
-      );
-      if (await _saveStore.exists(key)) {
-        savedSizes.add(size);
-      }
-    }
-    return savedSizes;
-  }
-
   void _scheduleMidnightRefresh(DateTime now) {
     // Construct the next calendar midnight instead of adding 24 hours:
     // local days can be shorter or longer around daylight-saving changes.
@@ -162,92 +140,30 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
     });
   }
 
-  Future<void> _refreshCompletedImages() async {
-    final completed = <String>{};
-    for (final image in puzzleCatalog) {
-      for (final size in puzzleSizes) {
-        final key = puzzleCompletionKey(
-          imageId: image.id,
-          columns: size.columns,
-          rows: size.rows,
-        );
-        if (await _completionStore.isCompleted(key)) {
-          completed.add(image.id);
-          break; // One completed size is enough for the badge.
-        }
-      }
-    }
-    if (mounted && !setEquals(_completedImageIds, completed)) {
-      setState(() => _completedImageIds = completed);
-    }
+  Future<void> _playDaily(PuzzleImage daily) async {
+    await startPuzzleFlow(context, daily, clock: widget.clock);
+    // Finishing it changes the windowsill; refresh when the player returns.
+    await _refreshDailyStatus();
   }
 
-  Future<Set<PuzzleSize>> _completedSizesFor(PuzzleImage image) async {
-    final completedSizes = <PuzzleSize>{};
-    for (final size in puzzleSizes) {
-      final key = puzzleCompletionKey(
-        imageId: image.id,
-        columns: size.columns,
-        rows: size.rows,
-      );
-      if (await _completionStore.isCompleted(key)) {
-        completedSizes.add(size);
-      }
-    }
-    return completedSizes;
-  }
-
-  Future<void> _startPuzzle(BuildContext context, PuzzleImage image) async {
-    // The run belongs to the day the player tapped, even if the size sheet
-    // below stays open across midnight.
-    final startedDay = dayKey(_now);
-    // Resolve each size's state BEFORE opening the sheet, so the sheet
-    // itself stays plain synchronous UI (an async lookup inside its build
-    // would re-trigger itself on every rebuild).
-    final inProgressSizes = await _savedSizesFor(image);
-    final completedSizes = await _completedSizesFor(image);
-    // Read once here so GameScreen stays synchronous; mid-game settings
-    // changes apply from the next puzzle on.
-    final settings = await _settingsStore.load();
-    if (!context.mounted) {
-      return;
-    }
-
-    final selectedSize = await showModalBottomSheet<PuzzleSize>(
-      context: context,
-      builder: (_) => _PuzzleSizePicker(
-        image: image,
-        inProgressSizes: inProgressSizes,
-        completedSizes: completedSizes,
-      ),
-    );
-
-    // The sheet can be dismissed, or this screen removed while it is open.
-    if (selectedSize == null || !context.mounted) {
-      return;
-    }
-
+  Future<void> _openCategory(PuzzleCategory category) async {
     await Navigator.push<void>(
       context,
       MaterialPageRoute<void>(
-        builder: (_) => GameScreen(
-          image: image,
-          size: selectedSize,
-          clock: widget.clock,
-          startedDay: startedDay,
-          settings: settings,
-        ),
+        builder: (_) => CategoryScreen(category: category, clock: widget.clock),
       ),
     );
-
-    // A puzzle (possibly today's daily) may have been finished while the
-    // game screen was open. The two reads are independent.
-    await Future.wait([_refreshCompletedImages(), _refreshDailyStatus()]);
+    // Today's daily may have been finished from inside the category.
+    await _refreshDailyStatus();
   }
 
   @override
   Widget build(BuildContext context) {
     final daily = dailyPuzzleFor(_dailyDate);
+    final categories = [
+      for (final category in puzzleCategories)
+        if (imagesInCategory(category.id).isNotEmpty) category,
+    ];
     return Scaffold(
       appBar: AppBar(
         title: const Text('Choose a puzzle'),
@@ -271,141 +187,36 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
             now: _dailyDate,
             completedDays: _completedDailyDays,
             inProgress: _dailyInProgress,
-            onPlay: () => _startPuzzle(context, daily),
+            onPlay: () => _playDaily(daily),
           ),
           const SizedBox(height: 16),
-          for (final category in puzzleCategories)
-            _CategorySection(
-              category: category,
-              completedImageIds: _completedImageIds,
-              onImageTap: (image) => _startPuzzle(context, image),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CategorySection extends StatelessWidget {
-  const _CategorySection({
-    required this.category,
-    required this.completedImageIds,
-    required this.onImageTap,
-  });
-
-  final PuzzleCategory category;
-  final Set<String> completedImageIds;
-  final ValueChanged<PuzzleImage> onImageTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final images = imagesInCategory(category.id);
-    if (images.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(top: 8, bottom: 12),
-          child: Row(
-            children: [
-              PaintedSwatch(color: categoryStyleFor(category.id).accent),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  category.title,
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-              ),
-            ],
-          ),
-        ),
-        GridView.builder(
-          // The outer ListView scrolls; this grid only sizes itself.
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            mainAxisSpacing: 16,
-            crossAxisSpacing: 16,
-            childAspectRatio: 0.85,
-          ),
-          itemCount: images.length,
-          itemBuilder: (context, index) {
-            final image = images[index];
-            return _PuzzleCard(
-              image: image,
-              // Grid position, so side-by-side cards get different wobbles.
-              variant: index,
-              isCompleted: completedImageIds.contains(image.id),
-              onTap: () => onImageTap(image),
-            );
-          },
-        ),
-        const SizedBox(height: 16),
-      ],
-    );
-  }
-}
-
-class _PuzzleCard extends StatelessWidget {
-  const _PuzzleCard({
-    required this.image,
-    required this.variant,
-    required this.isCompleted,
-    required this.onTap,
-  });
-
-  final PuzzleImage image;
-
-  /// Wobble preset for [PaintedCard]; the grid passes its item index.
-  final int variant;
-
-  /// Finished at least once, at any size: shows the check badge.
-  final bool isCompleted;
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return PaintedCard(
-      variant: variant,
-      onTap: onTap,
-      padding: const EdgeInsets.fromLTRB(9, 9, 9, 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                FramedArt(
-                  child: Image.asset(
-                    image.assetPath,
-                    fit: BoxFit.cover,
-                    // Decode smaller previews to reduce memory use.
-                    cacheWidth: 640,
-                  ),
-                ),
-                if (isCompleted)
-                  const Positioned(top: 8, right: 8, child: _CompletedBadge()),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(2, 8, 2, 0),
-            child: Semantics(
-              // Distinguish this catalog tile from the daily card in e2e tests.
-              identifier: 'catalog-puzzle-${image.id}',
-              child: Text(
-                image.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-            ),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              const spacing = 16.0;
+              // Keep the responsive columns, but let card heights follow
+              // their content when enlarged text wraps onto extra lines.
+              final columns = max(
+                1,
+                (constraints.maxWidth / (260 + spacing)).ceil(),
+              );
+              final cardWidth =
+                  (constraints.maxWidth - spacing * (columns - 1)) / columns;
+              return Wrap(
+                spacing: spacing,
+                runSpacing: spacing,
+                children: [
+                  for (final (index, category) in categories.indexed)
+                    SizedBox(
+                      width: cardWidth,
+                      child: _CategoryCard(
+                        category: category,
+                        variant: index,
+                        onOpen: () => _openCategory(category),
+                      ),
+                    ),
+                ],
+              );
+            },
           ),
         ],
       ),
@@ -413,8 +224,12 @@ class _PuzzleCard extends StatelessWidget {
   }
 }
 
-class _CompletedBadge extends StatelessWidget {
-  const _CompletedBadge();
+/// The category's mascot on a small painted disc over the cover's corner.
+class _MascotChip extends StatelessWidget {
+  const _MascotChip({required this.icon, required this.color});
+
+  final IconData icon;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
@@ -424,91 +239,102 @@ class _CompletedBadge extends StatelessWidget {
         color: Theme.of(context).colorScheme.surface,
         shape: BoxShape.circle,
       ),
-      child: Icon(
-        Icons.check_circle,
-        size: 20,
-        color: Theme.of(context).colorScheme.primary,
-      ),
+      child: Icon(icon, size: 18, color: color),
     );
   }
 }
 
-class _PuzzleSizePicker extends StatelessWidget {
-  const _PuzzleSizePicker({
-    required this.image,
-    required this.inProgressSizes,
-    required this.completedSizes,
+/// One tappable collection on the home screen: cover painting, mascot
+/// chip, title, count.
+class _CategoryCard extends StatelessWidget {
+  const _CategoryCard({
+    required this.category,
+    required this.variant,
+    required this.onOpen,
   });
 
-  final PuzzleImage image;
+  final PuzzleCategory category;
 
-  /// Sizes of this image that have a saved game to resume.
-  final Set<PuzzleSize> inProgressSizes;
+  /// Wobble preset for [PaintedCard]; the grid passes its item index.
+  final int variant;
 
-  /// Sizes of this image that were finished at least once.
-  final Set<PuzzleSize> completedSizes;
+  final VoidCallback onOpen;
+
+  /// Material stand-ins until the painted mascots land with the
+  /// studio-world costume pass (mountains, mug, cat, daisies, houses,
+  /// palette).
+  static const _mascots = <String, IconData>{
+    'landscapes': Icons.terrain,
+    'cozy': Icons.coffee,
+    'animals': Icons.pets,
+    'flowers': Icons.local_florist,
+    'cities': Icons.holiday_village,
+    'art': Icons.palette,
+  };
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      // Fits its contents when there is room, and scrolls in short windows.
-      child: ListView(
-        shrinkWrap: true,
-        padding: const EdgeInsets.only(bottom: 8),
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text(
-              image.title,
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-          ),
-          for (final size in puzzleSizes)
-            ListTile(
-              title: Semantics(
-                identifier:
-                    'puzzle-size-${image.id}-${size.columns}x${size.rows}',
-                child: Text.rich(
-                  TextSpan(
-                    children: [
-                      TextSpan(
-                        text: '${size.pieceCount}',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      const TextSpan(text: ' pieces'),
-                    ],
+    final style = categoryStyleFor(category.id);
+    final images = imagesInCategory(category.id);
+    // The first catalog image is the cover: stable between visits, so
+    // players can find a collection by its picture, and curated simply by
+    // ordering the catalog.
+    final cover = images.first;
+    return PaintedCard(
+      variant: variant,
+      color: style.tint,
+      onTap: onOpen,
+      padding: const EdgeInsets.fromLTRB(9, 9, 9, 10),
+      child: Semantics(
+        // Lets e2e tests open a category without matching on its title.
+        identifier: 'category-${category.id}',
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            AspectRatio(
+              aspectRatio: 3 / 2,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  FramedArt(
+                    child: Image.asset(
+                      cover.assetPath,
+                      fit: BoxFit.cover,
+                      // Decode smaller previews to reduce memory use.
+                      cacheWidth: 640,
+                    ),
                   ),
-                ),
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: _MascotChip(
+                      icon: _mascots[category.id] ?? Icons.image_outlined,
+                      color: style.accent,
+                    ),
+                  ),
+                ],
               ),
-              subtitle: Text('${size.columns} × ${size.rows}'),
-              trailing: _statusLabel(context, size),
-              onTap: () => Navigator.pop(context, size),
             ),
-        ],
+            Padding(
+              padding: const EdgeInsets.fromLTRB(2, 8, 2, 0),
+              child: Text(
+                category.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: Text(
+                '${images.length} paintings',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+          ],
+        ),
       ),
     );
-  }
-
-  /// "In progress" wins over "Completed ✓": resuming is the next action.
-  /// The e2e tests assert on these texts.
-  Widget? _statusLabel(BuildContext context, PuzzleSize size) {
-    if (inProgressSizes.contains(size)) {
-      return Semantics(
-        // Identify this size's status independently of the daily card's status.
-        identifier:
-            'puzzle-in-progress-${image.id}-${size.columns}x${size.rows}',
-        child: Text(
-          'In progress',
-          style: TextStyle(color: Theme.of(context).colorScheme.primary),
-        ),
-      );
-    }
-    if (completedSizes.contains(size)) {
-      return Text(
-        'Completed ✓',
-        style: TextStyle(color: Theme.of(context).colorScheme.tertiary),
-      );
-    }
-    return null;
   }
 }

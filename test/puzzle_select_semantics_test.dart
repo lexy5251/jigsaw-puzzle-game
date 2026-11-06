@@ -45,6 +45,13 @@ void main() {
       );
       expect(easyStatus, findsNothing);
 
+      // Categories live on their own pages now: open Landscapes first,
+      // through the same identifier the Maestro flow uses.
+      final landscapesCard = find.bySemanticsIdentifier('category-landscapes');
+      await scrollSelectScreenTo(tester, landscapesCard, delta: 150);
+      await tester.tap(landscapesCard);
+      await tester.pumpAndSettle();
+
       final catalogTitle = find.bySemanticsIdentifier(
         'catalog-puzzle-alpine-lakes-panorama',
       );
