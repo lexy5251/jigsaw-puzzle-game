@@ -9,6 +9,8 @@ import 'game_screen.dart';
 import 'puzzle_catalog.dart';
 import 'puzzle_completion.dart';
 import 'puzzle_save.dart';
+import 'studio_surfaces.dart';
+import 'studio_theme.dart';
 
 const _saveStore = SharedPreferencesSaveStore();
 const _completionStore = SharedPreferencesCompletionStore();
@@ -23,7 +25,8 @@ Future<Set<PuzzleSize>> _savedSizesFor(PuzzleImage image) async {
       columns: size.columns,
       rows: size.rows,
     );
-    if (await _saveStore.exists(key)) {
+    final save = await _saveStore.load(key);
+    if (save?.isConsistentFor(size.pieceCount) ?? false) {
       savedSizes.add(size);
     }
   }
@@ -70,6 +73,9 @@ Future<void> startPuzzleFlow(
 
   final selectedSize = await showModalBottomSheet<PuzzleSize>(
     context: context,
+    // Canvas ground behind the options' linen cards — the themed sheet
+    // default is the same linen, which would make the cards invisible.
+    backgroundColor: StudioColors.ground,
     builder: (_) => _PuzzleSizePicker(
       image: image,
       inProgressSizes: inProgressSizes,
@@ -117,36 +123,62 @@ class _PuzzleSizePicker extends StatelessWidget {
       // Fits its contents when there is room, and scrolls in short windows.
       child: ListView(
         shrinkWrap: true,
-        padding: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
         children: [
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.only(bottom: 16),
             child: Text(
               image.title,
               style: Theme.of(context).textTheme.titleLarge,
             ),
           ),
-          for (final size in puzzleSizes)
-            ListTile(
-              title: Semantics(
-                identifier:
-                    'puzzle-size-${image.id}-${size.columns}x${size.rows}',
-                child: Text.rich(
-                  TextSpan(
-                    children: [
-                      TextSpan(
-                        text: '${size.pieceCount}',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      const TextSpan(text: ' pieces'),
-                    ],
+          for (final (index, size) in puzzleSizes.indexed) ...[
+            if (index > 0) const SizedBox(height: 10),
+            _sizeCard(context, index, size),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// One size option on its own painted card (the sheet matches the
+  /// Studio look instead of default Material rows).
+  Widget _sizeCard(BuildContext context, int index, PuzzleSize size) {
+    final status = _statusLabel(context, size);
+    return PaintedCard(
+      // List position, so stacked cards get different wobbles.
+      variant: index,
+      onTap: () => Navigator.pop(context, size),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Semantics(
+                  identifier:
+                      'puzzle-size-${image.id}-${size.columns}x${size.rows}',
+                  child: Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(
+                          text: '${size.pieceCount}',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        const TextSpan(text: ' pieces'),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-              subtitle: Text('${size.columns} × ${size.rows}'),
-              trailing: _statusLabel(context, size),
-              onTap: () => Navigator.pop(context, size),
+                Text(
+                  '${size.columns} × ${size.rows}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
             ),
+          ),
+          ?status,
         ],
       ),
     );

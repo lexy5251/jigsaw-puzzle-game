@@ -203,13 +203,13 @@ void main() {
       await tester.pump(const Duration(milliseconds: 16));
     }
     expect(old.progress.isComplete, isTrue);
-    expect(find.text('Puzzle complete!'), findsNothing);
+    expect(find.textContaining('hung in your gallery'), findsNothing);
 
     await confirmRestart(tester);
     final next = await finishRestart(tester, old);
     expect(next.progress.isComplete, isFalse);
     await tester.pump(const Duration(seconds: 1));
-    expect(find.text('Puzzle complete!'), findsNothing);
+    expect(find.textContaining('hung in your gallery'), findsNothing);
   });
 
   testWidgets('restart waits for a completion delete already in flight', (

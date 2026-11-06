@@ -112,7 +112,7 @@ void main() {
     await completePuzzle(tester, game);
 
     // The completion record landed but the day did not; the save must
-    // survive so resuming and finishing again retries the credit.
+    // survive so resuming retries the credit.
     expect(prefs.storage[dailyDaysKey], isNull);
     expect(
       prefs.storage.keys.where((key) => key.startsWith('flutter.done.')),
@@ -125,7 +125,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('re-finishing the kept save retries the daily credit', (
+  testWidgets('resuming the finished save retries the daily credit', (
     tester,
   ) async {
     prefs.onWrite = (key) => key != dailyDaysKey;
@@ -134,7 +134,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
 
     // Storage recovers; the player resumes the kept save (an app restart
-    // in between) and finishes again.
+    // in between); the retry needs no additional piece movement.
     prefs.onWrite = null;
     SharedPreferences.resetStatic();
     final resumed = await bootGameScreen(
@@ -143,14 +143,16 @@ void main() {
       size: singlePieceSize,
       clock: fixedNow,
     );
-    await completePuzzle(tester, resumed);
+    await tester.runAsync(() => resumed.completionFinished);
+    expect(resumed.progress.isComplete, isTrue);
+    expect(resumed.placedCount.value, 1);
 
     expect(prefs.storage[dailyDaysKey], contains('2026-11-06'));
     expect(
       prefs.storage.containsKey('flutter.save.${dailyImage.id}.1x1'),
       isFalse,
     );
-    // The completion record counts both finishes — the accepted cost of
+    // The completion record counts both attempts — the accepted cost of
     // reusing the progress save as the retry vehicle.
     final record = await const SharedPreferencesCompletionStore().record(
       puzzleCompletionKey(imageId: dailyImage.id, columns: 1, rows: 1),

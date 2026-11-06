@@ -54,6 +54,10 @@ abstract final class StudioColors {
   /// linen ("cards may sit on cream/blush/moss grounds").
   static const blushGround = Color(0xFFF4DDCD);
   static const mossGround = Color(0xFFE5E4C8);
+
+  /// The completion scene's gallery wall (mockup "Done · hung in your
+  /// gallery"), a shade deeper than [ground].
+  static const galleryWall = Color(0xFFECDFC2);
 }
 
 /// Per-category personality (mockup section F): only two things change per

@@ -250,7 +250,7 @@ void main() {
       p[1]!.settle();
       game.persistProgress();
       await game.progressSaved;
-      expect((await store.load(key))!.lockedPieceIndexes, isEmpty);
+      expect((await store.load(key))!.lockedPieceIndexes.toSet(), {0, 1});
       expect(game.progress.lockedCount, 0);
       expect(
         p.values.every((piece) => !piece.containsLocalPoint(piece.size / 2)),

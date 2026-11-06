@@ -271,14 +271,17 @@ void main() {
       await bootGame(tester, game);
 
       // Drop the second piece while the first one's snap glide (100ms) is
-      // still running: the save written when the first piece locks must not
-      // already count the gliding one.
+      // still running: both accepted placements must already be saved,
+      // while the live count waits for the glides to finish.
       final pieces = game.world.children.whereType<PuzzlePiece>().toList();
       for (final piece in pieces) {
         piece.position.setFrom(piece.correctPosition);
         piece.settle();
         await tester.pump(const Duration(milliseconds: 16));
       }
+      await game.progressSaved;
+      expect(completions, 0);
+      expect((await store.load(key))!.lockedPieceIndexes.toSet(), {0, 1});
       for (var i = 0; i < 30; i++) {
         await tester.pump(const Duration(milliseconds: 16));
       }
@@ -286,7 +289,7 @@ void main() {
       expect(game.progress.isComplete, isTrue);
       expect(completions, 1);
       for (final snapshot in store.written) {
-        expect(snapshot.lockedPieceIndexes, hasLength(lessThan(2)));
+        expect(snapshot.isConsistentFor(2), isTrue);
       }
       expect(await store.exists(key), isFalse);
     },
@@ -296,8 +299,8 @@ void main() {
     tester,
   ) async {
     final store = InMemorySaveStore();
-    // Should never be written, but must self-heal if it ever exists:
-    // without a retry the puzzle would stay "in progress" forever.
+    // Leaving during the final snap can preserve a fully placed save;
+    // reopening must finish recording it.
     await store.save(
       key,
       PuzzleSaveState(
@@ -358,8 +361,16 @@ void main() {
     }
     expect(oldGame.progress.isComplete, isTrue);
 
-    // The player reopens the puzzle while the completion record is still
-    // being written: the new session takes over the save key.
+    // A new run takes over the save key while the old completion record
+    // is still being written.
+    await store.save(
+      key,
+      PuzzleSaveState(
+        trayPieceIndexes: const [],
+        lockedPieceIndexes: const [],
+        loosePiecePositions: {0: Vector2(25, 30)},
+      ),
+    );
     final newGame = makeGame(store, columns: 1, rows: 1);
     await bootGame(tester, newGame);
     final newPiece = newGame.world.children.whereType<PuzzlePiece>().single;

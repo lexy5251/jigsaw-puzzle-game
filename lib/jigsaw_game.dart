@@ -96,10 +96,16 @@ class JigsawGame extends FlameGame
   /// Live count of correctly placed pieces, used to detect completion.
   late final PuzzleProgress progress;
 
+  /// Mirrors [progress] for the host screen's palette counter. A plain
+  /// field notifier: each game instance (including restarts) starts at 0
+  /// and needs no disposal.
+  final ValueNotifier<int> placedCount = ValueNotifier(0);
+
   // Serialize progress writes so a delayed write cannot recreate a save
   // after a successful completion has deleted it.
   Future<void>? _pendingProgressSave;
   Future<void>? _pendingProgressDelete;
+  Future<void>? _pendingCompletion;
   bool _discardingProgress = false;
 
   // Which game instance currently owns each save key (this app run). If the
@@ -243,6 +249,9 @@ class JigsawGame extends FlameGame
     }
     _fitCameraToBoard();
     onBoardLoaded?.call(savedState != null);
+    // An interrupted final snap can leave a fully placed save. Finish
+    // recording it after the board and its restored counter are ready.
+    if (progress.isComplete) _celebrateCompletion();
   }
 
   @override
@@ -334,6 +343,8 @@ class JigsawGame extends FlameGame
     )..setEdgesOnly(_edgesOnlyFilter);
     _tray = tray;
     camera.viewport.add(tray);
+    // Above the tray, so a carried piece stays visible crossing it.
+    camera.viewport.add(_ElevatedPieceOverlay()..priority = 1);
   }
 
   @override
@@ -557,8 +568,8 @@ class JigsawGame extends FlameGame
       return;
     }
 
-    // Commit exact coordinates now. The settle affects drawing only, so a
-    // snapshot during the animation still reconstructs the whole chunk.
+    // Saves commit the accepted group lock and exact coordinates now;
+    // leaving during the visual glide must not lose the placement.
     _busyPieces.addAll(result.members);
     var remaining = result.members.length;
     for (final index in result.members) {
@@ -584,6 +595,7 @@ class JigsawGame extends FlameGame
       piece.finishSettle(locked: result.locked);
       if (newlyLocked) completed = progress.lockPiece() || completed;
     }
+    placedCount.value = progress.lockedCount;
     sounds?.playSnap();
     HapticFeedback.lightImpact().ignore();
     if (completed) _celebrateCompletion();
@@ -591,7 +603,7 @@ class JigsawGame extends FlameGame
   }
 
   void _celebrateCompletion() {
-    unawaited(_recordCompletion());
+    unawaited(_pendingCompletion = _recordCompletion());
     sounds?.playComplete();
     HapticFeedback.heavyImpact().ignore();
     _playCompletionGlow();
@@ -646,6 +658,12 @@ class JigsawGame extends FlameGame
     );
   }
 
+  /// Pieces riding above everything (dragged or glide-settling); the tray
+  /// overlay re-renders exactly these.
+  @visibleForTesting
+  Iterable<PuzzlePiece> get elevatedPieces =>
+      _boardPieces.values.where((piece) => piece.isElevated);
+
   /// Piece indexes still in the tray — exposed for tests.
   @visibleForTesting
   List<int> get trayPieceIndexes => _tray?.remainingPieceIndexes ?? const [];
@@ -663,6 +681,10 @@ class JigsawGame extends FlameGame
   /// Use [discardProgress] to stop further writes before deleting a save.
   Future<void> get progressSaved =>
       _pendingProgressSave ?? Future<void>.value();
+
+  /// Completes after the current completion-record and save-cleanup attempt.
+  Future<void> get completionFinished =>
+      _pendingCompletion ?? Future<void>.value();
 
   /// Permanently stops this run and clears its progress before replacement.
   /// Late gesture releases and loads must not create any more snapshots.
@@ -737,10 +759,10 @@ class JigsawGame extends FlameGame
       piece.position.setValues(position.x, position.y);
       if (_groups.isLocked(piece.index)) {
         piece.restoreAsLocked();
-        // Retry completion if a fully locked save ever slips through.
-        if (progress.lockPiece()) _celebrateCompletion();
+        progress.lockPiece();
       }
     }
+    placedCount.value = progress.lockedCount;
   }
 
   /// Writes progress while playing. Completion retains the last resumable
@@ -782,12 +804,18 @@ class JigsawGame extends FlameGame
     );
   }
 
+  /// Screen-space top of the tray, for the overlay's "is it over the tray"
+  /// check. Infinity while the tray is not mounted (nothing to cover).
+  double get _trayTopOnScreen => _tray?.position.y ?? double.infinity;
+
   /// Copies the live board and tray state into a snapshot for storage.
   PuzzleSaveState _createSaveState() {
     final lockedPieceIndexes = <int>[];
     final loosePiecePositions = <int, Vector2>{};
     for (final piece in _boardPieces.values) {
-      if (piece.isLocked) {
+      // The visual lock flag follows the snap animation. The group's lock
+      // already records whether this drop reached its final board position.
+      if (_groups.isLocked(piece.index)) {
         lockedPieceIndexes.add(piece.index);
       } else {
         loosePiecePositions[piece.index] = piece.position.clone();
@@ -799,5 +827,41 @@ class JigsawGame extends FlameGame
       loosePiecePositions: loosePiecePositions,
       startedDay: _runStartedDay,
     );
+  }
+}
+
+/// Re-renders elevated pieces (dragged or glide-settling) above the tray.
+/// Pieces live in the world and the tray is a near-opaque viewport HUD, so
+/// without this a piece carried across the tray slides underneath its wood
+/// and seems to vanish mid-drag. Render-only: hit testing and game logic
+/// keep using the world piece; pixels away from the tray are untouched.
+class _ElevatedPieceOverlay extends Component
+    with HasGameReference<JigsawGame> {
+  @override
+  void render(Canvas canvas) {
+    final trayTop = game._trayTopOnScreen;
+    if (!trayTop.isFinite) return;
+    // Above the tray the world copy is already visible. Repainting its
+    // partially transparent edge there would darken it a second time.
+    canvas.save();
+    canvas.clipRect(
+      Rect.fromLTWH(0, trayTop, game.size.x, game.size.y - trayTop),
+      doAntiAlias: false,
+    );
+    final zoom = game.camera.viewfinder.zoom;
+    for (final piece in game._boardPieces.values) {
+      if (!piece.isElevated) {
+        continue;
+      }
+      final topLeft = game.camera.localToGlobal(piece.position);
+      // render() includes the glide offset, which can still cross the tray
+      // even when the piece's final position is already above it.
+      canvas.save();
+      canvas.translate(topLeft.x, topLeft.y);
+      canvas.scale(zoom);
+      piece.render(canvas);
+      canvas.restore();
+    }
+    canvas.restore();
   }
 }

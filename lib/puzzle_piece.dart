@@ -21,7 +21,12 @@ class PuzzlePiece extends SpriteComponent
     required super.position,
     required this.correctPosition,
     Vector2? renderBleed,
-  }) : renderBleed = renderBleed ?? Vector2.zero();
+  }) : renderBleed = renderBleed ?? Vector2.zero() {
+    // Board zoom draws sprites below 1:1; the default FilterQuality.none
+    // aliases their antialiased rims into a visible light edge on device.
+    paint.filterQuality = FilterQuality.medium;
+    paint.isAntiAlias = true;
+  }
 
   /// Canonical piece number (row * columns + column); save files reference it.
   final int index;
@@ -42,8 +47,8 @@ class PuzzlePiece extends SpriteComponent
 
   bool _isLocked = false;
 
-  // Coordinates are exact throughout the visual glide. Counting/saving as
-  // locked waits for the entire chunk's animation to finish.
+  // Coordinates and saved locks commit on drop. The live count and visual
+  // lock flag wait for the entire chunk's animation to finish.
   bool _isSnapping = false;
   int? _activePointerId;
   Vector2 _settleOffset = Vector2.zero();
@@ -53,6 +58,11 @@ class PuzzlePiece extends SpriteComponent
 
   bool get isLocked => _isLocked;
   bool get isSettling => _isSnapping;
+
+  /// Dragged or glide-settling pieces ride above everything else — the
+  /// game's tray overlay re-renders them so they stay visible when the
+  /// finger crosses the (nearly opaque) tray.
+  bool get isElevated => priority == _draggingPriority;
 
   void setDragging(bool dragging) {
     priority = dragging ? _draggingPriority : _loosePriority;
