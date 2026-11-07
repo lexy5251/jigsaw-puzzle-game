@@ -49,14 +49,13 @@ class _CategoryScreenState extends State<CategoryScreen> {
     final inProgress = <String>{};
     for (final image in _images) {
       for (final size in puzzleSizes) {
-        final completionKey = puzzleCompletionKey(
-          imageId: image.id,
-          columns: size.columns,
-          rows: size.rows,
-        );
         // One size in either state is enough for that badge.
         if (!completed.contains(image.id) &&
-            await _completionStore.isCompleted(completionKey)) {
+            await _completionStore.isCompletedForGrid(
+              imageId: image.id,
+              columns: size.columns,
+              rows: size.rows,
+            )) {
           completed.add(image.id);
         }
         final saveKey = puzzleSaveKey(

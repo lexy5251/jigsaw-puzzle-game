@@ -52,6 +52,18 @@ abstract class PuzzleCompletionStore {
   Future<bool> isCompleted(String key);
 }
 
+/// The one shared way to ask "was this image finished at this grid?" —
+/// callers must not pair [puzzleCompletionKey] with [isCompleted] by hand,
+/// or the sites drift apart when the key format changes.
+extension PuzzleCompletionQuery on PuzzleCompletionStore {
+  Future<bool> isCompletedForGrid({
+    required String imageId,
+    required int columns,
+    required int rows,
+  }) =>
+      isCompleted(puzzleCompletionKey(imageId: imageId, columns: columns, rows: rows));
+}
+
 /// Device-local storage. Failures are logged in debug builds and handled
 /// without throwing, so a storage problem does not interrupt gameplay.
 class SharedPreferencesCompletionStore implements PuzzleCompletionStore {

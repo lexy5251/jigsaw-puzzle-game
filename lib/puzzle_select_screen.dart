@@ -44,8 +44,10 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
   /// Days on which the daily puzzle was finished (streak input).
   var _completedDailyDays = <String>{};
 
-  /// Whether today's daily image has a resumable save at any size.
-  var _dailyInProgress = false;
+  /// The day a resumable run of today's daily would credit when finished
+  /// (today, or yesterday for a run begun before midnight); null when no
+  /// save would bloom anything.
+  String? _dailyRunCredit;
 
   /// Keep the displayed date and its asynchronously loaded status together.
   late DateTime _dailyDate;
@@ -75,17 +77,13 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
     super.dispose();
   }
 
-  /// Whether today's daily has a resumable run that would still credit a
-  /// pot: a save of its image whose stamped start day is inside the one-day
-  /// credit window. An old abandoned save of the same image does not count —
-  /// finishing it would not bloom anything, so showing "In progress" for it
+  /// The day a resumable run of today's daily would credit when finished
+  /// now — decided by [dailyCreditDay], the same rule the completion flow
+  /// applies, so the card can never promise a bloom a finish won't deliver.
+  /// A save that credits nothing (abandoned, or started on a day when this
+  /// image was not the daily) does not count: showing "In progress" for it
   /// would mislead.
-  Future<bool> _dailyRunInProgress(PuzzleImage daily, DateTime now) async {
-    final today = utcMidnight(now);
-    final creditableDays = {
-      dayKey(today),
-      dayKey(today.subtract(const Duration(days: 1))),
-    };
+  Future<String?> _dailyRunCreditDay(PuzzleImage daily, DateTime now) async {
     for (final size in puzzleSizes) {
       final save = await _saveStore.load(
         puzzleSaveKey(
@@ -94,13 +92,19 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
           rows: size.rows,
         ),
       );
-      if (save != null &&
-          save.isConsistentFor(size.pieceCount) &&
-          creditableDays.contains(save.startedDay)) {
-        return true;
+      if (save == null || !save.isConsistentFor(size.pieceCount)) {
+        continue;
+      }
+      final creditDay = dailyCreditDay(
+        daily.id,
+        now,
+        startedDay: save.startedDay,
+      );
+      if (creditDay != null) {
+        return creditDay;
       }
     }
-    return false;
+    return null;
   }
 
   void _scheduleMidnightRefresh(DateTime now) {
@@ -125,7 +129,7 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
 
     final days = await _dailyStore.completedDays();
     final daily = dailyPuzzleFor(now);
-    final inProgress = await _dailyRunInProgress(daily, now);
+    final runCredit = await _dailyRunCreditDay(daily, now);
     // A read started before midnight must not overwrite the next day's data.
     if (!mounted || dayKey(now) != dayKey(_now)) {
       return;
@@ -133,13 +137,13 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
     // This runs on every app resume; skip the rebuild when nothing changed.
     if (dayKey(_dailyDate) == dayKey(now) &&
         setEquals(_completedDailyDays, days) &&
-        _dailyInProgress == inProgress) {
+        _dailyRunCredit == runCredit) {
       return;
     }
     setState(() {
       _dailyDate = now;
       _completedDailyDays = days;
-      _dailyInProgress = inProgress;
+      _dailyRunCredit = runCredit;
     });
   }
 
@@ -187,11 +191,18 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
         children: [
           DailyPuzzleCard(
             image: daily,
-            now: _dailyDate,
-            completedDays: _completedDailyDays,
-            inProgress: _dailyInProgress,
+            doneToday: _completedDailyDays.contains(dayKey(_dailyDate)),
+            inProgress: _dailyRunCredit != null,
+            // A fresh start always credits today; an in-progress run only
+            // when it was begun today (a yesterday-begun run blooms
+            // yesterday's pot, so the card must not promise today's).
+            bloomsToday:
+                _dailyRunCredit == null ||
+                _dailyRunCredit == dayKey(_dailyDate),
             onPlay: () => _playDaily(daily),
           ),
+          const SizedBox(height: 10),
+          DailyWindowsill(now: _dailyDate, completedDays: _completedDailyDays),
           const SizedBox(height: 16),
           LayoutBuilder(
             builder: (context, constraints) {

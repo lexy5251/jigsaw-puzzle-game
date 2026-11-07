@@ -144,6 +144,7 @@ Future<JigsawGame> bootGameScreen(
   DateTime Function()? clock,
   AppSettings settings = const AppSettings(),
   GameSounds Function()? soundsFactory,
+  List<PuzzleImage> catalog = puzzleCatalog,
 }) async {
   late JigsawGame game;
   await tester.runAsync(() async {
@@ -155,6 +156,7 @@ Future<JigsawGame> bootGameScreen(
           clock: clock,
           settings: settings,
           soundsFactory: soundsFactory,
+          catalog: catalog,
         ),
       ),
     );

@@ -122,6 +122,7 @@ class JigsawGame extends FlameGame
 
   // Live piece state: the tray holds unused pieces; world holds board pieces.
   PieceTray? _tray;
+  _ElevatedPieceOverlay? _elevatedOverlay;
   late PieceGroups _groups;
   final Map<int, PuzzlePiece> _boardPieces = {};
   final Set<int> _busyPieces = {};
@@ -311,6 +312,9 @@ class JigsawGame extends FlameGame
           ..color = StudioColors.boardOutline,
       ),
     );
+    // Above resting pieces, below every dragged body: all lifted shadows
+    // paint first, so a dragged chunk cannot shade its own members.
+    world.add(_DragShadow()..priority = 90);
   }
 
   /// Pairs each shaped piece image with stable indexes and solved positions
@@ -325,6 +329,7 @@ class JigsawGame extends FlameGame
           index: index,
           sprite: shapedImages[index].sprite,
           renderBleed: shapedImages[index].bleed,
+          artwork: shapedImages[index].artwork,
           correctPosition: Vector2(
             (index % columns) * pieceSize.x,
             (index ~/ columns) * pieceSize.y,
@@ -344,7 +349,8 @@ class JigsawGame extends FlameGame
     _tray = tray;
     camera.viewport.add(tray);
     // Above the tray, so a carried piece stays visible crossing it.
-    camera.viewport.add(_ElevatedPieceOverlay()..priority = 1);
+    _elevatedOverlay = _ElevatedPieceOverlay()..priority = 1;
+    camera.viewport.add(_elevatedOverlay!);
   }
 
   @override
@@ -518,6 +524,7 @@ class JigsawGame extends FlameGame
         index: piece.index,
         sprite: piece.sprite!,
         renderBleed: piece.renderBleed,
+        artwork: piece.artwork,
         correctPosition: piece.correctPosition.clone(),
       ),
       canvasPoint: centerOnScreen,
@@ -677,6 +684,10 @@ class JigsawGame extends FlameGame
   @visibleForTesting
   double get ghostPreviewOpacity => _ghostPreview?.opacity ?? 0;
 
+  /// The tray-crossing re-render layer — exposed for tests.
+  @visibleForTesting
+  Component get elevatedPieceOverlay => _elevatedOverlay!;
+
   /// Completes when the currently queued progress writes have landed.
   /// Use [discardProgress] to stop further writes before deleting a save.
   Future<void> get progressSaved =>
@@ -728,6 +739,7 @@ class JigsawGame extends FlameGame
       index: data.index,
       sprite: data.sprite,
       renderBleed: data.renderBleed,
+      artwork: data.artwork,
       size: pieceSize.clone(),
       position: position,
       correctPosition: data.correctPosition.clone(),
@@ -849,19 +861,45 @@ class _ElevatedPieceOverlay extends Component
       doAntiAlias: false,
     );
     final zoom = game.camera.viewfinder.zoom;
+    final elevated = game._boardPieces.values
+        .where((piece) => piece.isElevated)
+        .toList();
+    // Shadows first, bodies second — same layering as the world, so a
+    // dragged chunk's members never shade each other here either.
+    for (final renderBody in [false, true]) {
+      for (final piece in elevated) {
+        final topLeft = game.camera.localToGlobal(piece.position);
+        // Both passes include the glide offset, which can still cross the
+        // tray even when the piece's final position is already above it.
+        canvas.save();
+        canvas.translate(topLeft.x, topLeft.y);
+        canvas.scale(zoom);
+        if (renderBody) {
+          piece.render(canvas);
+        } else {
+          piece.renderDropShadow(canvas);
+        }
+        canvas.restore();
+      }
+    }
+    canvas.restore();
+  }
+}
+
+/// World layer between resting pieces and dragged bodies: paints every
+/// elevated piece's drop shadow, so all shadows land below all carried
+/// artwork instead of on a chunk-mate's face.
+class _DragShadow extends Component with HasGameReference<JigsawGame> {
+  @override
+  void render(Canvas canvas) {
     for (final piece in game._boardPieces.values) {
       if (!piece.isElevated) {
         continue;
       }
-      final topLeft = game.camera.localToGlobal(piece.position);
-      // render() includes the glide offset, which can still cross the tray
-      // even when the piece's final position is already above it.
       canvas.save();
-      canvas.translate(topLeft.x, topLeft.y);
-      canvas.scale(zoom);
-      piece.render(canvas);
+      canvas.translate(piece.position.x, piece.position.y);
+      piece.renderDropShadow(canvas);
       canvas.restore();
     }
-    canvas.restore();
   }
 }

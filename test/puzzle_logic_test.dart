@@ -108,4 +108,47 @@ void main() {
       expect(isZoomedBeyondFit(fit * 1.02, fit), isTrue);
     });
   });
+
+  group('trayColumnVisible', () {
+    // Window: scrolled 100 to the right, 400 wide -> visible span 100..500.
+    const scroll = 100.0;
+    const view = 400.0;
+
+    test('keeps slots overlapping the window, drops the rest', () {
+      bool visible(double left) => trayColumnVisible(
+        left: left,
+        width: 50,
+        scrollOffset: scroll,
+        viewWidth: view,
+      );
+      expect(visible(200), isTrue); // fully inside
+      expect(visible(80), isTrue); // straddles the left edge
+      expect(visible(480), isTrue); // straddles the right edge
+      expect(visible(20), isFalse); // fully left of the window
+      expect(visible(520), isFalse); // fully right of the window
+    });
+
+    test('a slot touching the window edge still draws', () {
+      // A culled-but-visible slot would blank a thumbnail mid-scroll, so the
+      // boundary cases must count as visible.
+      expect(
+        trayColumnVisible(
+          left: 50,
+          width: 50,
+          scrollOffset: scroll,
+          viewWidth: view,
+        ),
+        isTrue,
+      );
+      expect(
+        trayColumnVisible(
+          left: 500,
+          width: 50,
+          scrollOffset: scroll,
+          viewWidth: view,
+        ),
+        isTrue,
+      );
+    });
+  });
 }

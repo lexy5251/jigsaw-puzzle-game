@@ -37,28 +37,31 @@ Future<Set<PuzzleSize>> _savedSizesFor(PuzzleImage image) async {
 Future<Set<PuzzleSize>> _completedSizesFor(PuzzleImage image) async {
   final completedSizes = <PuzzleSize>{};
   for (final size in puzzleSizes) {
-    final key = puzzleCompletionKey(
+    final completed = await _completionStore.isCompletedForGrid(
       imageId: image.id,
       columns: size.columns,
       rows: size.rows,
     );
-    if (await _completionStore.isCompleted(key)) {
+    if (completed) {
       completedSizes.add(size);
     }
   }
   return completedSizes;
 }
 
-/// Opens the size sheet for [image] and, if a size is chosen, runs the game.
-/// Returns once the player is back, so callers can refresh their state.
+/// Opens the size sheet for [image] and, if a size is chosen, runs the game —
+/// chaining straight into each "Next puzzle" pick at the same size until the
+/// player exits. Returns once the player is truly back, so callers can
+/// refresh their state.
 Future<void> startPuzzleFlow(
   BuildContext context,
   PuzzleImage image, {
   DateTime Function()? clock,
+  List<PuzzleImage> catalog = puzzleCatalog,
 }) async {
   // The run belongs to the day the player tapped, even if the size sheet
   // below stays open across midnight.
-  final startedDay = dayKey((clock ?? DateTime.now)());
+  var startedDay = dayKey((clock ?? DateTime.now)());
   // Resolve each size's state BEFORE opening the sheet, so the sheet
   // itself stays plain synchronous UI (an async lookup inside its build
   // would re-trigger itself on every rebuild).
@@ -66,7 +69,7 @@ Future<void> startPuzzleFlow(
   final completedSizes = await _completedSizesFor(image);
   // Read once here so GameScreen stays synchronous; mid-game settings
   // changes apply from the next puzzle on.
-  final settings = await _settingsStore.load();
+  var settings = await _settingsStore.load();
   if (!context.mounted) {
     return;
   }
@@ -88,18 +91,34 @@ Future<void> startPuzzleFlow(
     return;
   }
 
-  await Navigator.push<void>(
-    context,
-    MaterialPageRoute<void>(
-      builder: (_) => GameScreen(
-        image: image,
-        size: selectedSize,
-        clock: clock,
-        startedDay: startedDay,
-        settings: settings,
+  var current = image;
+  while (true) {
+    // The game screen pops with the painting the player chose via the
+    // completion card's "Next puzzle" button, or null on a plain exit.
+    final next = await Navigator.push<PuzzleImage>(
+      context,
+      MaterialPageRoute<PuzzleImage>(
+        builder: (_) => GameScreen(
+          image: current,
+          size: selectedSize,
+          clock: clock,
+          startedDay: startedDay,
+          settings: settings,
+          catalog: catalog,
+        ),
       ),
-    ),
-  );
+    );
+    if (next == null || !context.mounted) {
+      return;
+    }
+    current = next;
+    // The player commits to the new run now, not when the chain began.
+    startedDay = dayKey((clock ?? DateTime.now)());
+    settings = await _settingsStore.load();
+    if (!context.mounted) {
+      return;
+    }
+  }
 }
 
 class _PuzzleSizePicker extends StatelessWidget {
