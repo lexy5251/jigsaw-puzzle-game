@@ -47,6 +47,19 @@ double clampTrayScroll(double offset, double stripWidth, double trayWidth) {
   return offset.clamp(0.0, maxOffset).toDouble();
 }
 
+/// Whether a strip-local slot at [left] with [width] overlaps the tray's
+/// visible window ([scrollOffset] to [scrollOffset] + [viewWidth]). The tray
+/// culls offscreen thumbnails with this, so it must match the strip layout:
+/// strip x == -scrollOffset, clipped to the tray's own bounds.
+bool trayColumnVisible({
+  required double left,
+  required double width,
+  required double scrollOffset,
+  required double viewWidth,
+}) {
+  return left + width >= scrollOffset && left <= scrollOffset + viewWidth;
+}
+
 // Tray geometry. Thumbnails show the full sprite box (base cell plus the
 // transparent tab margins), and slots advance by that whole box — so pieces
 // can never overlap. Density comes from sizing thumbnails to always fit

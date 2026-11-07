@@ -95,6 +95,87 @@ void main() {
     });
   });
 
+  testWidgets('dimensional artwork stays inside the outline; shadow is apart', (
+    tester,
+  ) async {
+    await tester.runAsync(() async {
+      final source = await makeSource();
+      addTearDown(source.dispose);
+      final pieces = await rasterizePieces(
+        source: source,
+        columns: 1,
+        rows: 1,
+        shapes: PieceShapeGrid.generate(columns: 1, rows: 1, seed: 3),
+      );
+      addTearDown(pieces.single.dispose);
+
+      Future<ui.Image> capture(void Function(Canvas) draw) async {
+        final recorder = ui.PictureRecorder();
+        final canvas = Canvas(recorder)..scale(3);
+        draw(canvas);
+        final picture = recorder.endRecording();
+        try {
+          return await picture.toImage(300, 300);
+        } finally {
+          picture.dispose();
+        }
+      }
+
+      const bounds = Rect.fromLTWH(20, 20, 60, 52);
+      final artwork = pieces.single.artwork;
+      final body = await capture(
+        (canvas) => artwork.render(canvas, bounds: bounds),
+      );
+      final restingShadow = await capture(
+        (canvas) => artwork.renderShadow(canvas, bounds: bounds),
+      );
+      final liftedShadow = await capture(
+        (canvas) => artwork.renderShadow(canvas, bounds: bounds, lifted: true),
+      );
+      addTearDown(body.dispose);
+      addTearDown(restingShadow.dispose);
+      addTearDown(liftedShadow.dispose);
+
+      final images = {
+        for (final entry in {
+          'body': body,
+          'resting': restingShadow,
+          'lifted': liftedShadow,
+        }.entries)
+          entry.key: (await entry.value.toByteData(
+            format: ui.ImageByteFormat.rawRgba,
+          ))!,
+      };
+      int channel(String image, double x, double y, int channel) =>
+          images[image]!.getUint8(
+            ((y * 3).floor() * 300 + (x * 3).floor()) * 4 + channel,
+          );
+
+      // The face spans (30,30)..(70,62). The photo's middle stays unchanged
+      // and the margins stay clear.
+      expect(channel('body', 50, 46, 0), 255);
+      expect(channel('body', 50, 46, 1), 0);
+      expect(channel('body', 50, 46, 3), 255);
+      expect(channel('body', 22, 22, 3), 0);
+      expect(channel('body', 50, 30.5, 1), greaterThan(0)); // top highlight
+      // The cardboard rim shows INSIDE the lower edge (green well above the
+      // pure-red photo), and not a pixel of body lands outside the outline —
+      // joined neighbours sit flush against it.
+      expect(channel('body', 50, 61.5, 0), lessThan(255));
+      expect(channel('body', 50, 61.5, 1), greaterThan(50));
+      expect(channel('body', 50, 63, 3), 0);
+      // The shadow is a separate pass (drawn below bodies by the game's
+      // layers); it reaches past the outline's lower edge, deeper when
+      // lifted.
+      expect(channel('resting', 50, 64, 3), greaterThan(0));
+      expect(
+        channel('lifted', 50, 66, 3),
+        greaterThan(channel('resting', 50, 66, 3)),
+        reason: 'A lifted piece casts a deeper shadow below its edge.',
+      );
+    });
+  });
+
   for (final fail in [false, true]) {
     testWidgets(
       'releases rendering resources after ${fail ? 'failure' : 'success'}',

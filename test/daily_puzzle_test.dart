@@ -268,4 +268,20 @@ void main() {
       expect(longestStreak({'2026-10-31', '2026-11-01', '2026-11-02'}), 3);
     });
   });
+
+  group('dailyBloomCaption', () {
+    test("names today's pot when credited the finish day", () {
+      expect(
+        dailyBloomCaption('2026-11-06', DateTime(2026, 11, 6, 14), 3),
+        "Today's pot bloomed · 3-day streak",
+      );
+    });
+
+    test("names yesterday's pot for the past-midnight grace", () {
+      expect(
+        dailyBloomCaption('2026-11-06', DateTime(2026, 11, 7, 0, 5), 1),
+        "Yesterday's pot bloomed · 1-day streak",
+      );
+    });
+  });
 }

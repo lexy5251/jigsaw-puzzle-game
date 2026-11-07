@@ -10,6 +10,7 @@ import 'package:flame/events.dart';
 import 'package:flutter/material.dart';
 
 import 'jigsaw_game.dart';
+import 'piece_renderer.dart';
 
 /// A board piece that can be dragged until it snaps into its correct position.
 class PuzzlePiece extends SpriteComponent
@@ -20,6 +21,7 @@ class PuzzlePiece extends SpriteComponent
     required super.size,
     required super.position,
     required this.correctPosition,
+    this.artwork,
     Vector2? renderBleed,
   }) : renderBleed = renderBleed ?? Vector2.zero() {
     // Board zoom draws sprites below 1:1; the default FilterQuality.none
@@ -37,6 +39,7 @@ class PuzzlePiece extends SpriteComponent
   /// rect also stays the touch target on purpose: it is a steadier, more
   /// finger-friendly area than the exact knobby outline.)
   final Vector2 renderBleed;
+  final PieceArtwork? artwork;
 
   static const _lockedPriority = -1;
   static const _loosePriority = 0;
@@ -68,27 +71,75 @@ class PuzzlePiece extends SpriteComponent
     priority = dragging ? _draggingPriority : _loosePriority;
   }
 
+  /// Visual offset of the glide-settle animation. The game's shadow layer
+  /// applies the same offset, so the shadow travels with the artwork.
+  Vector2 get glideOffset {
+    if (!_isSnapping) {
+      return Vector2.zero();
+    }
+    final t = (_settleTime / _settleDuration).clamp(0.0, 1.0);
+    return _settleOffset * (1 - Curves.easeOut.transform(t));
+  }
+
+  /// The sprite box this piece draws into, around its base rectangle.
+  Rect get _spriteBounds => Rect.fromLTWH(
+    -renderBleed.x,
+    -renderBleed.y,
+    sprite!.srcSize.x,
+    sprite!.srcSize.y,
+  );
+
   // The shaped image is drawn 1:1 around the base rectangle instead of being
   // squeezed into it. overridePaint keeps opacity and flash effects working.
   // Deliberately NOT calling super.render: it would draw the sprite a second
   // time, squeezed into the base rect.
+  //
+  // Resting and locked pieces blit the baked decorated sprite (cheap, and
+  // the component paint covers the whole piece). Only elevated pieces
+  // re-render live from the photo, so the outline stays crisp while carried
+  // under camera zoom; their drop shadow is drawn by the game's shadow
+  // layer, below every dragged body.
   @override
   // ignore: must_call_super
   void render(Canvas canvas) {
     canvas.save();
-    if (_isSnapping) {
-      final t = (_settleTime / _settleDuration).clamp(0.0, 1.0);
-      final remaining = 1 - Curves.easeOut.transform(t);
-      canvas.translate(
-        _settleOffset.x * remaining,
-        _settleOffset.y * remaining,
+    final glide = glideOffset;
+    canvas.translate(glide.x, glide.y);
+    final pieceArtwork = artwork;
+    if (isElevated && pieceArtwork != null) {
+      pieceArtwork.render(
+        canvas,
+        bounds: _spriteBounds,
+        decorationScale: 1 / game.camera.viewfinder.zoom,
+        photoPaint: paint,
+      );
+    } else {
+      sprite!.render(
+        canvas,
+        position: -renderBleed,
+        size: sprite!.srcSize,
+        overridePaint: paint,
       );
     }
-    sprite!.render(
+    canvas.restore();
+  }
+
+  /// This piece's lifted drop shadow, in local coordinates. Called by the
+  /// game's shadow layers so every shadow lands below every dragged body —
+  /// a dragged chunk must never shade its own members.
+  void renderDropShadow(Canvas canvas) {
+    final pieceArtwork = artwork;
+    if (pieceArtwork == null) {
+      return;
+    }
+    canvas.save();
+    final glide = glideOffset;
+    canvas.translate(glide.x, glide.y);
+    pieceArtwork.renderShadow(
       canvas,
-      position: -renderBleed,
-      size: sprite!.srcSize,
-      overridePaint: paint,
+      bounds: _spriteBounds,
+      decorationScale: 1 / game.camera.viewfinder.zoom,
+      lifted: true,
     );
     canvas.restore();
   }

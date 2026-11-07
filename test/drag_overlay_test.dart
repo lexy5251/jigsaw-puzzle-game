@@ -105,27 +105,60 @@ void main() {
         }
       }
 
-      final before = (await tester.runAsync(render))!;
-      addTearDown(before.dispose);
+      // Three frames: resting, dragged without the overlay, dragged with it.
+      final resting = (await tester.runAsync(render))!;
+      addTearDown(resting.dispose);
       game.beginPieceDrag(piece);
+      final overlay = game.elevatedPieceOverlay;
+      overlay.removeFromParent();
       await tester.pump(const Duration(milliseconds: 16));
-      final after = (await tester.runAsync(render))!;
-      addTearDown(after.dispose);
+      final dragged = (await tester.runAsync(render))!;
+      addTearDown(dragged.dispose);
+      game.camera.viewport.add(overlay);
+      await tester.pump(const Duration(milliseconds: 16));
+      final overlaid = (await tester.runAsync(render))!;
+      addTearDown(overlaid.dispose);
+
+      // Pickup may repaint only the piece's own screen area (the live body
+      // and its deepened shadow), inflated a little for the shadow's blur.
+      final topLeft = game.camera.localToGlobal(piece.position);
+      final pieceRect = Rect.fromLTWH(
+        topLeft.x - piece.renderBleed.x * zoom,
+        topLeft.y - piece.renderBleed.y * zoom,
+        piece.sprite!.srcSize.x * zoom,
+        piece.sprite!.srcSize.y * zoom,
+      ).inflate(12);
+
       await tester.runAsync(() async {
-        final a = (await before.toByteData(
+        final rest = (await resting.toByteData(
           format: ui.ImageByteFormat.rawRgba,
         ))!;
-        final b = (await after.toByteData(format: ui.ImageByteFormat.rawRgba))!;
+        final drag = (await dragged.toByteData(
+          format: ui.ImageByteFormat.rawRgba,
+        ))!;
+        final over = (await overlaid.toByteData(
+          format: ui.ImageByteFormat.rawRgba,
+        ))!;
         var aboveChanged = 0;
         var trayChanged = 0;
+        var strayPickupChanged = 0;
+        var pieceChanged = 0;
         for (var y = 0; y < 600; y++) {
           for (var x = 0; x < 800; x++) {
             final index = (y * 800 + x) * 4;
-            if (a.getUint32(index) != b.getUint32(index)) {
+            if (drag.getUint32(index) != over.getUint32(index)) {
               if (y < tray.y.floor()) {
                 aboveChanged++;
               } else {
                 trayChanged++;
+              }
+            }
+            if (y < tray.y.floor() &&
+                rest.getUint32(index) != over.getUint32(index)) {
+              if (pieceRect.contains(Offset(x.toDouble(), y.toDouble()))) {
+                pieceChanged++;
+              } else {
+                strayPickupChanged++;
               }
             }
           }
@@ -139,6 +172,16 @@ void main() {
           trayChanged,
           greaterThan(0),
           reason: 'The carried piece must appear above the tray.',
+        );
+        expect(
+          strayPickupChanged,
+          0,
+          reason: 'Pickup must not repaint anything beyond the piece itself.',
+        );
+        expect(
+          pieceChanged,
+          greaterThan(0),
+          reason: 'Pickup must visibly lift the piece (deeper shadow).',
         );
       });
       await tester.pumpWidget(const SizedBox.shrink());

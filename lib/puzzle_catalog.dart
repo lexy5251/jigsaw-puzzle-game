@@ -437,3 +437,26 @@ List<PuzzleImage> imagesInCategory(String categoryId) => [
   for (final image in puzzleCatalog)
     if (image.categoryId == categoryId) image,
 ];
+
+/// The painting to offer as "Next puzzle" after finishing [current]: the
+/// nearest image after it in its category (wrapping around) whose id is not
+/// in [completedIds]. Null when the rest of the category is done — the
+/// completion scene hides the button then.
+PuzzleImage? nextPuzzleAfter(
+  PuzzleImage current,
+  Set<String> completedIds, {
+  List<PuzzleImage> catalog = puzzleCatalog,
+}) {
+  final category = [
+    for (final image in catalog)
+      if (image.categoryId == current.categoryId) image,
+  ];
+  final start = category.indexWhere((image) => image.id == current.id);
+  for (var step = 1; step <= category.length; step++) {
+    final candidate = category[(start + step) % category.length];
+    if (candidate.id != current.id && !completedIds.contains(candidate.id)) {
+      return candidate;
+    }
+  }
+  return null;
+}

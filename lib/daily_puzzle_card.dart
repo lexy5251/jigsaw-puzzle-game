@@ -5,115 +5,145 @@ import 'puzzle_catalog.dart';
 import 'studio_mascots.dart';
 import 'studio_surfaces.dart';
 
-/// The daily-puzzle card: today's image, its status, and the windowsill.
+/// The daily-puzzle "Begin card": today's image, its status, and the one
+/// action. Deliberately no tracker elements — the streak lives in the
+/// quieter [DailyWindowsill] strip below it, so the home screen reads as an
+/// invitation to play, not a check-in app (owner ruling, UI-1).
 class DailyPuzzleCard extends StatelessWidget {
   const DailyPuzzleCard({
     super.key,
     required this.image,
-    required this.now,
-    required this.completedDays,
+    required this.doneToday,
     required this.inProgress,
+    required this.bloomsToday,
     required this.onPlay,
   });
 
   final PuzzleImage image;
-  final DateTime now;
-  final Set<String> completedDays;
 
-  /// Whether today's daily has a resumable run that still credits a pot.
+  /// Whether today's pot has already bloomed.
+  final bool doneToday;
+
+  /// Whether a resumable run of this image still credits a pot.
   final bool inProgress;
+
+  /// Whether finishing (a fresh start, or the resumable run) blooms TODAY's
+  /// pot. False for a run begun yesterday — its bloom belongs to yesterday,
+  /// so the rule line must not promise today's.
+  final bool bloomsToday;
 
   final VoidCallback onPlay;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final doneToday = completedDays.contains(dayKey(now));
-    final streak = currentStreak(completedDays, now);
-    final longest = longestStreak(completedDays);
-
-    return PaintedCard(
-      onTap: onPlay,
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              FramedArt(
-                child: Image.asset(
-                  image.assetPath,
-                  width: 72,
-                  height: 72,
-                  fit: BoxFit.cover,
-                  // Same decode width as the catalog tiles, so the daily
-                  // image shares their ImageCache entry instead of
-                  // decoding the asset a second time.
-                  cacheWidth: 640,
-                ),
+    // Enlarged text or a narrow phone: the action moves under the text
+    // instead of crushing the title (same breakpoint idea as the game
+    // screen's separateTools).
+    final stacked =
+        MediaQuery.sizeOf(context).width < 360 ||
+        MediaQuery.textScalerOf(context).scale(16) > 24;
+    // The button is a visual affordance only: the card itself is the one
+    // semantic tap target (merged below), so screen readers hear a single
+    // stop instead of the card and then a redundant 'Begin'.
+    final action = doneToday
+        ? null
+        : ExcludeSemantics(
+            child: FilledButton(
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                visualDensity: VisualDensity.compact,
               ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "TODAY'S PAINTING",
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.primary,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.1,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      image.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      _statusText(doneToday),
-                      style: theme.textTheme.bodySmall,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Icon(
-                doneToday ? Icons.check_circle : Icons.arrow_forward,
-                color: doneToday
-                    ? theme.colorScheme.secondary
-                    : theme.colorScheme.primary,
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          _Windowsill(now: now, completedDays: completedDays),
-          const SizedBox(height: 10),
-          Text(
-            streak == 0
-                ? 'A pot blooms for every quiet day.'
-                : '$streak-day streak',
-            textAlign: TextAlign.center,
-            style: streak == 0
-                ? theme.textTheme.bodySmall
-                : theme.textTheme.titleMedium,
-          ),
-          if (longest > 0)
-            Text(
-              'longest: $longest · pots regrow, no pressure',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall,
+              onPressed: onPlay,
+              child: Text(inProgress ? 'Continue' : 'Begin'),
             ),
-        ],
+          );
+
+    return Semantics(
+      button: true,
+      child: MergeSemantics(
+        child: PaintedCard(
+          onTap: onPlay,
+          padding: const EdgeInsets.all(16),
+          child: stacked
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _info(theme, trailing: doneToday ? _doneIcon(theme) : null),
+                    if (action != null) ...[
+                      const SizedBox(height: 10),
+                      Align(alignment: Alignment.centerRight, child: action),
+                    ],
+                  ],
+                )
+              : _info(
+                  theme,
+                  trailing: doneToday ? _doneIcon(theme) : action,
+                ),
+        ),
       ),
     );
   }
 
+  Widget _doneIcon(ThemeData theme) =>
+      Icon(Icons.check_circle, color: theme.colorScheme.secondary);
+
+  Widget _info(ThemeData theme, {required Widget? trailing}) {
+    return Row(
+      children: [
+        FramedArt(
+          child: Image.asset(
+            image.assetPath,
+            width: 72,
+            height: 72,
+            fit: BoxFit.cover,
+            // Same decode width as the catalog tiles, so the daily
+            // image shares their ImageCache entry instead of
+            // decoding the asset a second time.
+            cacheWidth: 640,
+          ),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "TODAY'S PAINTING",
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.primary,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.1,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                image.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleMedium,
+              ),
+              const SizedBox(height: 2),
+              Text(_statusText(), style: theme.textTheme.bodySmall),
+              if (!doneToday && bloomsToday)
+                // The rule players otherwise trip over: only this painting
+                // blooms a pot.
+                Text(
+                  "Finish it and today's pot blooms.",
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+            ],
+          ),
+        ),
+        if (trailing != null) ...[const SizedBox(width: 8), trailing],
+      ],
+    );
+  }
+
   /// The e2e tests assert on these texts.
-  String _statusText(bool doneToday) {
+  String _statusText() {
     if (doneToday) {
       return 'Done today ✓';
     }
@@ -121,10 +151,16 @@ class DailyPuzzleCard extends StatelessWidget {
   }
 }
 
-/// The current week as a row of pots, Monday to Sunday: a completed daily
-/// blooms, today's empty pot waits in terracotta, other days stay faint.
-class _Windowsill extends StatelessWidget {
-  const _Windowsill({required this.now, required this.completedDays});
+/// The streak, demoted to ambient decor: the current week as a small row of
+/// pots on a shelf, Monday to Sunday, with one compact text line. A
+/// completed daily blooms, today's empty pot waits in terracotta, other
+/// days stay faint.
+class DailyWindowsill extends StatelessWidget {
+  const DailyWindowsill({
+    super.key,
+    required this.now,
+    required this.completedDays,
+  });
 
   final DateTime now;
   final Set<String> completedDays;
@@ -142,6 +178,7 @@ class _Windowsill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final today = utcMidnight(now);
     final monday = today.subtract(Duration(days: now.weekday - 1));
     return Column(
@@ -151,13 +188,13 @@ class _Windowsill extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             for (var i = 0; i < 7; i++)
-              _pot(Theme.of(context), monday.add(Duration(days: i)), today),
+              _pot(theme, monday.add(Duration(days: i)), today),
           ],
         ),
         // The wooden shelf the pots stand on (mockup .shelfline).
         Container(
-          height: 6,
-          margin: const EdgeInsets.fromLTRB(8, 3, 8, 0),
+          height: 5,
+          margin: const EdgeInsets.fromLTRB(24, 3, 24, 0),
           decoration: const BoxDecoration(
             color: Color(0xFFC9A36A),
             borderRadius: BorderRadius.all(Radius.circular(3)),
@@ -170,8 +207,27 @@ class _Windowsill extends StatelessWidget {
             ],
           ),
         ),
+        const SizedBox(height: 6),
+        Text(
+          _streakLine(),
+          textAlign: TextAlign.center,
+          style: theme.textTheme.bodySmall,
+        ),
       ],
     );
+  }
+
+  /// One quiet line instead of a headline — the streak is decor, not score.
+  String _streakLine() {
+    final streak = currentStreak(completedDays, now);
+    final longest = longestStreak(completedDays);
+    if (streak > 0) {
+      return '${streakLabel(streak)} · longest: $longest';
+    }
+    if (longest > 0) {
+      return 'longest: $longest · pots regrow, no pressure';
+    }
+    return 'A pot blooms for every quiet day.';
   }
 
   Widget _pot(ThemeData theme, DateTime day, DateTime today) {
@@ -188,8 +244,10 @@ class _Windowsill extends StatelessWidget {
         ? 0.25
         : 0.45;
     // The pot's state is invisible to screen readers. One label per day
-    // replaces the bare weekday letter.
+    // replaces the bare weekday letter; container keeps each day its own
+    // announcement instead of merging into the strip.
     return Semantics(
+      container: true,
       label: _potSemantics(day, today, done),
       excludeSemantics: true,
       child: Column(
@@ -199,7 +257,7 @@ class _Windowsill extends StatelessWidget {
             opacity: opacity,
             child: MascotArt(
               done ? StudioMascot.cactus : StudioMascot.pot,
-              height: isToday ? 42 : 33,
+              height: isToday ? 30 : 24,
             ),
           ),
           const SizedBox(height: 2),

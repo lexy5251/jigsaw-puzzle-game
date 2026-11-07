@@ -12,6 +12,7 @@ import 'package:flame/events.dart';
 import 'package:flutter/material.dart';
 
 import 'jigsaw_game.dart';
+import 'piece_renderer.dart';
 import 'puzzle_logic.dart';
 import 'puzzle_piece.dart';
 import 'studio_theme.dart';
@@ -23,6 +24,7 @@ class PieceData {
     required this.sprite,
     required this.renderBleed,
     required this.correctPosition,
+    this.artwork,
   });
 
   /// Canonical piece number (row * columns + column); save files reference it.
@@ -31,6 +33,9 @@ class PieceData {
   /// The shaped piece image: the base cell plus [renderBleed] margin all
   /// around, so tabs that stick out past the cell are included.
   final Sprite sprite;
+
+  /// Original photo and outline for a sharp, dimensional tray preview.
+  final PieceArtwork? artwork;
 
   /// How far [sprite] extends past the base cell on each axis.
   final Vector2 renderBleed;
@@ -173,6 +178,7 @@ class PieceTray extends PositionComponent
       }
       final thumbnail = _TrayThumbnail(
         data: pieceData,
+        tray: this,
         size: Vector2(_thumbnailWidth, _thumbnailHeight),
       );
       _thumbnails.add(thumbnail);
@@ -277,6 +283,7 @@ class PieceTray extends PositionComponent
       index: thumbnail.data.index,
       sprite: thumbnail.data.sprite,
       renderBleed: thumbnail.data.renderBleed,
+      artwork: thumbnail.data.artwork,
       size: pieceWorldSize.clone(),
       position: Vector2.zero(),
       correctPosition: thumbnail.data.correctPosition,
@@ -357,14 +364,30 @@ class PieceTray extends PositionComponent
 }
 
 class _TrayThumbnail extends SpriteComponent {
-  _TrayThumbnail({required this.data, required super.size})
+  _TrayThumbnail({required this.data, required this.tray, required super.size})
     : super(sprite: data.sprite) {
-    // Thumbnails show the sprite at ~25% size; the default FilterQuality.none
-    // picks single texels, so pieces' bright antialiased rims read as a white
-    // edge on device. Mipmapped sampling averages the shrink properly.
+    // Thumbnails draw the sprite well below 1:1; mipmapped sampling (medium)
+    // keeps the minified rim clean — the default aliases it into a visible
+    // light edge on device.
     paint.filterQuality = FilterQuality.medium;
     paint.isAntiAlias = true;
   }
 
   final PieceData data;
+  final PieceTray tray;
+
+  @override
+  void render(Canvas canvas) {
+    // A large puzzle may have hundreds of previews in the clipped strip;
+    // only the visible columns need to draw at all.
+    if (!trayColumnVisible(
+      left: x,
+      width: width,
+      scrollOffset: tray._scrollOffset,
+      viewWidth: tray.width,
+    )) {
+      return;
+    }
+    super.render(canvas);
+  }
 }

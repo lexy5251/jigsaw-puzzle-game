@@ -5,6 +5,9 @@
 // 4. Keeps a back button to return to puzzle selection.
 // 5. When the game reports completion, records it permanently and hangs the
 //    painting on a gallery wall, timed to appear as the in-game glow fades.
+//    The wall offers the category's next unfinished painting as one-tap
+//    "Next puzzle" (the screen pops with that painting as its result and
+//    the launcher chains into it), with "Back to the gallery" as the exit.
 // JigsawGame handles the puzzle gameplay.
 
 import 'dart:async';
@@ -34,10 +37,15 @@ class GameScreen extends StatefulWidget {
     this.clock,
     this.startedDay,
     this.settings = const AppSettings(),
+    this.catalog = puzzleCatalog,
   });
 
   final PuzzleImage image;
   final PuzzleSize size;
+
+  /// Where "Next puzzle" looks for the category's other paintings; tests
+  /// supply a small fixture catalog.
+  final List<PuzzleImage> catalog;
 
   /// Player preferences, read by the caller before this screen opens.
   final AppSettings settings;
@@ -65,7 +73,17 @@ class _GameScreenState extends State<GameScreen> {
 
   bool _showCompletionCard = false;
   bool _restarting = false;
+
+  /// The "Next puzzle" offer; null until completion resolves it (and stays
+  /// null when the rest of the category is already done at this size).
+  PuzzleImage? _nextImage;
+
+  /// The gallery wall's bloom caption, resolved once at credit time; null
+  /// when the run earned no NEW daily credit. The wall shows the bloom —
+  /// the moment of finishing is where the reward must appear.
+  String? _bloomCaption;
   Timer? _completionTimer;
+  Timer? _revealFallbackTimer;
   bool _edgesOnly = false;
   late bool _showGhostPreview = widget.settings.ghostPreviewDefault;
 
@@ -73,6 +91,8 @@ class _GameScreenState extends State<GameScreen> {
   bool? _resumed;
 
   late JigsawGame _game = _createGame();
+
+  DateTime get _now => (widget.clock ?? DateTime.now)();
 
   String get _saveKey => puzzleSaveKey(
     imageId: widget.image.id,
@@ -93,7 +113,7 @@ class _GameScreenState extends State<GameScreen> {
           FlameAudioSounds(volumeScale: widget.settings.effectsVolume),
       saveStore: _saveStore,
       saveKey: _saveKey,
-      startedDay: widget.startedDay ?? dayKey((widget.clock ?? DateTime.now)()),
+      startedDay: widget.startedDay ?? dayKey(_now),
       onCompleted: () => _onPuzzleCompleted(game),
       onBoardLoaded: (resumed) {
         if (mounted && !_restarting && identical(_game, game)) {
@@ -132,9 +152,12 @@ class _GameScreenState extends State<GameScreen> {
       return;
     }
     _completionTimer?.cancel();
+    _revealFallbackTimer?.cancel();
     setState(() {
       _restarting = true;
       _showCompletionCard = false;
+      _nextImage = null;
+      _bloomCaption = null;
     });
     // Stop new writes before awaiting any old ones. An already-held finger
     // can still deliver a release after the dialog closes.
@@ -160,18 +183,45 @@ class _GameScreenState extends State<GameScreen> {
 
   Future<bool> _onPuzzleCompleted(JigsawGame game) async {
     if (!mounted || _restarting || !identical(_game, game)) return false;
-    // Let the in-game glow (0.9s) finish before the card appears.
+    // The card reveals when BOTH the glow delay and its data (next-puzzle
+    // offer, bloom caption) are ready: the delay is armed first so storage
+    // latency hides inside the 0.9s glow instead of stacking after it, and
+    // the card still never appears with an unresolved hero button (the old
+    // button-swap race).
+    var delayElapsed = false;
+    var dataReady = false;
     _completionTimer?.cancel();
+    _revealFallbackTimer?.cancel();
     _completionTimer = Timer(const Duration(milliseconds: 950), () {
-      if (mounted && !_restarting && identical(_game, game)) {
-        setState(() => _showCompletionCard = true);
+      delayElapsed = true;
+      if (dataReady) {
+        _revealCompletionCard(game);
+      } else {
+        // Storage answers in microseconds normally; if it wedges, still
+        // give the player the card (and its exit) instead of a dead end.
+        _revealFallbackTimer = Timer(
+          const Duration(seconds: 2),
+          () => _revealCompletionCard(game),
+        );
       }
     });
 
-    // The streak credits what the player saw happen, so it runs first and
-    // unconditionally. Sequencing (not racing) the two writes also keeps
-    // their reads from interleaving in the shared preferences cache.
-    final dailyRecorded = await _recordDailyCompletion(game.runStartedDay);
+    final next = await _findNextPuzzle();
+    // The record writes run UNCONDITIONALLY from here: a completion the
+    // player saw must be stored even if a restart or a chained replacement
+    // lands while the read above was in flight — only the UI fields are
+    // guarded. The streak write stays sequenced ahead of the completion
+    // write so their reads cannot interleave in the preferences cache.
+    final daily = await _recordDailyCompletion(game.runStartedDay);
+    if (!_restarting && identical(_game, game)) {
+      _nextImage = next;
+      _bloomCaption = daily.bloomCaption;
+    }
+    dataReady = true;
+    if (delayElapsed) {
+      _revealFallbackTimer?.cancel();
+      _revealCompletionCard(game);
+    }
 
     // The game keeps its progress save until BOTH records are stored, so a
     // failed daily credit gets the same retry as a failed completion write:
@@ -186,27 +236,83 @@ class _GameScreenState extends State<GameScreen> {
             rows: widget.size.rows,
           ),
         );
-    return dailyRecorded && completionRecorded;
+    return daily.recorded && completionRecorded;
+  }
+
+  /// Reveals the gallery wall (idempotent: a fallback reveal followed by
+  /// late-arriving data just rebuilds the wall with the data filled in).
+  void _revealCompletionCard(JigsawGame game) {
+    if (mounted && !_restarting && identical(_game, game)) {
+      setState(() => _showCompletionCard = true);
+    }
   }
 
   /// Finishing a daily image at any size blooms the pot of the day the run
-  /// began — the save's stamp (see [dailyCreditDay]).
-  /// False means a credit was due but could not be stored.
-  Future<bool> _recordDailyCompletion(String? startedDay) async {
+  /// began — the save's stamp (see [dailyCreditDay]). `recorded` false means
+  /// a credit was due but could not be stored. The caption is non-null only
+  /// for a NEWLY credited day: a replay of an already-bloomed day (or a
+  /// retried completion write) celebrates nothing again.
+  Future<({bool recorded, String? bloomCaption})> _recordDailyCompletion(
+    String? startedDay,
+  ) async {
+    final completedAt = _now;
     final day = dailyCreditDay(
       widget.image.id,
-      (widget.clock ?? DateTime.now)(),
+      completedAt,
       startedDay: startedDay,
     );
     if (day == null) {
-      return true;
+      return (recorded: true, bloomCaption: null);
     }
-    return const SharedPreferencesDailyStreakStore().markCompleted(day);
+    const store = SharedPreferencesDailyStreakStore();
+    final days = await store.completedDays();
+    if (days.contains(day)) {
+      return (recorded: true, bloomCaption: null);
+    }
+    if (!await store.markCompleted(day)) {
+      return (recorded: false, bloomCaption: null);
+    }
+    // Streak from the set just written: the caption can never contradict
+    // the write it celebrates (a bloomed day always reads at least 1).
+    final streak = currentStreak({...days, day}, completedAt);
+    return (
+      recorded: true,
+      bloomCaption: dailyBloomCaption(day, completedAt, streak),
+    );
+  }
+
+  /// The category's next painting not yet completed at this grid size.
+  /// Candidates are probed lazily in [nextPuzzleAfter]'s own order —
+  /// typically one read — instead of prefetching the whole category, which
+  /// also keeps the candidate-ordering rule in a single place.
+  Future<PuzzleImage?> _findNextPuzzle() async {
+    const store = SharedPreferencesCompletionStore();
+    final completed = <String>{};
+    while (true) {
+      final candidate = nextPuzzleAfter(
+        widget.image,
+        completed,
+        catalog: widget.catalog,
+      );
+      if (candidate == null) {
+        return null;
+      }
+      final done = await store.isCompletedForGrid(
+        imageId: candidate.id,
+        columns: widget.size.columns,
+        rows: widget.size.rows,
+      );
+      if (!done) {
+        return candidate;
+      }
+      completed.add(candidate.id);
+    }
   }
 
   @override
   void dispose() {
     _completionTimer?.cancel();
+    _revealFallbackTimer?.cancel();
     super.dispose();
   }
 
@@ -288,8 +394,15 @@ class _GameScreenState extends State<GameScreen> {
             _GalleryWall(
               image: widget.image,
               pieceCount: widget.size.pieceCount,
-              completedOn: (widget.clock ?? DateTime.now)(),
+              completedOn: _now,
+              dailyBloom: _bloomCaption,
               onBackToGallery: () => Navigator.pop(context),
+              // Popping with the painting hands the chain to the launcher's
+              // flow loop, which pushes the next game at the same size.
+              onNextPuzzle: switch (_nextImage) {
+                null => null,
+                final next => () => Navigator.pop(context, next),
+              },
             ),
         ],
       ),
@@ -388,13 +501,24 @@ class _GalleryWall extends StatelessWidget {
     required this.image,
     required this.pieceCount,
     required this.completedOn,
+    required this.dailyBloom,
     required this.onBackToGallery,
+    required this.onNextPuzzle,
   });
 
   final PuzzleImage image;
   final int pieceCount;
   final DateTime completedOn;
+
+  /// Caption for a run that bloomed a daily pot ("Today's pot bloomed ·
+  /// 3-day streak"); null shows the plain sunflower sprig instead.
+  final String? dailyBloom;
+
   final VoidCallback onBackToGallery;
+
+  /// Starts the category's next unfinished painting; null hides the button
+  /// (the rest of the category is done at this size).
+  final VoidCallback? onNextPuzzle;
 
   static const _months = [
     'Jan',
@@ -415,6 +539,7 @@ class _GalleryWall extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final date = '${_months[completedOn.month - 1]} ${completedOn.day}';
+    final bloom = dailyBloom;
     // Fade the wall in as the in-game glow fades out.
     return Positioned.fill(
       child: TweenAnimationBuilder<double>(
@@ -443,12 +568,33 @@ class _GalleryWall extends StatelessWidget {
                         const SizedBox(height: 12),
                         _plaque(theme, date),
                         const SizedBox(height: 6),
-                        const MascotArt(StudioMascot.sprig, height: 60),
+                        // A daily run's reward appears HERE, at the moment
+                        // of finishing — a bloomed pot beside the painting.
+                        if (bloom == null)
+                          const MascotArt(StudioMascot.sprig, height: 60)
+                        else ...[
+                          const MascotArt(StudioMascot.cactus, height: 60),
+                          const SizedBox(height: 4),
+                          Text(bloom, style: theme.textTheme.bodySmall),
+                        ],
                         const SizedBox(height: 16),
-                        FilledButton(
-                          onPressed: onBackToGallery,
-                          child: const Text('Back to the gallery'),
-                        ),
+                        // "One more" is the likely mood right after finishing,
+                        // so the next puzzle is the hero action and the exit
+                        // a quiet text button beneath it.
+                        if (onNextPuzzle != null) ...[
+                          FilledButton(
+                            onPressed: onNextPuzzle,
+                            child: const Text('Next puzzle'),
+                          ),
+                          TextButton(
+                            onPressed: onBackToGallery,
+                            child: const Text('Back to the gallery'),
+                          ),
+                        ] else
+                          FilledButton(
+                            onPressed: onBackToGallery,
+                            child: const Text('Back to the gallery'),
+                          ),
                       ],
                     ),
                   ),
