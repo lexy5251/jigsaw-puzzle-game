@@ -498,23 +498,29 @@ class JigsawGame extends FlameGame
     }
   }
 
-  /// A lone piece released with its center over the tray goes back into it
-  /// (players clear a messy board this way). Chunks and locked pieces stay:
-  /// the tray holds single pieces only.
-  bool _shouldReturnToTray(PuzzlePiece piece) {
+  /// A lone piece dropped over the tray goes back into it (players clear a
+  /// messy board this way). Chunks and locked pieces stay: the tray holds
+  /// single pieces only. [settlePiece] resolves the drop point.
+  bool _shouldReturnToTray(PuzzlePiece piece, Vector2 dropPoint) {
     final tray = _tray;
     if (tray == null || _groups.membersOf(piece.index).length > 1) {
       return false;
     }
-    final centerOnScreen = camera.localToGlobal(
-      piece.position + piece.size / 2,
-    );
-    return centerOnScreen.y >= tray.position.y;
+    return dropPoint.y >= tray.position.y;
   }
 
-  void _returnPieceToTray(PuzzlePiece piece) {
-    final centerOnScreen = camera.localToGlobal(
-      piece.position + piece.size / 2,
+  void _returnPieceToTray(PuzzlePiece piece, Vector2 dropPoint) {
+    // The piece's on-screen sprite box: where the tray's landing animation
+    // starts, so the return visibly continues from under the finger.
+    final zoom = camera.viewfinder.zoom;
+    final spriteTopLeft = camera.localToGlobal(
+      piece.position - piece.renderBleed,
+    );
+    final flightFrom = Rect.fromLTWH(
+      spriteTopLeft.x,
+      spriteTopLeft.y,
+      piece.sprite!.srcSize.x * zoom,
+      piece.sprite!.srcSize.y * zoom,
     );
     _groups.remove(piece.index);
     _boardPieces.remove(piece.index);
@@ -527,7 +533,8 @@ class JigsawGame extends FlameGame
         artwork: piece.artwork,
         correctPosition: piece.correctPosition.clone(),
       ),
-      canvasPoint: centerOnScreen,
+      canvasPoint: dropPoint,
+      flightFrom: flightFrom,
     );
     sounds?.playDrop();
     persistProgress();
@@ -548,14 +555,22 @@ class JigsawGame extends FlameGame
     }
   }
 
-  /// Both board and tray releases use the same pure chunk rules.
-  void settlePiece(PuzzlePiece piece) {
+  /// Both board and tray releases use the same pure chunk rules. A drop from
+  /// a cancelled gesture passes [allowTrayReturn] false: it was never a
+  /// deliberate release, so it may not send the piece back to the tray.
+  void settlePiece(PuzzlePiece piece, {bool allowTrayReturn = true}) {
     if (_disposed || _discardingProgress) return;
     if (piece.isLocked || piece.isSettling) return;
     _groups.moveTo(piece.index, Point(piece.x, piece.y));
     _busyPieces.removeAll(_groups.membersOf(piece.index));
-    if (_shouldReturnToTray(piece)) {
-      _returnPieceToTray(piece);
+    // The finger decides where the drop lands, not the piece's center: a
+    // piece grabbed by its edge can hang over the tray while the finger is
+    // still clearly on the board. Non-gesture drops (no known pointer) fall
+    // back to the center.
+    final dropPoint = piece.takeDragPointer() ??
+        camera.localToGlobal(piece.position + piece.size / 2);
+    if (allowTrayReturn && _shouldReturnToTray(piece, dropPoint)) {
+      _returnPieceToTray(piece, dropPoint);
       return;
     }
     final result = _groups.drop(

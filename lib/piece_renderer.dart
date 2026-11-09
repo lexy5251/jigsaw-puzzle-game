@@ -50,6 +50,7 @@ class PieceArtwork {
     required this.outline,
     required this.bleed,
     required this.imageSize,
+    required this.decorationUnit,
   });
 
   final ui.Image source;
@@ -57,6 +58,16 @@ class PieceArtwork {
   final ui.Path outline;
   final double bleed;
   final ui.Size imageSize;
+
+  /// The decoration unit the sprite was baked with, in source pixels.
+  final double decorationUnit;
+
+  /// The [render] decorationScale that reproduces the baked rim thickness
+  /// when this artwork is drawn into [bounds] — live previews stay as thick
+  /// as the resting board pieces they mirror, at any preview size.
+  double bakedDecorationScale(ui.Rect bounds) =>
+      decorationUnit *
+      min(bounds.width / imageSize.width, bounds.height / imageSize.height);
 
   /// Draws the piece body — cardboard rim, photo, bevels — mapping the full
   /// sprite box onto [bounds]. Everything stays inside the outline: joined
@@ -197,6 +208,7 @@ Future<List<ShapedPieceImage>> rasterizePieces({
       outline: outlinePath,
       bleed: bleed,
       imageSize: ui.Size(spriteWidth.toDouble(), spriteHeight.toDouble()),
+      decorationUnit: decorationUnit,
     );
 
     final recorder = ui.PictureRecorder();

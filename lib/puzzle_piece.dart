@@ -9,12 +9,13 @@ import 'package:flame/effects.dart';
 import 'package:flame/events.dart';
 import 'package:flutter/material.dart';
 
+import 'drag_cancellation.dart';
 import 'jigsaw_game.dart';
 import 'piece_renderer.dart';
 
 /// A board piece that can be dragged until it snaps into its correct position.
 class PuzzlePiece extends SpriteComponent
-    with DragCallbacks, HasGameReference<JigsawGame> {
+    with DragCallbacks, CancelAwareDrag, HasGameReference<JigsawGame> {
   PuzzlePiece({
     required this.index,
     required super.sprite,
@@ -61,6 +62,26 @@ class PuzzlePiece extends SpriteComponent
 
   bool get isLocked => _isLocked;
   bool get isSettling => _isSnapping;
+
+  // The tray-return check follows the finger, not the piece's center: a
+  // piece grabbed by its edge can hang over the tray while the finger is
+  // still on the board. Null while the piece is not being carried.
+  Vector2? _dragPointerOnScreen;
+
+  /// Records where the finger carrying this piece is on screen. The tray
+  /// drives lifted pieces without this component's own drag callbacks, so
+  /// it reports the pointer through this hook too.
+  void noteDragPointer(Vector2 canvasPosition) {
+    _dragPointerOnScreen = canvasPosition.clone();
+  }
+
+  /// Returns and clears the carried pointer's screen position; the game
+  /// reads it once when resolving a drop.
+  Vector2? takeDragPointer() {
+    final pointer = _dragPointerOnScreen;
+    _dragPointerOnScreen = null;
+    return pointer;
+  }
 
   /// Dragged or glide-settling pieces ride above everything else — the
   /// game's tray overlay re-renders them so they stay visible when the
@@ -172,19 +193,26 @@ class PuzzlePiece extends SpriteComponent
     super.onDragStart(event);
     if (_activePointerId == null && game.beginPieceDrag(this)) {
       _activePointerId = event.pointerId;
+      noteDragPointer(event.canvasPosition);
     }
   }
 
   @override
   void onDragUpdate(DragUpdateEvent event) {
-    if (event.pointerId != _activePointerId ||
-        _isLocked ||
-        _isSnapping ||
-        game.isScaling) {
+    if (event.pointerId != _activePointerId || _isLocked || _isSnapping) {
       return;
     }
 
     // Canvas positions stay valid when the pointer moves outside the piece.
+    // In Flame 1.38, canvasStartPosition is the current pointer position;
+    // the end adds the delta. Recorded even while a pinch suppresses
+    // movement below: the release's tray-return decision must follow the
+    // real finger, not its pre-pinch position.
+    noteDragPointer(event.canvasStartPosition);
+    if (game.isScaling) {
+      return;
+    }
+
     // With an unrotated camera, dividing by zoom converts to world distance.
     final screenDelta = event.canvasEndPosition - event.canvasStartPosition;
     final worldDelta = screenDelta / game.camera.viewfinder.zoom;
@@ -197,13 +225,13 @@ class PuzzlePiece extends SpriteComponent
 
     if (event.pointerId == _activePointerId) {
       _activePointerId = null;
-      settle();
+      settle(allowTrayReturn: !dragWasCancelled);
     }
   }
 
   /// Resolves a drop from either a board drag or a tray drag.
-  void settle() {
-    game.settlePiece(this);
+  void settle({bool allowTrayReturn = true}) {
+    game.settlePiece(this, allowTrayReturn: allowTrayReturn);
   }
 
   /// Restores a saved locked piece: no snap animation, no progress count.

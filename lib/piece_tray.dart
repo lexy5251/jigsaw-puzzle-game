@@ -11,6 +11,7 @@ import 'package:flame/components.dart';
 import 'package:flame/events.dart';
 import 'package:flutter/material.dart';
 
+import 'drag_cancellation.dart';
 import 'jigsaw_game.dart';
 import 'piece_renderer.dart';
 import 'puzzle_logic.dart';
@@ -46,7 +47,7 @@ class PieceData {
 
 /// Scrollable previews of unplaced pieces, fixed at the bottom of the screen.
 class PieceTray extends PositionComponent
-    with DragCallbacks, HasGameReference<JigsawGame> {
+    with DragCallbacks, CancelAwareDrag, HasGameReference<JigsawGame> {
   PieceTray({
     required List<PieceData> pieces,
     required this.pieceWorldSize,
@@ -80,6 +81,11 @@ class PieceTray extends PositionComponent
   int? _activePointerId;
   _TrayThumbnail? _selectedThumbnail;
   PuzzlePiece? _carriedPiece;
+
+  // A just-returned piece's landing animation. Lives on the tray (not the
+  // thumbnail) so a mid-flight strip rebuild still finds it: the flying
+  // piece's slot renders blank until the flight lands.
+  _ReturnFlight? _activeFlight;
 
   late final RectangleComponent _background;
   late final ClipComponent _trayClip;
@@ -137,7 +143,15 @@ class PieceTray extends PositionComponent
   /// Takes a piece back from the board, inserting it at the slot under
   /// [canvasPoint] — the piece must reappear where the player dropped it,
   /// not at the strip's (possibly scrolled-off) far end.
-  void returnPiece(PieceData data, {required Vector2 canvasPoint}) {
+  ///
+  /// With [flightFrom] (the piece's on-screen sprite box) the piece visibly
+  /// shrinks and glides into its slot instead of swapping in the same frame.
+  /// The model commits immediately either way: saves and piece counts must
+  /// never wait on a visual.
+  void returnPiece(PieceData data, {required Vector2 canvasPoint, Rect? flightFrom}) {
+    // A second return while one is still flying reveals the first at once;
+    // one blank slot and one flyer at a time keeps the bookkeeping simple.
+    _activeFlight?.finishNow();
     final slot = _slotIndexAt(canvasPoint);
     final insertAt = slot < 0
         ? 0
@@ -146,6 +160,47 @@ class PieceTray extends PositionComponent
         : _remainingPieces.indexOf(_thumbnails[slot].data);
     _remainingPieces.insert(insertAt, data);
     _rebuildThumbnails();
+    if (flightFrom != null) {
+      _startReturnFlight(data, flightFrom);
+    }
+  }
+
+  void _startReturnFlight(PieceData data, Rect flightFromOnCanvas) {
+    final from = flightFromOnCanvas.shift(Offset(-position.x, -position.y));
+
+    // Re-read every tick: the strip can scroll or re-layout under the flyer
+    // mid-flight, and the slot must stay the true landing spot. Null once
+    // the thumbnail is gone (lifted back out or filtered away) — the flight
+    // then lands immediately instead of flying a ghost into an empty slot.
+    // Null at launch instead means the edges-only filter hides the returned
+    // piece, and the flight dissolves at the drop point.
+    Rect? slotRect() {
+      final destination = _thumbnails
+          .where((thumbnail) => thumbnail.data.index == data.index)
+          .firstOrNull;
+      if (destination == null) {
+        return null;
+      }
+      return Rect.fromLTWH(
+        destination.x - _scrollOffset,
+        destination.y,
+        destination.width,
+        destination.height,
+      );
+    }
+
+    final flight = _ReturnFlight(
+      pieceIndex: data.index,
+      sprite: data.sprite,
+      artwork: data.artwork,
+      from: from,
+      resolveTo: slotRect,
+      onLanded: () => _activeFlight = null,
+    );
+    _activeFlight = flight;
+    // Above the background and the clipped strip, so the flyer may overhang
+    // the tray's top edge while it comes in from the board.
+    add(flight..priority = 1);
   }
 
   /// Shows only edge pieces (true) or every unused piece (false).
@@ -197,6 +252,8 @@ class PieceTray extends PositionComponent
 
     _background.size = size.clone();
     _trayClip.size = size.clone();
+    // A relayout invalidates a flying piece's endpoints; land it at once.
+    _activeFlight?.finishNow();
     for (final thumbnail in _thumbnails) {
       thumbnail.size = Vector2(_thumbnailWidth, _thumbnailHeight);
     }
@@ -255,19 +312,8 @@ class PieceTray extends PositionComponent
     _finishDrag();
   }
 
-  @override
-  void onDragCancel(DragCancelEvent event) {
-    super.onDragCancel(event);
-
-    if (event.pointerId != _activePointerId) {
-      return;
-    }
-
-    _finishDrag();
-  }
-
   void _finishDrag() {
-    _carriedPiece?.settle();
+    _carriedPiece?.settle(allowTrayReturn: !dragWasCancelled);
     _carriedPiece = null;
     _selectedThumbnail = null;
     _activePointerId = null;
@@ -301,6 +347,8 @@ class PieceTray extends PositionComponent
   }
 
   void _movePieceToPointer(PuzzlePiece piece, Vector2 canvasPosition) {
+    // The tray owns this gesture, so it reports the finger for the piece.
+    piece.noteDragPointer(canvasPosition);
     final pointerInWorld = game.camera.globalToLocal(canvasPosition);
     // Piece positions refer to their top-left corner; center it on the pointer.
     game.movePieceTo(piece, pointerInWorld - pieceWorldSize / 2);
@@ -361,6 +409,28 @@ class PieceTray extends PositionComponent
   /// How far the strip is scrolled to the right.
   @visibleForTesting
   double get scrollOffset => _scrollOffset;
+
+  /// The piece whose landing animation is still in flight, if any.
+  @visibleForTesting
+  int? get landingPieceIndex => _activeFlight?.pieceIndex;
+
+  /// Where the active landing flight is currently heading (tray-local), or
+  /// null when nothing is in flight.
+  @visibleForTesting
+  Rect? get activeFlightTarget => _activeFlight?.target;
+
+  /// The box the active landing flight is drawn in this frame (tray-local),
+  /// or null when nothing is in flight.
+  @visibleForTesting
+  Rect? get activeFlightBox => _activeFlight?.currentBox;
+
+  /// A tray piece's artwork — exposed so render tests can rebuild the
+  /// expected preview pixels with PieceArtwork.render directly.
+  @visibleForTesting
+  PieceArtwork? artworkFor(int index) => _remainingPieces
+      .where((data) => data.index == index)
+      .firstOrNull
+      ?.artwork;
 }
 
 class _TrayThumbnail extends SpriteComponent {
@@ -378,6 +448,11 @@ class _TrayThumbnail extends SpriteComponent {
 
   @override
   void render(Canvas canvas) {
+    // The slot stays blank while its piece is still flying in (returnPiece's
+    // landing animation draws the artwork instead).
+    if (data.index == tray._activeFlight?.pieceIndex) {
+      return;
+    }
     // A large puzzle may have hundreds of previews in the clipped strip;
     // only the visible columns need to draw at all.
     if (!trayColumnVisible(
@@ -388,6 +463,154 @@ class _TrayThumbnail extends SpriteComponent {
     )) {
       return;
     }
-    super.render(canvas);
+    final artwork = data.artwork;
+    if (artwork == null) {
+      super.render(canvas);
+      return;
+    }
+    // The baked sprite holds only this piece's small crop of the photo, so
+    // on dense grids (216: ~89px of photo) the constant-size tray would
+    // upscale it past its resolution and look blurry. Drawing live from the
+    // full photo keeps previews sharp at every piece count; the decoration
+    // scale is derived from the bake so the rim stays exactly as thick as
+    // on resting board pieces.
+    final bounds = Rect.fromLTWH(0, 0, width, height);
+    artwork.render(
+      canvas,
+      bounds: bounds,
+      decorationScale: artwork.bakedDecorationScale(bounds),
+      photoPaint: paint,
+    );
+  }
+}
+
+/// A returned piece flying into its tray slot: the sprite shrinks from the
+/// board drop point into the destination thumbnail's box, which is revealed
+/// on landing. Render-only — the tray's model committed when the flight
+/// started, so interrupting it can never lose the piece.
+class _ReturnFlight extends PositionComponent {
+  _ReturnFlight({
+    required this.pieceIndex,
+    required this.sprite,
+    required this.artwork,
+    required this.from,
+    required Rect? Function() resolveTo,
+    required this.onLanded,
+  }) {
+    // A null slot at launch means the piece has no visible destination (the
+    // edges-only filter hides it): dissolve at the drop point instead, and
+    // freeze the resolver so the fade can never redirect to a slot that
+    // appears mid-flight.
+    final initialSlot = resolveTo();
+    fadeOut = initialSlot == null;
+    final fadeTarget = Rect.fromCenter(
+      center: from.center,
+      width: 0,
+      height: 0,
+    );
+    _target = initialSlot ?? fadeTarget;
+    _resolveTo = fadeOut ? () => fadeTarget : resolveTo;
+    // Same mipmapped sampling as the thumbnails: the sprite shrinks well
+    // below 1:1 during the flight.
+    _paint.filterQuality = FilterQuality.medium;
+    _paint.isAntiAlias = true;
+  }
+
+  /// The piece this flight is delivering; its tray slot renders blank until
+  /// the flight lands.
+  final int pieceIndex;
+
+  final Sprite sprite;
+
+  /// Full-resolution piece artwork; the landing flight renders it live so it
+  /// arrives as sharp as the (live-rendered) thumbnail it becomes.
+  final PieceArtwork? artwork;
+  final Rect from;
+
+  /// Live destination slot in tray coordinates. Null means the slot is gone
+  /// (its thumbnail was lifted or filtered away), which lands the flight.
+  late final Rect? Function() _resolveTo;
+
+  /// True when there was no visible destination slot at launch (edges-only
+  /// filter): the piece dissolves at the drop point instead of landing.
+  late final bool fadeOut;
+  final VoidCallback onLanded;
+
+  final Paint _paint = Paint();
+  late Rect _target;
+  double _elapsed = 0;
+  bool _done = false;
+  static const _duration = 0.18;
+
+  /// Where the flight is currently heading — exposed for tests via the tray.
+  Rect get target => _target;
+
+  double get _progress =>
+      Curves.easeOut.transform((_elapsed / _duration).clamp(0.0, 1.0));
+
+  /// The box drawn this frame, interpolated between [from] and the live
+  /// target — exposed for tests via the tray.
+  Rect get currentBox => Rect.lerp(from, _target, _progress)!;
+
+  /// Lands immediately — used when a relayout or a newer return invalidates
+  /// this flight's endpoints.
+  void finishNow() => _finish();
+
+  void _finish() {
+    if (_done) {
+      return;
+    }
+    _done = true;
+    onLanded();
+    removeFromParent();
+  }
+
+  @override
+  void update(double dt) {
+    super.update(dt);
+    final liveTarget = _resolveTo();
+    if (liveTarget == null) {
+      _finish();
+      return;
+    }
+    _target = liveTarget;
+    _elapsed += dt;
+    if (_elapsed >= _duration) {
+      _finish();
+    }
+  }
+
+  @override
+  void render(Canvas canvas) {
+    // Removal is queued, so a flight finished during update is still mounted
+    // for this frame's render — and the revealed thumbnail already draws.
+    // Painting here too would double the piece for one frame.
+    if (_done) {
+      return;
+    }
+    final box = currentBox;
+    final liveArtwork = artwork;
+    if (!fadeOut && liveArtwork != null) {
+      liveArtwork.render(
+        canvas,
+        bounds: box,
+        // Sized for the destination slot, so the rim is already as thick as
+        // the thumbnail's when it takes over on landing.
+        decorationScale: liveArtwork.bakedDecorationScale(_target),
+        photoPaint: _paint,
+      );
+      return;
+    }
+    if (fadeOut) {
+      // The fade stays a sprite blit: the paint's alpha must dim the whole
+      // piece, and as photoPaint it would dim only the photo, not the rim.
+      _paint.color = Colors.white.withValues(alpha: 1 - _progress);
+    }
+    sprite.render(
+      canvas,
+      position: Vector2(box.left, box.top),
+      size: Vector2(box.width, box.height),
+      overridePaint: _paint,
+    );
   }
 }
