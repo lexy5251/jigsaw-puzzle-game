@@ -90,6 +90,18 @@ void main() {
         thumbnailSize.x,
         thumbnailSize.y,
       );
+      // Thumbnails draw their contact shadow first, like board pieces —
+      // the shadow box overhangs the sprite box by the (scaled) pad.
+      final pad = tray.restShadowPadFor(indexes[i])!;
+      final srcSize = tray.spriteSrcSizeFor(indexes[i])!;
+      final padX = pad * bounds.width / srcSize.x;
+      final padY = pad * bounds.height / srcSize.y;
+      tray.restShadowFor(indexes[i])!.render(
+        canvas,
+        position: Vector2(bounds.left - padX, bounds.top - padY),
+        size: Vector2(bounds.width + 2 * padX, bounds.height + 2 * padY),
+        overridePaint: photoPaint,
+      );
       artwork.render(
         canvas,
         bounds: bounds,
@@ -104,10 +116,20 @@ void main() {
     final landingIndex = tray.landingPieceIndex;
     if (flightBox != null && flightTarget != null && landingIndex != null) {
       final artwork = tray.artworkFor(landingIndex)!;
+      final pad = tray.restShadowPadFor(landingIndex)!;
+      final srcSize = tray.spriteSrcSizeFor(landingIndex)!;
+      final padX = pad * flightBox.width / srcSize.x;
+      final padY = pad * flightBox.height / srcSize.y;
+      tray.restShadowFor(landingIndex)!.render(
+        canvas,
+        position: Vector2(flightBox.left - padX, flightBox.top - padY),
+        size: Vector2(flightBox.width + 2 * padX, flightBox.height + 2 * padY),
+        overridePaint: photoPaint,
+      );
       artwork.render(
         canvas,
         bounds: flightBox,
-        // The real flyer sizes its rim for the destination slot.
+        // The real flyer sizes its edge for the destination slot.
         decorationScale: artwork.bakedDecorationScale(flightTarget),
         photoPaint: photoPaint,
       );

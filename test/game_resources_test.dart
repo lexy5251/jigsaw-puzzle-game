@@ -57,7 +57,8 @@ void main() {
       await game.loaded;
     });
     await tester.pump(const Duration(milliseconds: 16));
-    expect(generated.length, 24);
+    // 24 pieces x two bakes each (body + contact shadow).
+    expect(generated.length, 48);
     expect(generated.every((image) => !image.debugDisposed), isTrue);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -89,7 +90,7 @@ void main() {
       await tester.pumpWidget(GameWidget(game: game));
       await store.requested.future;
     });
-    expect(generated.length, 24);
+    expect(generated.length, 48);
     await tester.pumpWidget(const SizedBox.shrink());
     expect(generated.every((image) => image.debugDisposed), isTrue);
 
@@ -122,7 +123,7 @@ void main() {
         await tester.pumpWidget(GameWidget(game: game));
         await game.loaded;
       });
-      expect(generated.length, 24);
+      expect(generated.length, 48);
       expect(generated.every((image) => image.debugDisposed), isTrue);
       expect(reportedLoaded, isFalse);
       expect(game.trayPieceIndexes, isEmpty);

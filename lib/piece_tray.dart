@@ -23,6 +23,8 @@ class PieceData {
   PieceData({
     required this.index,
     required this.sprite,
+    required this.restShadow,
+    required this.restShadowPad,
     required this.renderBleed,
     required this.correctPosition,
     this.artwork,
@@ -34,6 +36,14 @@ class PieceData {
   /// The shaped piece image: the base cell plus [renderBleed] margin all
   /// around, so tabs that stick out past the cell are included.
   final Sprite sprite;
+
+  /// The piece's baked contact shadow, drawn under tray previews so a piece
+  /// looks the same in the tray as resting on the board.
+  final Sprite restShadow;
+
+  /// How far [restShadow]'s box extends past [sprite]'s box on each side,
+  /// in source pixels (blur spill room); blits scale and offset by this.
+  final double restShadowPad;
 
   /// Original photo and outline for a sharp, dimensional tray preview.
   final PieceArtwork? artwork;
@@ -192,6 +202,8 @@ class PieceTray extends PositionComponent
     final flight = _ReturnFlight(
       pieceIndex: data.index,
       sprite: data.sprite,
+      restShadow: data.restShadow,
+      restShadowPad: data.restShadowPad,
       artwork: data.artwork,
       from: from,
       resolveTo: slotRect,
@@ -431,6 +443,30 @@ class PieceTray extends PositionComponent
       .where((data) => data.index == index)
       .firstOrNull
       ?.artwork;
+
+  /// A tray piece's baked contact shadow — exposed for the same render tests.
+  @visibleForTesting
+  Sprite? restShadowFor(int index) => _remainingPieces
+      .where((data) => data.index == index)
+      .firstOrNull
+      ?.restShadow;
+
+  /// The shadow box's overhang past the sprite box (source px) — exposed so
+  /// render tests can place the shadow exactly like the tray does.
+  @visibleForTesting
+  double? restShadowPadFor(int index) => _remainingPieces
+      .where((data) => data.index == index)
+      .firstOrNull
+      ?.restShadowPad;
+
+  /// A tray piece's sprite-box size in source px — the scale reference the
+  /// shadow-pad math uses; exposed for the same render tests.
+  @visibleForTesting
+  Vector2? spriteSrcSizeFor(int index) => _remainingPieces
+      .where((data) => data.index == index)
+      .firstOrNull
+      ?.sprite
+      .srcSize;
 }
 
 class _TrayThumbnail extends SpriteComponent {
@@ -463,6 +499,17 @@ class _TrayThumbnail extends SpriteComponent {
     )) {
       return;
     }
+    // Same contact shadow as a piece resting on the board, so moving a piece
+    // between tray and board never changes how it looks. The shadow box is
+    // the sprite box grown by the pad, scaled down with the preview.
+    final padX = data.restShadowPad * width / data.sprite.srcSize.x;
+    final padY = data.restShadowPad * height / data.sprite.srcSize.y;
+    data.restShadow.render(
+      canvas,
+      position: Vector2(-padX, -padY),
+      size: Vector2(width + 2 * padX, height + 2 * padY),
+      overridePaint: paint,
+    );
     final artwork = data.artwork;
     if (artwork == null) {
       super.render(canvas);
@@ -492,6 +539,8 @@ class _ReturnFlight extends PositionComponent {
   _ReturnFlight({
     required this.pieceIndex,
     required this.sprite,
+    required this.restShadow,
+    required this.restShadowPad,
     required this.artwork,
     required this.from,
     required Rect? Function() resolveTo,
@@ -521,6 +570,13 @@ class _ReturnFlight extends PositionComponent {
   final int pieceIndex;
 
   final Sprite sprite;
+
+  /// The piece's baked contact shadow — flown along under the body so the
+  /// piece looks grounded the whole way into its slot.
+  final Sprite restShadow;
+
+  /// Shadow-box overhang past the sprite box, in source pixels.
+  final double restShadowPad;
 
   /// Full-resolution piece artwork; the landing flight renders it live so it
   /// arrives as sharp as the (live-rendered) thumbnail it becomes.
@@ -591,10 +647,21 @@ class _ReturnFlight extends PositionComponent {
     final box = currentBox;
     final liveArtwork = artwork;
     if (!fadeOut && liveArtwork != null) {
+      // The shadow rides along under the body, so the landing piece looks
+      // grounded exactly like the thumbnail that takes over on landing. Its
+      // box is the sprite box grown by the pad, scaled with the flyer.
+      final padX = restShadowPad * box.width / sprite.srcSize.x;
+      final padY = restShadowPad * box.height / sprite.srcSize.y;
+      restShadow.render(
+        canvas,
+        position: Vector2(box.left - padX, box.top - padY),
+        size: Vector2(box.width + 2 * padX, box.height + 2 * padY),
+        overridePaint: _paint,
+      );
       liveArtwork.render(
         canvas,
         bounds: box,
-        // Sized for the destination slot, so the rim is already as thick as
+        // Sized for the destination slot, so the edge is already as thick as
         // the thumbnail's when it takes over on landing.
         decorationScale: liveArtwork.bakedDecorationScale(_target),
         photoPaint: _paint,

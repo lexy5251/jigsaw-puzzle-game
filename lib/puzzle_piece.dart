@@ -42,7 +42,9 @@ class PuzzlePiece extends SpriteComponent
   final Vector2 renderBleed;
   final PieceArtwork? artwork;
 
-  static const _lockedPriority = -1;
+  // Locked sits two below loose so the rest-shadow layer (-1) fits between:
+  // a loose piece's contact shadow must fall ON the flush, locked picture.
+  static const _lockedPriority = -2;
   static const _loosePriority = 0;
   static const _draggingPriority = 100;
 
@@ -159,7 +161,10 @@ class PuzzlePiece extends SpriteComponent
     pieceArtwork.renderShadow(
       canvas,
       bounds: _spriteBounds,
-      decorationScale: 1 / game.camera.viewfinder.zoom,
+      // Scales with camera zoom like the baked resting shadow, so picking a
+      // piece up grows its shadow (lifted preset is larger) instead of
+      // snapping to a fixed screen size that shrinks it when zoomed in.
+      decorationScale: pieceArtwork.decorationUnit,
       lifted: true,
     );
     canvas.restore();

@@ -52,12 +52,17 @@ void main() {
       expect(pieces.length, 4);
 
       // Cell = 20x16, shorter side 16: bleed = ceil(0.275 * 16) + 1 = 6,
-      // so every piece image is (20 + 12) x (16 + 12).
+      // so every piece image is (20 + 12) x (16 + 12). The shadow bakes at
+      // half resolution into that box grown by shadowPad = ceil(1.6 + 3*1.1)
+      // = 5 on every side, so blur is never clipped at a tab tip.
       for (final piece in pieces) {
         expect(piece.bleed.x, 6);
         expect(piece.bleed.y, 6);
         expect(piece.sprite.srcSize.x, 32);
         expect(piece.sprite.srcSize.y, 28);
+        expect(piece.shadowPad, 5);
+        expect(piece.restShadow.srcSize.x, 21);
+        expect(piece.restShadow.srcSize.y, 19);
       }
     });
   });
@@ -151,18 +156,17 @@ void main() {
             ((y * 3).floor() * 300 + (x * 3).floor()) * 4 + channel,
           );
 
-      // The face spans (30,30)..(70,62). The photo's middle stays unchanged
-      // and the margins stay clear.
+      // The face spans (30,30)..(70,62). Clean-flat: the photo is untouched
+      // from center to cut and the margins stay clear.
       expect(channel('body', 50, 46, 0), 255);
       expect(channel('body', 50, 46, 1), 0);
       expect(channel('body', 50, 46, 3), 255);
       expect(channel('body', 22, 22, 3), 0);
-      expect(channel('body', 50, 30.5, 1), greaterThan(0)); // top highlight
-      // The cardboard rim shows INSIDE the lower edge (green well above the
-      // pure-red photo), and not a pixel of body lands outside the outline —
-      // joined neighbours sit flush against it.
-      expect(channel('body', 50, 61.5, 0), lessThan(255));
-      expect(channel('body', 50, 61.5, 1), greaterThan(50));
+      // The photo runs edge-to-edge (no rim band; the soft warm edge shade
+      // only dims and tints it slightly), and not a pixel of body lands
+      // outside the outline — joined neighbours sit flush against it.
+      expect(channel('body', 50, 61.5, 0), greaterThan(200));
+      expect(channel('body', 50, 61.5, 1), lessThan(40));
       expect(channel('body', 50, 63, 3), 0);
       // The shadow is a separate pass (drawn below bodies by the game's
       // layers); it reaches past the outline's lower edge, deeper when
@@ -203,19 +207,21 @@ void main() {
                   ? _FailingShapeGrid()
                   : PieceShapeGrid.generate(columns: 2, rows: 2, seed: 3),
             );
+            // Each piece bakes two images: the decorated body and its
+            // half-resolution contact shadow.
             if (fail) {
               await expectLater(rendering, throwsStateError);
-              expect(images.length, 3);
+              expect(images.length, 6);
               expect(images.every((image) => image.debugDisposed), isTrue);
             } else {
               final pieces = await rendering;
-              expect(images.length, 4);
+              expect(images.length, 8);
               expect(images.every((image) => !image.debugDisposed), isTrue);
               for (final piece in pieces) {
                 piece.dispose();
               }
             }
-            expect(pictures.length, fail ? 3 : 4);
+            expect(pictures.length, fail ? 6 : 8);
             expect(pictures.every((picture) => picture.debugDisposed), isTrue);
             expect(source.debugDisposed, isFalse);
           } finally {

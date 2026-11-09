@@ -283,7 +283,7 @@ class JigsawGame extends FlameGame
     final ghost = SpriteComponent(
       sprite: Sprite(image),
       size: _boardSize.clone(),
-      priority: -3, // Below the board outline and all pieces.
+      priority: -4, // Below the board outline and all pieces.
     )..opacity = _ghostPreviewEnabled ? _ghostOpacity : 0;
     _ghostPreview = ghost;
     world.add(ghost);
@@ -305,17 +305,36 @@ class JigsawGame extends FlameGame
     world.add(
       RectangleComponent(
         size: _boardSize.clone(),
-        priority: -2, // Render below locked pieces.
+        priority: -3, // Render below locked pieces.
         paint: Paint()
           ..style = PaintingStyle.stroke
           ..strokeWidth = 2
           ..color = StudioColors.boardOutline,
       ),
     );
+    // Above locked pieces (-2), below loose bodies (0): a resting piece's
+    // contact shadow falls on the flush picture, while a joined chunk's
+    // internal shadows are covered by its own members' bodies.
+    world.add(_RestShadow()..priority = -1);
     // Above resting pieces, below every dragged body: all lifted shadows
     // paint first, so a dragged chunk cannot shade its own members.
     world.add(_DragShadow()..priority = 90);
   }
+
+  /// Whether [piece]'s resting contact shadow draws this frame. Locked
+  /// pieces sit flush in the picture; elevated pieces hand off to the
+  /// stronger lifted shadow in [_DragShadow].
+  bool _showsRestShadow(PuzzlePiece piece) =>
+      !piece.isLocked && !piece.isElevated;
+
+  /// Piece indexes whose resting contact shadow draws this frame — exposed
+  /// so tests can assert the resting/locked/dragged handoff without
+  /// scraping pixels.
+  @visibleForTesting
+  List<int> get restShadowPieceIndexes => [
+    for (final piece in _boardPieces.values)
+      if (_showsRestShadow(piece)) piece.index,
+  ];
 
   /// Pairs each shaped piece image with stable indexes and solved positions
   /// for saving and restoring.
@@ -328,6 +347,8 @@ class JigsawGame extends FlameGame
         PieceData(
           index: index,
           sprite: shapedImages[index].sprite,
+          restShadow: shapedImages[index].restShadow,
+          restShadowPad: shapedImages[index].shadowPad,
           renderBleed: shapedImages[index].bleed,
           artwork: shapedImages[index].artwork,
           correctPosition: Vector2(
@@ -529,6 +550,8 @@ class JigsawGame extends FlameGame
       PieceData(
         index: piece.index,
         sprite: piece.sprite!,
+        restShadow: _pieceImages[piece.index].restShadow,
+        restShadowPad: _pieceImages[piece.index].shadowPad,
         renderBleed: piece.renderBleed,
         artwork: piece.artwork,
         correctPosition: piece.correctPosition.clone(),
@@ -898,6 +921,37 @@ class _ElevatedPieceOverlay extends Component
       }
     }
     canvas.restore();
+  }
+}
+
+/// World layer between locked and loose pieces: blits every resting piece's
+/// baked contact shadow. Below the bodies, a joined chunk's internal shadows
+/// are hidden by its own members, so only the chunk's outer silhouette is
+/// shaded — and above locked pieces, so a loose piece still visibly sits on
+/// top of the finished picture.
+class _RestShadow extends Component with HasGameReference<JigsawGame> {
+  // The half-resolution shadow upscales 2x plus camera zoom; the default
+  // FilterQuality.none bands its gradient into visible steps.
+  static final _paint = Paint()
+    ..filterQuality = FilterQuality.medium
+    ..isAntiAlias = true;
+
+  @override
+  void render(Canvas canvas) {
+    for (final piece in game._boardPieces.values) {
+      if (!game._showsRestShadow(piece)) {
+        continue;
+      }
+      final image = game._pieceImages[piece.index];
+      final pad = image.shadowPad;
+      image.restShadow.render(
+        canvas,
+        // The shadow box is the sprite box grown by pad on every side.
+        position: piece.position - piece.renderBleed - Vector2.all(pad),
+        size: piece.sprite!.srcSize + Vector2.all(2 * pad),
+        overridePaint: _paint,
+      );
+    }
   }
 }
 
