@@ -24,6 +24,15 @@ void main() {
     ),
   );
 
+  // The card's done marker: the bloomed pot (owner ruling, UI-2). With the
+  // status text gone, this is how tests probe the done state.
+  Finder doneMarker() => find.descendant(
+    of: find.byType(DailyPuzzleCard),
+    matching: find.byWidgetPredicate(
+      (widget) => widget is MascotArt && widget.mascot == StudioMascot.cactus,
+    ),
+  );
+
   testWidgets('shows a live streak that today has not broken yet', (
     tester,
   ) async {
@@ -83,9 +92,20 @@ void main() {
     await pumpSelectScreen(tester, clock: fixedNow);
     await tester.pumpAndSettle();
 
-    expect(find.text('Done today ✓'), findsOneWidget);
     expect(find.text('1-day streak · longest: 1'), findsOneWidget);
-    expect(find.byIcon(Icons.check_circle), findsOneWidget);
+    // The done marker is the bloomed pot on the card, with no status text
+    // under the title (owner ruling, UI-2 + follow-up) — never the old
+    // stock Material check.
+    expect(doneMarker(), findsOneWidget);
+    expect(find.text('In progress'), findsNothing);
+    expect(find.text('Not started'), findsNothing);
+    expect(
+      find.descendant(
+        of: find.byType(DailyPuzzleCard),
+        matching: find.byIcon(Icons.check_circle),
+      ),
+      findsNothing,
+    );
     // Done for the day: no action button, no rule line to follow. (Scoped:
     // other screen areas may legitimately grow FilledButtons later.)
     expect(
@@ -273,7 +293,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final card = find.byType(DailyPuzzleCard);
-    expect(find.text('Done today ✓'), findsOneWidget);
+    expect(doneMarker(), findsOneWidget);
     expect(bloomedPots(), findsNWidgets(2));
 
     now = monday;
@@ -285,7 +305,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('In progress'), findsOneWidget);
-    expect(find.text('Done today ✓'), findsNothing);
+    expect(doneMarker(), findsNothing);
     // An in-progress daily offers to pick the run back up.
     expect(find.widgetWithText(FilledButton, 'Continue'), findsOneWidget);
     expect(find.text('2-day streak · longest: 2'), findsOneWidget);
@@ -326,7 +346,7 @@ void main() {
     SharedPreferences.setMockInitialValues({'daily.days': '["2026-11-06"]'});
     await pumpSelectScreen(tester, clock: () => now);
     await tester.pumpAndSettle();
-    expect(find.text('Done today ✓'), findsOneWidget);
+    expect(doneMarker(), findsOneWidget);
 
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
@@ -343,7 +363,7 @@ void main() {
       ),
       findsOneWidget,
     );
-    expect(find.text('Done today ✓'), findsNothing);
+    expect(doneMarker(), findsNothing);
     expect(find.text('Not started'), findsOneWidget);
     expect(
       find.text('longest: 1 · pots regrow, no pressure'),

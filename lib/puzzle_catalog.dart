@@ -11,6 +11,13 @@ class PuzzleCategory {
   final String title;
 }
 
+/// Owner-made cover art for a category's card on the main page. These live
+/// outside the catalog on purpose: covers never enter the game (owner
+/// ruling, UI-3). A category without a cover file falls back to its first
+/// catalog painting at the call site.
+String categoryCoverPath(String categoryId) =>
+    'assets/covers/$categoryId.jpg';
+
 class PuzzleImage {
   const PuzzleImage({
     required this.id,

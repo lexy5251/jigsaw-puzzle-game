@@ -69,7 +69,7 @@ class DailyPuzzleCard extends StatelessWidget {
               ? Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _info(theme, trailing: doneToday ? _doneIcon(theme) : null),
+                    _info(theme, trailing: doneToday ? _doneMarker() : null),
                     if (action != null) ...[
                       const SizedBox(height: 10),
                       Align(alignment: Alignment.centerRight, child: action),
@@ -78,15 +78,22 @@ class DailyPuzzleCard extends StatelessWidget {
                 )
               : _info(
                   theme,
-                  trailing: doneToday ? _doneIcon(theme) : action,
+                  trailing: doneToday ? _doneMarker() : action,
                 ),
         ),
       ),
     );
   }
 
-  Widget _doneIcon(ThemeData theme) =>
-      Icon(Icons.check_circle, color: theme.colorScheme.secondary);
+  /// Today's pot, bloomed — the rule line ("Finish it and today's pot
+  /// blooms.") coming true on the card itself, echoing the windowsill
+  /// below (owner ruling, UI-2).
+  // The label keeps the done state in the card's merged screen-reader
+  // utterance now that no visible text carries it.
+  Widget _doneMarker() => Semantics(
+    label: 'Done today',
+    child: const MascotArt(StudioMascot.cactus, height: 40),
+  );
 
   Widget _info(ThemeData theme, {required Widget? trailing}) {
     return Row(
@@ -123,17 +130,21 @@ class DailyPuzzleCard extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.titleMedium,
               ),
-              const SizedBox(height: 2),
-              Text(_statusText(), style: theme.textTheme.bodySmall),
-              if (!doneToday && bloomsToday)
-                // The rule players otherwise trip over: only this painting
-                // blooms a pot.
-                Text(
-                  "Finish it and today's pot blooms.",
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.primary,
+              // The done state has no status text: the bloomed pot alone
+              // marks it (owner ruling, UI-2 follow-up).
+              if (!doneToday) ...[
+                const SizedBox(height: 2),
+                Text(_statusText(), style: theme.textTheme.bodySmall),
+                if (bloomsToday)
+                  // The rule players otherwise trip over: only this painting
+                  // blooms a pot.
+                  Text(
+                    "Finish it and today's pot blooms.",
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.primary,
+                    ),
                   ),
-                ),
+              ],
             ],
           ),
         ),
@@ -142,13 +153,9 @@ class DailyPuzzleCard extends StatelessWidget {
     );
   }
 
-  /// The e2e tests assert on these texts.
-  String _statusText() {
-    if (doneToday) {
-      return 'Done today ✓';
-    }
-    return inProgress ? 'In progress' : 'Not started';
-  }
+  /// The e2e tests assert on these texts. There is no done text: the
+  /// bloomed pot alone marks a finished day.
+  String _statusText() => inProgress ? 'In progress' : 'Not started';
 }
 
 /// The streak, demoted to ambient decor: the current week as a small row of

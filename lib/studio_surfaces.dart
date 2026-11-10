@@ -47,12 +47,33 @@ class PaintedCard extends StatelessWidget {
     this.variant = 0,
     this.onTap,
     this.padding,
+    this.shadow = softShadow,
     required this.child,
   });
+
+  /// Mockup: 0 3px 10px -5px rgba(40,25,10,.35) — warm, not gray.
+  static const softShadow = BoxShadow(
+    color: StudioColors.cardShadow,
+    offset: Offset(0, 3),
+    blurRadius: 10,
+    spreadRadius: -5,
+  );
+
+  /// A touch deeper, for cards whose fill matches the wallpaper and whose
+  /// edge therefore only exists as shadow (the category cards).
+  static const groundShadow = BoxShadow(
+    color: StudioColors.cardShadow,
+    offset: Offset(0, 4),
+    blurRadius: 14,
+    spreadRadius: -3,
+  );
 
   /// Fill color; defaults to the theme's linen surface. Ground variants
   /// (blush, moss) come from `StudioColors`.
   final Color? color;
+
+  /// The card's drop shadow; [softShadow] unless the context needs more.
+  final BoxShadow shadow;
 
   /// Picks one of the corner presets. Pass a grid/list index so adjacent
   /// cards get different silhouettes.
@@ -69,18 +90,7 @@ class PaintedCard extends StatelessWidget {
         ? child
         : Padding(padding: padding!, child: child);
     return DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: radius,
-        // Mockup: 0 3px 10px -5px rgba(40,25,10,.35) — warm, not gray.
-        boxShadow: const [
-          BoxShadow(
-            color: StudioColors.cardShadow,
-            offset: Offset(0, 3),
-            blurRadius: 10,
-            spreadRadius: -5,
-          ),
-        ],
-      ),
+      decoration: BoxDecoration(borderRadius: radius, boxShadow: [shadow]),
       child: Material(
         color: color ?? Theme.of(context).colorScheme.surface,
         shape: RoundedRectangleBorder(borderRadius: radius),

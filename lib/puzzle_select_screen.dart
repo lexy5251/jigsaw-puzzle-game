@@ -1,9 +1,10 @@
 // Puzzle selection overview:
 // 1. A "Today's painting" card on top shows the daily puzzle with the
 //    streak windowsill — a pot blooms for every day the daily was finished.
-// 2. Below it, one painted card per themed category (accent, mascot,
-//    painting count); categories with no images yet are hidden. Tapping a
-//    card opens that category's own screen with its puzzle grid.
+// 2. Below it, one painted card per themed category (owner-made cover art
+//    from assets/covers/, accent tint, painting count); categories with no
+//    images yet are hidden. Tapping a card opens that category's own
+//    screen with its puzzle grid.
 // 3. Starting a puzzle (daily card or category screen) goes through the
 //    shared size-sheet flow in puzzle_launcher.dart.
 
@@ -21,7 +22,6 @@ import 'puzzle_catalog.dart';
 import 'puzzle_launcher.dart';
 import 'puzzle_save.dart';
 import 'settings_screen.dart';
-import 'studio_mascots.dart';
 import 'studio_surfaces.dart';
 import 'studio_theme.dart';
 
@@ -238,31 +238,8 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
   }
 }
 
-/// The category's mascot on a small painted disc over the cover's corner.
-class _MascotChip extends StatelessWidget {
-  const _MascotChip({required this.mascot});
-
-  final StudioMascot mascot;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      // A fixed disc, so wide mascots (mountains, houses) and tall ones
-      // (daisy) all read as the same-size chip; FittedBox scales each into it.
-      width: 30,
-      height: 30,
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        shape: BoxShape.circle,
-      ),
-      child: FittedBox(child: MascotArt(mascot, height: 64)),
-    );
-  }
-}
-
-/// One tappable collection on the home screen: cover painting, mascot
-/// chip, title, count.
+/// One tappable collection on the home screen: cover painting, title,
+/// count. No corner mascot chip — the owner ruled it clutter (UI-3).
 class _CategoryCard extends StatelessWidget {
   const _CategoryCard({
     required this.category,
@@ -279,15 +256,15 @@ class _CategoryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final style = categoryStyleFor(category.id);
     final images = imagesInCategory(category.id);
-    // The first catalog image is the cover: stable between visits, so
-    // players can find a collection by its picture, and curated simply by
-    // ordering the catalog.
-    final cover = images.first;
     return PaintedCard(
       variant: variant,
-      color: style.tint,
+      // One background for every card — the wallpaper color; the shadow
+      // alone makes it read as a card, so it runs a touch deeper here
+      // (owner ruling, UI-3 follow-up: the per-category tints are gone
+      // on the main page).
+      color: StudioColors.ground,
+      shadow: PaintedCard.groundShadow,
       onTap: onOpen,
       padding: const EdgeInsets.fromLTRB(9, 9, 9, 10),
       child: Semantics(
@@ -299,23 +276,23 @@ class _CategoryCard extends StatelessWidget {
           children: [
             AspectRatio(
               aspectRatio: 3 / 2,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  FramedArt(
-                    child: Image.asset(
-                      cover.assetPath,
-                      fit: BoxFit.cover,
-                      // Decode smaller previews to reduce memory use.
-                      cacheWidth: 640,
-                    ),
+              child: FramedArt(
+                // The owner-made cover for this category (UI-3 ruling: the
+                // "first catalog image" covers didn't sell the categories).
+                child: Image.asset(
+                  categoryCoverPath(category.id),
+                  fit: BoxFit.cover,
+                  // Decode smaller previews to reduce memory use.
+                  cacheWidth: 640,
+                  // A category without a cover file yet (e.g. a freshly
+                  // added one) degrades to the old rule: first catalog
+                  // painting.
+                  errorBuilder: (context, _, _) => Image.asset(
+                    images.first.assetPath,
+                    fit: BoxFit.cover,
+                    cacheWidth: 640,
                   ),
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: _MascotChip(mascot: mascotForCategory(category.id)),
-                  ),
-                ],
+                ),
               ),
             ),
             Padding(
