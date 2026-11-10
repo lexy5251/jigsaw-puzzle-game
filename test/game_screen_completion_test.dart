@@ -38,7 +38,7 @@ void main() {
     );
     await completePuzzle(tester, game);
 
-    expect(find.textContaining('hung in your gallery'), findsOneWidget);
+    expect(find.textContaining('no timer, no score'), findsOneWidget);
     expect(
       PuzzleSaveState.fromJsonString(
         prefs.storage[singlePieceProgressKey] as String,
@@ -123,7 +123,7 @@ void main() {
     );
     await completePuzzle(tester, game);
 
-    expect(find.textContaining('hung in your gallery'), findsOneWidget);
+    expect(find.textContaining('no timer, no score'), findsOneWidget);
     expect(tester.takeException(), isNull); // no RenderFlex overflow
     await tester.pumpWidget(const SizedBox.shrink());
   });

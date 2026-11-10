@@ -53,7 +53,7 @@ void main() {
     );
   }
 
-  testWidgets('the very first daily completion blooms a 1-day streak', (
+  testWidgets('the very first daily completion records the day', (
     tester,
   ) async {
     // Clean install: no 'daily.days' key at all.
@@ -61,32 +61,30 @@ void main() {
     await completePuzzle(tester, game);
 
     expect(prefs.storage[dailyDaysKey], contains('2026-11-06'));
-    expect(find.text("Today's pot bloomed · 1-day streak"), findsOneWidget);
+    // The card stays celebration-free (UI-4): the bloom only shows on the
+    // home windowsill.
+    expect(find.textContaining('pot bloomed'), findsNothing);
+    expect(find.textContaining('no timer, no score'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('a replay of an already-credited day does not re-celebrate', (
-    tester,
-  ) async {
+  testWidgets('a replay of an already-credited day keeps it', (tester) async {
     prefs.storage[dailyDaysKey] = '["2026-11-06"]';
     final game = await boot(tester, dailyImage);
     await completePuzzle(tester, game);
 
-    // The pot already bloomed today; the wall celebrates the painting only.
-    expect(find.textContaining('pot bloomed'), findsNothing);
-    expect(find.textContaining('hung in your gallery'), findsOneWidget);
+    expect(prefs.storage[dailyDaysKey], contains('2026-11-06'));
+    expect(find.textContaining('no timer, no score'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
   testWidgets("finishing today's daily image marks the day", (tester) async {
-    // Yesterday is already done, so today's bloom continues a streak.
+    // Yesterday is already done, so today's credit continues the streak.
     prefs.storage[dailyDaysKey] = '["2026-11-05"]';
     final game = await boot(tester, dailyImage);
     await completePuzzle(tester, game);
 
     expect(prefs.storage[dailyDaysKey], contains('2026-11-06'));
-    // The reward shows at the moment of finishing, on the gallery wall.
-    expect(find.text("Today's pot bloomed · 2-day streak"), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -107,12 +105,8 @@ void main() {
     );
     await completePuzzle(tester, game);
 
+    // The credit goes to the day the run belonged to, not the clock's day.
     expect(prefs.storage[dailyDaysKey], contains('2026-11-06'));
-    // The caption credits the pot the run belonged to, not the clock's day.
-    expect(
-      find.text("Yesterday's pot bloomed · 1-day streak"),
-      findsOneWidget,
-    );
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -135,8 +129,6 @@ void main() {
     await completePuzzle(tester, game);
 
     expect(prefs.storage.containsKey(dailyDaysKey), isFalse);
-    // No daily credit, no bloom caption — just the plain celebration.
-    expect(find.textContaining('pot bloomed'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -148,9 +140,7 @@ void main() {
     await completePuzzle(tester, game);
 
     // The completion record landed but the day did not; the save must
-    // survive so resuming retries the credit. A bloom that was not stored
-    // must not be celebrated either.
-    expect(find.textContaining('pot bloomed'), findsNothing);
+    // survive so resuming retries the credit.
     expect(prefs.storage[dailyDaysKey], isNull);
     expect(
       prefs.storage.keys.where((key) => key.startsWith('flutter.done.')),

@@ -1,44 +1,182 @@
 // The painted material of the Studio look (docs/design/brushwork-mockup.html,
-// treatment E): cards are "daubs of paint" with slightly uneven corners and a
-// soft shadow, and artwork always sits in a frame with a light mat ring.
-// The mockup gets the wobble from an SVG turbulence filter; the Flutter
-// translation is elliptical, per-corner radii — cheap and deterministic.
+// treatment E): cards are "daubs of paint" with torn-paper edges and a soft
+// shadow, and artwork sits in a frame whose light mat ring tears the same
+// way. The mockup gets the tear from an SVG turbulence filter; the Flutter
+// translation is a seeded sine wave along the outline — cheap and
+// deterministic (owner ruling UI-5: wavy edges on cards AND photo frames).
+
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
 import 'studio_theme.dart';
 
-/// Preset corner silhouettes. Each corner is a different ellipse so no card
-/// edge reads as machine-perfect; neighboring cards should use different
-/// presets (see [PaintedCard.variant]).
-const List<BorderRadius> _wobbles = [
-  BorderRadius.only(
-    topLeft: Radius.elliptical(22, 18),
-    topRight: Radius.elliptical(17, 23),
-    bottomLeft: Radius.elliptical(19, 24),
-    bottomRight: Radius.elliptical(24, 17),
-  ),
-  BorderRadius.only(
-    topLeft: Radius.elliptical(18, 24),
-    topRight: Radius.elliptical(23, 17),
-    bottomLeft: Radius.elliptical(24, 18),
-    bottomRight: Radius.elliptical(17, 22),
-  ),
-  BorderRadius.only(
-    topLeft: Radius.elliptical(24, 19),
-    topRight: Radius.elliptical(18, 22),
-    bottomLeft: Radius.elliptical(17, 23),
-    bottomRight: Radius.elliptical(22, 18),
-  ),
-  BorderRadius.only(
-    topLeft: Radius.elliptical(17, 22),
-    topRight: Radius.elliptical(24, 18),
-    bottomLeft: Radius.elliptical(22, 17),
-    bottomRight: Radius.elliptical(18, 24),
-  ),
-];
+/// Wave strength shared by every painted card; photo frames use the
+/// gentler pair. One knob each so a global retune stays a one-line change
+/// (private: every retune site is in this file).
+const double _cardEdgeAmplitude = 4.0;
+const double _cardEdgeWavelength = 78.0;
+const double _frameEdgeAmplitude = 2.2;
+const double _frameEdgeWavelength = 40.0;
 
-/// A card painted as a single daub: organic corners, soft warm shadow,
+/// A rounded-rect outline whose edge undulates like torn paper.
+///
+/// The wave is two sines with integer cycle counts over the outline's
+/// length (so the path closes without a seam) and phases driven by [seed]
+/// — pure trig, stable across rebuilds, so a card never shimmers.
+class TornPaperBorder extends ShapeBorder {
+  const TornPaperBorder({
+    required this.seed,
+    this.amplitude = _cardEdgeAmplitude,
+    this.wavelength = _cardEdgeWavelength,
+    this.cornerRadius = 22,
+    this.ringColor,
+    this.ringWidth = 3,
+  });
+
+  /// Varies the wave phases so neighboring cards tear differently.
+  final int seed;
+
+  final double amplitude;
+  final double wavelength;
+  final double cornerRadius;
+
+  /// When set, [paint] strokes the torn outline just inside the edge —
+  /// the photo frames' mat ring. Null paints nothing (cards get their
+  /// edge from the fill alone).
+  final Color? ringColor;
+  final double ringWidth;
+
+  /// The ring is the only inset this border owns; without one, inner
+  /// and outer edges coincide.
+  double get _ringInset => ringColor == null ? 0 : ringWidth;
+
+  @override
+  EdgeInsetsGeometry get dimensions => EdgeInsets.all(_ringInset);
+
+  @override
+  Path getInnerPath(Rect rect, {TextDirection? textDirection}) =>
+      getOuterPath(rect.deflate(_ringInset), textDirection: textDirection);
+
+  @override
+  Path getOuterPath(Rect rect, {TextDirection? textDirection}) {
+    // Degenerate rects happen in real paints: ShapeDecoration's shadow
+    // pre-pass deflates by negative spread, which can collapse or invert
+    // a tiny card's rect. Bail out before metrics (empty iterator) and
+    // Radius.circular (negative assert) can throw.
+    if (rect.isEmpty) {
+      return Path()..addRect(rect);
+    }
+    // Small tiles get proportionally gentler waves instead of noise.
+    final shortSide = math.min(rect.width, rect.height);
+    final amp = math.min(amplitude, shortSide / 28);
+    final radius = math.min(cornerRadius, shortSide / 4);
+    final base = Path()
+      ..addRRect(RRect.fromRectAndRadius(rect, Radius.circular(radius)));
+    final metric = base.computeMetrics().first;
+    final length = metric.length;
+    if (length < wavelength * 2 || amp <= 0) {
+      return base;
+    }
+    // Integer cycle counts make every component periodic over the
+    // outline, so the displaced path meets itself exactly where it
+    // started. Three mixed frequencies plus a slow amplitude swell keep
+    // the tear irregular — a single sine reads as postage-stamp scallops.
+    final n0 = math.max(2, (length / (wavelength * 3.1)).round());
+    final n1 = math.max(3, (length / wavelength).round());
+    final n2 = math.max(5, (length / (wavelength * 0.42)).round());
+    final n3 = math.max(8, (length / (wavelength * 0.18)).round());
+    final p0 = seed * 1.9 + 0.8;
+    final p1 = seed * 2.4;
+    final p2 = seed * 5.3 + 1.7;
+    final p3 = seed * 3.7 + 4.2;
+    final torn = Path();
+    final samples = math.max(24, (length / 3.5).ceil());
+    for (var i = 0; i < samples; i++) {
+      final d = i * length / samples;
+      final tangent = metric.getTangentForOffset(d)!;
+      final phase = d / length * 2 * math.pi;
+      final ripple =
+          0.52 * math.sin(n1 * phase + p1) +
+          0.33 * math.sin(n2 * phase + p2) +
+          0.15 * math.sin(n3 * phase + p3);
+      final swell = 0.7 + 0.3 * math.sin(n0 * phase + p0);
+      final wave = amp * swell * ripple;
+      final normal = Offset(-tangent.vector.dy, tangent.vector.dx);
+      final point = tangent.position + normal * wave;
+      if (i == 0) {
+        torn.moveTo(point.dx, point.dy);
+      } else {
+        torn.lineTo(point.dx, point.dy);
+      }
+    }
+    return torn..close();
+  }
+
+  @override
+  void paint(Canvas canvas, Rect rect, {TextDirection? textDirection}) {
+    final ring = ringColor;
+    if (ring == null) {
+      return;
+    }
+    // One path for clip and stroke keeps the ring exactly parallel to
+    // the torn edge: stroke it double-width centered on the edge, clipped
+    // to the shape, so [ringWidth] of it shows inside — like the old
+    // inward-painting Border.all.
+    final edge = getOuterPath(rect, textDirection: textDirection);
+    canvas
+      ..save()
+      ..clipPath(edge)
+      ..drawPath(
+        edge,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = ringWidth * 2
+          ..color = ring,
+      )
+      ..restore();
+  }
+
+  @override
+  ShapeBorder scale(double t) => TornPaperBorder(
+    seed: seed,
+    amplitude: amplitude * t,
+    // A length along the outline, so a scaled copy scales it too.
+    wavelength: wavelength * t,
+    cornerRadius: cornerRadius * t,
+    ringColor: ringColor,
+    ringWidth: ringWidth * t,
+  );
+
+  // Value equality matters here: PaintedCard builds a fresh border per
+  // rebuild, and without it Material restarts its shape tween, the
+  // clipper reclips, and ShapeDecoration re-tears its paths every build.
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) {
+      return true;
+    }
+    return other is TornPaperBorder &&
+        other.seed == seed &&
+        other.amplitude == amplitude &&
+        other.wavelength == wavelength &&
+        other.cornerRadius == cornerRadius &&
+        other.ringColor == ringColor &&
+        other.ringWidth == ringWidth;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    seed,
+    amplitude,
+    wavelength,
+    cornerRadius,
+    ringColor,
+    ringWidth,
+  );
+}
+
+/// A card painted as a single daub: torn-paper edge, soft warm shadow,
 /// linen fill by default. Replaces [Card] on Studio screens.
 class PaintedCard extends StatelessWidget {
   const PaintedCard({
@@ -75,8 +213,8 @@ class PaintedCard extends StatelessWidget {
   /// The card's drop shadow; [softShadow] unless the context needs more.
   final BoxShadow shadow;
 
-  /// Picks one of the corner presets. Pass a grid/list index so adjacent
-  /// cards get different silhouettes.
+  /// Seeds the tear so adjacent cards get different silhouettes. Pass a
+  /// grid/list index.
   final int variant;
 
   final VoidCallback? onTap;
@@ -85,15 +223,15 @@ class PaintedCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final radius = _wobbles[variant % _wobbles.length];
+    final shape = TornPaperBorder(seed: variant);
     final content = padding == null
         ? child
         : Padding(padding: padding!, child: child);
     return DecoratedBox(
-      decoration: BoxDecoration(borderRadius: radius, boxShadow: [shadow]),
+      decoration: ShapeDecoration(shape: shape, shadows: [shadow]),
       child: Material(
         color: color ?? Theme.of(context).colorScheme.surface,
-        shape: RoundedRectangleBorder(borderRadius: radius),
+        shape: shape,
         clipBehavior: Clip.antiAlias,
         child: onTap == null ? content : InkWell(onTap: onTap, child: content),
       ),
@@ -101,24 +239,34 @@ class PaintedCard extends StatelessWidget {
   }
 }
 
-/// Artwork in its frame: rounded clip plus the light mat ring painted over
-/// the picture's edge ("artwork always sits in a painted frame with a
-/// cream mat"). Wrap the image (or an image-filling Stack) in this.
+/// Artwork in its frame: torn-edged clip plus the light mat ring painted
+/// over the picture's edge ("artwork always sits in a painted frame with
+/// a cream mat"). Wrap the image (or an image-filling Stack) in this.
 class FramedArt extends StatelessWidget {
-  const FramedArt({super.key, required this.child});
+  const FramedArt({super.key, this.seed = 1, required this.child});
+
+  /// Varies the frame's tear; grids pass their item index so a wall of
+  /// equal-sized frames doesn't repeat one identical outline.
+  final int seed;
 
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    final borderRadius = BorderRadius.circular(13);
+    final shape = TornPaperBorder(
+      seed: seed,
+      amplitude: _frameEdgeAmplitude,
+      wavelength: _frameEdgeWavelength,
+      cornerRadius: 13,
+      ringColor: StudioColors.matRing,
+    );
     return Container(
       // Foreground, not decoration: the mat must overlap the artwork.
-      foregroundDecoration: BoxDecoration(
-        borderRadius: borderRadius,
-        border: Border.all(color: StudioColors.matRing, width: 3),
+      foregroundDecoration: ShapeDecoration(shape: shape),
+      child: ClipPath(
+        clipper: ShapeBorderClipper(shape: shape),
+        child: child,
       ),
-      child: ClipRRect(borderRadius: borderRadius, child: child),
     );
   }
 }

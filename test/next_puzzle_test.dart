@@ -126,7 +126,7 @@ void main() {
       // The chain action leads; the exit is the quiet secondary button.
       expect(find.widgetWithText(FilledButton, 'Next puzzle'), findsOneWidget);
       expect(
-        find.widgetWithText(TextButton, 'Back to the gallery'),
+        find.widgetWithText(TextButton, 'Back to gallery'),
         findsOneWidget,
       );
 
@@ -224,7 +224,7 @@ void main() {
       expect(find.text('Next puzzle'), findsNothing);
       // With no chain to offer, the exit is promoted back to the hero button.
       expect(
-        find.widgetWithText(FilledButton, 'Back to the gallery'),
+        find.widgetWithText(FilledButton, 'Back to gallery'),
         findsOneWidget,
       );
       await tester.pumpWidget(const SizedBox.shrink());

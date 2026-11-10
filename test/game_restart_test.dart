@@ -198,18 +198,14 @@ void main() {
       image: singlePieceImage,
       size: singlePieceSize,
     );
-    old.world.children.whereType<PuzzlePiece>().single.settle();
-    for (var i = 0; i < 10; i++) {
-      await tester.pump(const Duration(milliseconds: 16));
-    }
-    expect(old.progress.isComplete, isTrue);
-    expect(find.textContaining('hung in your gallery'), findsNothing);
+    await completeBoard(tester, old);
+    expect(find.textContaining('no timer, no score'), findsNothing);
 
     await confirmRestart(tester);
     final next = await finishRestart(tester, old);
     expect(next.progress.isComplete, isFalse);
     await tester.pump(const Duration(seconds: 1));
-    expect(find.textContaining('hung in your gallery'), findsNothing);
+    expect(find.textContaining('no timer, no score'), findsNothing);
   });
 
   testWidgets('restart waits for a completion delete already in flight', (
@@ -234,7 +230,10 @@ void main() {
       }
       return true;
     };
-    await completePuzzle(tester, old);
+    // Complete the board but stay inside completionRevealDelay: once the
+    // card is up it blurs out the app bar, so this race can only start
+    // from a restart requested before the reveal.
+    await completeBoard(tester, old);
     expect(deleting, isTrue);
 
     await confirmRestart(tester);

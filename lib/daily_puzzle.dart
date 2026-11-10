@@ -75,19 +75,8 @@ String? dailyCreditDay(
       : null;
 }
 
-/// The streak phrase shared by the windowsill and the completion wall, so
-/// the two surfaces cannot drift apart in wording.
+/// The windowsill's streak phrase, kept here beside the streak math.
 String streakLabel(int streak) => '$streak-day streak';
-
-/// The completion wall's bloom caption for a run credited to [creditDay]
-/// and finished at [completedAt]. [dailyCreditDay] only ever credits the
-/// finish day or the day before it, so the pot is today's or yesterday's —
-/// resolved once, here, against the completion moment (a caption computed
-/// against a later clock would flip words when a rebuild crosses midnight).
-String dailyBloomCaption(String creditDay, DateTime completedAt, int streak) {
-  final pot = creditDay == dayKey(completedAt) ? "Today's" : "Yesterday's";
-  return "$pot pot bloomed · ${streakLabel(streak)}";
-}
 
 /// Consecutive completed days ending at [today] — or ending yesterday when
 /// today is not done yet, so the streak reads "alive" until midnight.

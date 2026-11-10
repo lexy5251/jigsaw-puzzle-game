@@ -172,6 +172,8 @@ class _PuzzleCard extends StatelessWidget {
               fit: StackFit.expand,
               children: [
                 FramedArt(
+                  // The grid index: neighboring frames tear differently.
+                  seed: variant,
                   child: Image.asset(
                     image.assetPath,
                     fit: BoxFit.cover,

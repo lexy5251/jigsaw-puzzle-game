@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jigsaw_puzzle/app_settings.dart';
+import 'package:jigsaw_puzzle/completion_card.dart';
 import 'package:jigsaw_puzzle/game_screen.dart';
 import 'package:jigsaw_puzzle/game_sounds.dart';
 import 'package:jigsaw_puzzle/jigsaw_game.dart';
@@ -169,13 +170,24 @@ Future<JigsawGame> bootGameScreen(
   return game;
 }
 
-/// Completes a fixture with one loose piece, then shows the completion card.
-Future<void> completePuzzle(WidgetTester tester, JigsawGame game) async {
+/// Settles the last loose piece and waits for the board to report
+/// completion — WITHOUT pumping past the card's reveal delay. Restart
+/// tests use this directly: the pre-reveal window is the only time the
+/// app bar is still usable.
+Future<void> completeBoard(WidgetTester tester, JigsawGame game) async {
   game.world.children.whereType<PuzzlePiece>().single.settle();
   for (var i = 0; i < 10; i++) {
     await tester.pump(const Duration(milliseconds: 16));
   }
   expect(game.progress.isComplete, isTrue);
-  await tester.pump(const Duration(milliseconds: 950));
-  await tester.pump(const Duration(milliseconds: 350));
+}
+
+/// Completes a fixture with one loose piece, then shows the completion card.
+Future<void> completePuzzle(WidgetTester tester, JigsawGame game) async {
+  await completeBoard(tester, game);
+  await tester.pump(GameScreen.completionRevealDelay);
+  await tester.pump(CompletionCard.fadeDuration);
+  // One more frame so the fade tween lands on exactly 1 and the card's
+  // IgnorePointer releases before tests tap its buttons.
+  await tester.pump();
 }

@@ -277,6 +277,8 @@ class _CategoryCard extends StatelessWidget {
             AspectRatio(
               aspectRatio: 3 / 2,
               child: FramedArt(
+                // The grid index: neighboring covers tear differently.
+                seed: variant,
                 // The owner-made cover for this category (UI-3 ruling: the
                 // "first catalog image" covers didn't sell the categories).
                 child: Image.asset(

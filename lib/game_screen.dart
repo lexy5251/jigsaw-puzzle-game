@@ -3,11 +3,12 @@
 // 2. Holds the running game for as long as this puzzle screen is open.
 // 3. Displays the puzzle using Flame's GameWidget.
 // 4. Keeps a back button to return to puzzle selection.
-// 5. When the game reports completion, records it permanently and hangs the
-//    painting on a gallery wall, timed to appear as the in-game glow fades.
-//    The wall offers the category's next unfinished painting as one-tap
-//    "Next puzzle" (the screen pops with that painting as its result and
-//    the launcher chains into it), with "Back to the gallery" as the exit.
+// 5. When the game reports completion, records it permanently and blurs
+//    the finished board behind the completion card, timed to appear as the
+//    in-game glow fades. The card offers the category's next unfinished
+//    painting as one-tap "Next puzzle" (the screen pops with that painting
+//    as its result and the launcher chains into it), with "Back to
+//    gallery" as the exit.
 // JigsawGame handles the puzzle gameplay.
 
 import 'dart:async';
@@ -16,6 +17,7 @@ import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 
 import 'app_settings.dart';
+import 'completion_card.dart';
 import 'daily_puzzle.dart';
 import 'daily_streak.dart';
 import 'game_sounds.dart';
@@ -23,8 +25,6 @@ import 'jigsaw_game.dart';
 import 'puzzle_catalog.dart';
 import 'puzzle_completion.dart';
 import 'puzzle_save.dart';
-import 'studio_mascots.dart';
-import 'studio_surfaces.dart';
 import 'studio_theme.dart';
 
 /// Hosts one running puzzle.
@@ -64,6 +64,11 @@ class GameScreen extends StatefulWidget {
   /// Defaults to the day this screen opens.
   final String? startedDay;
 
+  /// Delay between the last piece locking and the completion card's
+  /// reveal — the in-game glow (0.9s) plays out first. Tests pump this
+  /// exact duration, so keep them on this constant.
+  static const completionRevealDelay = Duration(milliseconds: 950);
+
   @override
   State<GameScreen> createState() => _GameScreenState();
 }
@@ -78,10 +83,6 @@ class _GameScreenState extends State<GameScreen> {
   /// null when the rest of the category is already done at this size).
   PuzzleImage? _nextImage;
 
-  /// The gallery wall's bloom caption, resolved once at credit time; null
-  /// when the run earned no NEW daily credit. The wall shows the bloom —
-  /// the moment of finishing is where the reward must appear.
-  String? _bloomCaption;
   Timer? _completionTimer;
   Timer? _revealFallbackTimer;
   bool _edgesOnly = false;
@@ -157,7 +158,6 @@ class _GameScreenState extends State<GameScreen> {
       _restarting = true;
       _showCompletionCard = false;
       _nextImage = null;
-      _bloomCaption = null;
     });
     // Stop new writes before awaiting any old ones. An already-held finger
     // can still deliver a release after the dialog closes.
@@ -183,8 +183,8 @@ class _GameScreenState extends State<GameScreen> {
 
   Future<bool> _onPuzzleCompleted(JigsawGame game) async {
     if (!mounted || _restarting || !identical(_game, game)) return false;
-    // The card reveals when BOTH the glow delay and its data (next-puzzle
-    // offer, bloom caption) are ready: the delay is armed first so storage
+    // The card reveals when BOTH the glow delay and its data (the
+    // next-puzzle offer) are ready: the delay is armed first so storage
     // latency hides inside the 0.9s glow instead of stacking after it, and
     // the card still never appears with an unresolved hero button (the old
     // button-swap race).
@@ -192,7 +192,7 @@ class _GameScreenState extends State<GameScreen> {
     var dataReady = false;
     _completionTimer?.cancel();
     _revealFallbackTimer?.cancel();
-    _completionTimer = Timer(const Duration(milliseconds: 950), () {
+    _completionTimer = Timer(GameScreen.completionRevealDelay, () {
       delayElapsed = true;
       if (dataReady) {
         _revealCompletionCard(game);
@@ -207,21 +207,25 @@ class _GameScreenState extends State<GameScreen> {
     });
 
     final next = await _findNextPuzzle();
-    // The record writes run UNCONDITIONALLY from here: a completion the
-    // player saw must be stored even if a restart or a chained replacement
-    // lands while the read above was in flight — only the UI fields are
-    // guarded. The streak write stays sequenced ahead of the completion
-    // write so their reads cannot interleave in the preferences cache.
-    final daily = await _recordDailyCompletion(game.runStartedDay);
+    // The reveal depends only on the next-puzzle offer — it must not wait
+    // on the record writes below, or a wedged write would hold the card
+    // (and reassign _nextImage late, resurrecting the button-swap race on
+    // the fallback path).
     if (!_restarting && identical(_game, game)) {
       _nextImage = next;
-      _bloomCaption = daily.bloomCaption;
     }
     dataReady = true;
     if (delayElapsed) {
       _revealFallbackTimer?.cancel();
       _revealCompletionCard(game);
     }
+
+    // The record writes run UNCONDITIONALLY from here: a completion the
+    // player saw must be stored even if a restart or a chained replacement
+    // lands while the read above was in flight — only the UI fields are
+    // guarded. The streak write stays sequenced ahead of the completion
+    // write so their reads cannot interleave in the preferences cache.
+    final dailyRecorded = await _recordDailyCompletion(game.runStartedDay);
 
     // The game keeps its progress save until BOTH records are stored, so a
     // failed daily credit gets the same retry as a failed completion write:
@@ -236,49 +240,37 @@ class _GameScreenState extends State<GameScreen> {
             rows: widget.size.rows,
           ),
         );
-    return daily.recorded && completionRecorded;
+    return dailyRecorded && completionRecorded;
   }
 
-  /// Reveals the gallery wall (idempotent: a fallback reveal followed by
-  /// late-arriving data just rebuilds the wall with the data filled in).
+  /// Reveals the completion card (idempotent: a fallback reveal followed by
+  /// late-arriving data just rebuilds the card with the data filled in).
   void _revealCompletionCard(JigsawGame game) {
     if (mounted && !_restarting && identical(_game, game)) {
+      // The board is static by now (the glow self-removed at 0.9s), but a
+      // running Flame loop repaints every frame, forcing the card's
+      // backdrop blur to re-blur the whole screen each vsync. No resume
+      // needed: every exit pops the route, and restart boots a fresh game.
+      game.pauseEngine();
       setState(() => _showCompletionCard = true);
     }
   }
 
   /// Finishing a daily image at any size blooms the pot of the day the run
-  /// began — the save's stamp (see [dailyCreditDay]). `recorded` false means
-  /// a credit was due but could not be stored. The caption is non-null only
-  /// for a NEWLY credited day: a replay of an already-bloomed day (or a
-  /// retried completion write) celebrates nothing again.
-  Future<({bool recorded, String? bloomCaption})> _recordDailyCompletion(
-    String? startedDay,
-  ) async {
-    final completedAt = _now;
-    final day = dailyCreditDay(
-      widget.image.id,
-      completedAt,
-      startedDay: startedDay,
-    );
+  /// began — the save's stamp (see [dailyCreditDay]). Returns false when a
+  /// credit was due but could not be stored. The bloom itself is only shown
+  /// on the home windowsill — the completion card stays celebration-free
+  /// (owner's UI-4 ruling).
+  Future<bool> _recordDailyCompletion(String? startedDay) async {
+    final day = dailyCreditDay(widget.image.id, _now, startedDay: startedDay);
     if (day == null) {
-      return (recorded: true, bloomCaption: null);
+      return true;
     }
     const store = SharedPreferencesDailyStreakStore();
-    final days = await store.completedDays();
-    if (days.contains(day)) {
-      return (recorded: true, bloomCaption: null);
+    if ((await store.completedDays()).contains(day)) {
+      return true;
     }
-    if (!await store.markCompleted(day)) {
-      return (recorded: false, bloomCaption: null);
-    }
-    // Streak from the set just written: the caption can never contradict
-    // the write it celebrates (a bloomed day always reads at least 1).
-    final streak = currentStreak({...days, day}, completedAt);
-    return (
-      recorded: true,
-      bloomCaption: dailyBloomCaption(day, completedAt, streak),
-    );
+    return store.markCompleted(day);
   }
 
   /// The category's next painting not yet completed at this grid size.
@@ -354,58 +346,67 @@ class _GameScreenState extends State<GameScreen> {
         },
       ),
     ];
-    return Scaffold(
-      // Constant tooltips (they double as semantics labels for e2e tests);
-      // the pressed state shows through the buttons' isSelected styling.
-      appBar: AppBar(
-        toolbarHeight: counterHeight > kToolbarHeight
-            ? counterHeight
-            : kToolbarHeight,
-        title: ValueListenableBuilder<int>(
-          valueListenable: _game.placedCount,
-          builder: (context, placed, _) =>
-              _PaletteCounter(placed: placed, total: widget.size.pieceCount),
-        ),
-        actions: separateTools ? null : tools,
-        // Preserve direct access to every tool while giving the count room
-        // alongside the back button on phones and with enlarged text.
-        bottom: separateTools
-            ? PreferredSize(
-                preferredSize: const Size.fromHeight(48),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: tools,
+    return Stack(
+      children: [
+        // The card's ModalBarrier blocks taps and semantics beneath it,
+        // but not keyboard traversal — focus is excluded here so Tab on
+        // web/desktop cannot reach the blurred-out controls either.
+        ExcludeFocus(
+          excluding: _showCompletionCard,
+          child: Scaffold(
+            // Constant tooltips (they double as semantics labels for e2e
+            // tests); the pressed state shows through the buttons'
+            // isSelected styling.
+            appBar: AppBar(
+              toolbarHeight: counterHeight > kToolbarHeight
+                  ? counterHeight
+                  : kToolbarHeight,
+              title: ValueListenableBuilder<int>(
+                valueListenable: _game.placedCount,
+                builder: (context, placed, _) => _PaletteCounter(
+                  placed: placed,
+                  total: widget.size.pieceCount,
                 ),
-              )
-            : null,
-      ),
-      body: Stack(
-        children: [
-          // Labeled so e2e tests (and screen readers) can identify the
-          // game screen — Flame's canvas exposes no semantics of its own.
-          Semantics(
-            label: _boardSemanticsLabel,
-            child: IgnorePointer(
-              ignoring: _restarting,
-              child: GameWidget(key: ObjectKey(_game), game: _game),
+              ),
+              actions: separateTools ? null : tools,
+              // Preserve direct access to every tool while giving the count room
+              // alongside the back button on phones and with enlarged text.
+              bottom: separateTools
+                  ? PreferredSize(
+                      preferredSize: const Size.fromHeight(48),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: tools,
+                      ),
+                    )
+                  : null,
+            ),
+            // Labeled so e2e tests (and screen readers) can identify the
+            // game screen — Flame's canvas exposes no semantics of its own.
+            body: Semantics(
+              label: _boardSemanticsLabel,
+              child: IgnorePointer(
+                ignoring: _restarting,
+                child: GameWidget(key: ObjectKey(_game), game: _game),
+              ),
             ),
           ),
-          if (_showCompletionCard)
-            _GalleryWall(
-              image: widget.image,
-              pieceCount: widget.size.pieceCount,
-              completedOn: _now,
-              dailyBloom: _bloomCaption,
-              onBackToGallery: () => Navigator.pop(context),
-              // Popping with the painting hands the chain to the launcher's
-              // flow loop, which pushes the next game at the same size.
-              onNextPuzzle: switch (_nextImage) {
-                null => null,
-                final next => () => Navigator.pop(context, next),
-              },
-            ),
-        ],
-      ),
+        ),
+        // Above the Scaffold, not inside its body: the card's backdrop
+        // blur must cover the app bar and its tools too.
+        if (_showCompletionCard)
+          CompletionCard(
+            image: widget.image,
+            pieceCount: widget.size.pieceCount,
+            onBackToGallery: () => Navigator.pop(context),
+            // Popping with the painting hands the chain to the launcher's
+            // flow loop, which pushes the next game at the same size.
+            onNextPuzzle: switch (_nextImage) {
+              null => null,
+              final next => () => Navigator.pop(context, next),
+            },
+          ),
+      ],
     );
   }
 }
@@ -490,222 +491,5 @@ class _PaletteCounter extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-/// The celebration: the finished painting is hung on a gallery wall —
-/// nail, gold frame, plaque, a potted sunflower (mockup "Done · hung in
-/// your gallery").
-class _GalleryWall extends StatelessWidget {
-  const _GalleryWall({
-    required this.image,
-    required this.pieceCount,
-    required this.completedOn,
-    required this.dailyBloom,
-    required this.onBackToGallery,
-    required this.onNextPuzzle,
-  });
-
-  final PuzzleImage image;
-  final int pieceCount;
-  final DateTime completedOn;
-
-  /// Caption for a run that bloomed a daily pot ("Today's pot bloomed ·
-  /// 3-day streak"); null shows the plain sunflower sprig instead.
-  final String? dailyBloom;
-
-  final VoidCallback onBackToGallery;
-
-  /// Starts the category's next unfinished painting; null hides the button
-  /// (the rest of the category is done at this size).
-  final VoidCallback? onNextPuzzle;
-
-  static const _months = [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final date = '${_months[completedOn.month - 1]} ${completedOn.day}';
-    final bloom = dailyBloom;
-    // Fade the wall in as the in-game glow fades out.
-    return Positioned.fill(
-      child: TweenAnimationBuilder<double>(
-        tween: Tween(begin: 0, end: 1),
-        duration: const Duration(milliseconds: 350),
-        curve: Curves.easeOut,
-        builder: (context, value, child) =>
-            Opacity(opacity: value, child: child),
-        child: Container(
-          color: StudioColors.galleryWall,
-          child: Stack(
-            children: [
-              ..._paintSpecks(),
-              SafeArea(
-                // Scrollable so the scene stays usable on short landscape
-                // screens instead of overflowing.
-                child: Center(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _nail(),
-                        const SizedBox(height: 8),
-                        _hungFrame(context),
-                        const SizedBox(height: 12),
-                        _plaque(theme, date),
-                        const SizedBox(height: 6),
-                        // A daily run's reward appears HERE, at the moment
-                        // of finishing — a bloomed pot beside the painting.
-                        if (bloom == null)
-                          const MascotArt(StudioMascot.sprig, height: 60)
-                        else ...[
-                          const MascotArt(StudioMascot.cactus, height: 60),
-                          const SizedBox(height: 4),
-                          Text(bloom, style: theme.textTheme.bodySmall),
-                        ],
-                        const SizedBox(height: 16),
-                        // "One more" is the likely mood right after finishing,
-                        // so the next puzzle is the hero action and the exit
-                        // a quiet text button beneath it.
-                        if (onNextPuzzle != null) ...[
-                          FilledButton(
-                            onPressed: onNextPuzzle,
-                            child: const Text('Next puzzle'),
-                          ),
-                          TextButton(
-                            onPressed: onBackToGallery,
-                            child: const Text('Back to the gallery'),
-                          ),
-                        ] else
-                          FilledButton(
-                            onPressed: onBackToGallery,
-                            child: const Text('Back to the gallery'),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _nail() => Container(
-    width: 7,
-    height: 7,
-    decoration: const BoxDecoration(
-      color: Color(0xFF8A6B43),
-      shape: BoxShape.circle,
-    ),
-  );
-
-  /// The finished painting in a gold frame with a pale inner mat line.
-  Widget _hungFrame(BuildContext context) {
-    final screen = MediaQuery.sizeOf(context);
-    // Bounded by both axes so the frame also fits short landscape screens.
-    final artWidth = [
-      screen.width * 0.72,
-      screen.height * 0.62,
-      320.0,
-    ].reduce((a, b) => a < b ? a : b);
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFFD9A33F), Color(0xFFC08437)],
-        ),
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x80462D0F),
-            offset: Offset(0, 14),
-            blurRadius: 28,
-            spreadRadius: -12,
-          ),
-        ],
-      ),
-      child: Container(
-        foregroundDecoration: BoxDecoration(
-          border: Border.all(color: const Color(0xCCFFFAEB), width: 3),
-          borderRadius: BorderRadius.circular(3),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(3),
-          child: Image.asset(
-            image.assetPath,
-            width: artWidth,
-            // Catalog images are 3:2 (the grid-ladder invariant relies on it).
-            height: artWidth / 1.5,
-            fit: BoxFit.cover,
-            cacheWidth: 640,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _plaque(ThemeData theme, String date) => PaintedCard(
-    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
-    child: Column(
-      children: [
-        Text(
-          image.title,
-          textAlign: TextAlign.center,
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        Text(
-          '$pieceCount pieces · $date · hung in your gallery',
-          textAlign: TextAlign.center,
-          style: theme.textTheme.bodySmall,
-        ),
-      ],
-    ),
-  );
-
-  /// Flecks of studio paint celebrating around the frame.
-  List<Widget> _paintSpecks() {
-    Widget speck(
-      double size,
-      int argb, {
-      double? top,
-      double? left,
-      double? right,
-    }) => Positioned(
-      top: top,
-      left: left,
-      right: right,
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(color: Color(argb), shape: BoxShape.circle),
-      ),
-    );
-    return [
-      speck(9, 0xFFD9A33F, top: 90, left: 48),
-      speck(7, 0xFFC06A45, top: 60, right: 70),
-      speck(8, 0xFF7B8456, top: 150, right: 36),
-      speck(6, 0xFFD79B86, top: 170, left: 32),
-    ];
   }
 }

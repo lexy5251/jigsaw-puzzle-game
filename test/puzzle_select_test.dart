@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:jigsaw_puzzle/completion_card.dart';
 import 'package:jigsaw_puzzle/daily_puzzle.dart';
 import 'package:jigsaw_puzzle/daily_streak.dart';
 import 'package:jigsaw_puzzle/game_screen.dart';
@@ -79,14 +80,19 @@ void main() {
       // Simulate Flame's completion notification after navigating from the
       // catalog. Daily credit must use the selection screen's fixed date.
       expect(await game.onCompleted!(), isTrue);
-      await tester.pump(const Duration(milliseconds: 950));
-      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pump(GameScreen.completionRevealDelay);
+      await tester.pump(CompletionCard.fadeDuration);
+      // Extra frame: the fade tween must land on 1 before the card's
+      // buttons accept taps (its IgnorePointer guards the fade).
+      await tester.pump();
       expect(
         await const SharedPreferencesDailyStreakStore().completedDays(),
         dailyMatchesCatalog ? {dayKey(now)} : isEmpty,
       );
 
-      await tester.pageBack();
+      // The completion card covers the app bar, so the exit is its own
+      // "Back to gallery" button, not the page-back arrow.
+      await tester.tap(find.text('Back to gallery'));
       await tester.pumpAndSettle();
 
       expect(find.byType(GameScreen), findsNothing);
