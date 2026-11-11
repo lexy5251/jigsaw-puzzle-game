@@ -395,6 +395,15 @@ const puzzleCatalog = [
     categoryId: 'art',
     fileName: 'art/garden_bridge_in_bloom.jpg',
   ),
+  // TEMPORARY: side-by-side device comparison for the photo-regeneration
+  // pass (old soft style vs new sharp impasto). Remove after the owner
+  // picks — the keeper takes the garden_bridge_in_bloom slot.
+  PuzzleImage(
+    id: 'garden-bridge-v2',
+    title: 'Garden Bridge (New)',
+    categoryId: 'art',
+    fileName: 'art/garden_bridge_v2.jpg',
+  ),
   PuzzleImage(
     id: 'lemon-terrace-cats',
     title: 'Lemon Terrace Cats',

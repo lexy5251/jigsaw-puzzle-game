@@ -5,10 +5,11 @@ import 'test_helpers.dart';
 
 void main() {
   group('AppSettings json', () {
-    test('round-trips both fields', () {
+    test('round-trips all fields', () {
       const settings = AppSettings(
         effectsVolume: 0.3,
         ghostPreviewDefault: true,
+        boardColorId: 'charcoal',
       );
       expect(AppSettings.fromJsonString(settings.toJsonString()), settings);
     });
@@ -18,12 +19,14 @@ void main() {
       expect(AppSettings.fromJsonString('[1, 2]'), const AppSettings());
     });
 
-    test('a bad field falls back alone, keeping the good one', () {
+    test('a bad field falls back alone, keeping the good ones', () {
       final settings = AppSettings.fromJsonString(
-        '{"effectsVolume": "loud", "ghostPreviewDefault": true}',
+        '{"effectsVolume": "loud", "ghostPreviewDefault": true, '
+        '"boardColorId": 7}',
       );
       expect(settings.effectsVolume, 1);
       expect(settings.ghostPreviewDefault, isTrue);
+      expect(settings.boardColorId, 'tan');
     });
 
     test('out-of-range volume is clamped', () {

@@ -155,8 +155,23 @@ class JigsawGame extends FlameGame
 
   double? _traySpriteAspect;
 
+  BoardColorOption _boardColor = defaultBoardColorOption;
+  RectangleComponent? _boardOutline;
+
   @override
-  Color backgroundColor() => StudioColors.board;
+  Color backgroundColor() => _boardColor.background;
+
+  @visibleForTesting
+  Color get boardOutlineColor => _boardColor.outline;
+
+  /// Swaps the board backdrop and its outline. Safe before onLoad (the
+  /// outline reads the option when added). Flame reads [backgroundColor]
+  /// only while building the GameWidget — not per frame — so the host must
+  /// rebuild it afterwards (GameScreen calls this inside setState).
+  void setBoardColor(BoardColorOption option) {
+    _boardColor = option;
+    _boardOutline?.paint.color = option.outline;
+  }
 
   @override
   Future<void> onLoad() async {
@@ -302,16 +317,15 @@ class JigsawGame extends FlameGame
   }
 
   void _addBoardOutline() {
-    world.add(
-      RectangleComponent(
-        size: _boardSize.clone(),
-        priority: -3, // Render below locked pieces.
-        paint: Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2
-          ..color = StudioColors.boardOutline,
-      ),
+    _boardOutline = RectangleComponent(
+      size: _boardSize.clone(),
+      priority: -3, // Render below locked pieces.
+      paint: Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..color = _boardColor.outline,
     );
+    world.add(_boardOutline!);
     // Above locked pieces (-2), below loose bodies (0): a resting piece's
     // contact shadow falls on the flush picture, while a joined chunk's
     // internal shadows are covered by its own members' bodies.
@@ -374,6 +388,11 @@ class JigsawGame extends FlameGame
     camera.viewport.add(_elevatedOverlay!);
   }
 
+  /// Last size this game laid out for. GameWidget rebuilds (e.g. the board
+  /// color setState) re-fire onGameResize with an unchanged size; refitting
+  /// then would throw away the player's zoom and pan.
+  Vector2? _lastLayoutSize;
+
   @override
   void onGameResize(Vector2 size) {
     super.onGameResize(size);
@@ -382,6 +401,10 @@ class JigsawGame extends FlameGame
     if (tray == null) {
       return; // onLoad sets up the layout after loading finishes.
     }
+    if (size == _lastLayoutSize) {
+      return;
+    }
+    _lastLayoutSize = size.clone(); // Flame reuses the vector it passes in.
 
     tray.resizeTo(
       position: Vector2(0, size.y - _trayHeight),
@@ -459,7 +482,8 @@ class JigsawGame extends FlameGame
     _zoomAroundCanvasPoint(newZoom, canvasFocalPoint);
   }
 
-  /// Returns the camera to the centered fitted view (the AppBar button).
+  /// Returns the camera to the centered fitted view. No UI button triggers
+  /// this anymore; pinching out snaps home instead (see [zoomTo]).
   void resetView() => _fitCameraToBoard();
 
   /// Keeps the world point under [canvasPoint] fixed on screen while zooming.

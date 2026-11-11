@@ -46,6 +46,10 @@ abstract final class StudioColors {
   /// (the old translucent white disappeared on it).
   static const boardOutline = Color(0x59423528);
 
+  /// Board outline for dark backdrops — cream at the same ~35%; the ink
+  /// stroke composites to near-invisible on slate and charcoal.
+  static const boardOutlineOnDark = Color(0x59FDF8EC);
+
   /// Piece tray wood; keeps a hint of translucency so dragged pieces
   /// passing under its edge stay faintly visible.
   static const tray = Color(0xF2E0CFA9);
@@ -55,6 +59,79 @@ abstract final class StudioColors {
   static const blushGround = Color(0xFFF4DDCD);
   static const mossGround = Color(0xFFE5E4C8);
 }
+
+/// One selectable board backdrop. Dark fills need their own outline color:
+/// the default ink stroke all but disappears on them.
+@immutable
+class BoardColorOption {
+  const BoardColorOption({
+    required this.id,
+    required this.label,
+    required this.background,
+    required this.outline,
+  });
+
+  /// Persisted in the settings blob — never rename an existing id.
+  final String id;
+
+  /// Shown in the picker's Semantics labels; keep constant for e2e tests.
+  final String label;
+
+  final Color background;
+  final Color outline;
+}
+
+/// The player-selectable board backdrops: a light→dark ramp of muted tones
+/// so both dark and white-heavy photos can get contrast. Order is the
+/// picker's display order.
+const boardColorOptions = <BoardColorOption>[
+  BoardColorOption(
+    id: 'linen',
+    label: 'Linen',
+    background: Color(0xFFF3EBD9),
+    outline: StudioColors.boardOutline,
+  ),
+  defaultBoardColorOption,
+  BoardColorOption(
+    id: 'taupe',
+    label: 'Taupe',
+    background: Color(0xFFBCAF99),
+    outline: StudioColors.boardOutline,
+  ),
+  BoardColorOption(
+    id: 'sage',
+    label: 'Sage',
+    background: Color(0xFFA5AB8B),
+    outline: StudioColors.boardOutline,
+  ),
+  BoardColorOption(
+    id: 'slate',
+    label: 'Slate',
+    background: Color(0xFF75808B),
+    outline: StudioColors.boardOutlineOnDark,
+  ),
+  BoardColorOption(
+    id: 'charcoal',
+    label: 'Charcoal',
+    // Near-black with a warm tint (owner's pick from the 11-10 pick sheet,
+    // candidate C) — "not exact black, but darker".
+    background: Color(0xFF221D17),
+    outline: StudioColors.boardOutlineOnDark,
+  ),
+];
+
+/// The classic warm tan the board has always used.
+const defaultBoardColorOption = BoardColorOption(
+  id: 'tan',
+  label: 'Warm tan',
+  background: StudioColors.board,
+  outline: StudioColors.boardOutline,
+);
+
+/// Unknown ids (old installs, future removals) degrade to the default
+/// instead of crashing the game screen.
+BoardColorOption boardColorOptionFor(String id) => boardColorOptions
+    .firstWhere((option) => option.id == id, orElse: () => defaultBoardColorOption);
 
 /// Per-category personality (mockup section F): only two things change per
 /// category — the accent and its tint. One table over the shared theme,

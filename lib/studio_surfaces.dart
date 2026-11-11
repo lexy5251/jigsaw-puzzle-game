@@ -273,22 +273,26 @@ class FramedArt extends StatelessWidget {
 
 /// A small organic-edged dot of accent paint (category swatches).
 class PaintedSwatch extends StatelessWidget {
-  const PaintedSwatch({super.key, required this.color});
+  const PaintedSwatch({super.key, required this.color, this.size = 14});
 
   final Color color;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
+    // The elliptical radii scale with the size so a larger daub keeps the
+    // same organic silhouette instead of looking rounder.
+    final unit = size / 14;
     return Container(
-      width: 14,
-      height: 14,
+      width: size,
+      height: size,
       decoration: BoxDecoration(
         color: color,
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.elliptical(7, 6),
-          topRight: Radius.elliptical(6, 8),
-          bottomLeft: Radius.elliptical(6, 7),
-          bottomRight: Radius.elliptical(8, 6),
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.elliptical(7 * unit, 6 * unit),
+          topRight: Radius.elliptical(6 * unit, 8 * unit),
+          bottomLeft: Radius.elliptical(6 * unit, 7 * unit),
+          bottomRight: Radius.elliptical(8 * unit, 6 * unit),
         ),
       ),
     );

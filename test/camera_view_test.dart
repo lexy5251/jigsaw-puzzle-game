@@ -2,11 +2,9 @@ import 'package:flame/game.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jigsaw_puzzle/jigsaw_game.dart';
 
-import 'test_helpers.dart';
-
 /// Camera rules from the 2026-11-05 phone-test rulings: the board stays put
 /// at the fitted view, panning is earned by zooming in, and zooming back out
-/// (or the AppBar fit button) snaps the camera home.
+/// snaps the camera home (resetView does the same on resize/rotation).
 void main() {
   Future<JigsawGame> bootGame(WidgetTester tester) async {
     final game = JigsawGame(imageAsset: 'test_photo.jpg', columns: 6, rows: 4);
@@ -89,20 +87,23 @@ void main() {
     expect(game.camera.viewfinder.position, home);
   });
 
-  testWidgets('the fit-screen AppBar button resets the view', (tester) async {
-    MockSharedPreferences().install();
-    final game = await bootGameScreen(
-      tester,
-      image: singlePieceImage,
-      size: singlePieceSize,
-    );
+  testWidgets('a same-size relayout keeps the zoomed and panned view', (
+    tester,
+  ) async {
+    final game = await bootGame(tester);
     final fit = game.camera.viewfinder.zoom;
-    final home = game.camera.viewfinder.position.clone();
-    game.zoomTo(fit * 2, Vector2(100, 100));
+    game.zoomTo(fit * 2, Vector2(400, 246));
+    game.panBy(Vector2(-50, -30));
+    final view = game.camera.viewfinder.position.clone();
 
-    await tester.tap(find.byTooltip('Fit board to screen'));
-    await tester.pump();
-    expect(game.camera.viewfinder.zoom, fit);
-    expect(game.camera.viewfinder.position, home);
+    // GameWidget rebuilds (the board color setState) re-fire onGameResize
+    // with an unchanged size — the player's view must survive them.
+    game.onGameResize(game.size.clone());
+    expect(game.camera.viewfinder.zoom, fit * 2);
+    expect(game.camera.viewfinder.position, view);
+
+    // An actual size change still refits the board.
+    game.onGameResize(game.size + Vector2(0, 80));
+    expect(game.camera.viewfinder.zoom, isNot(fit * 2));
   });
 }

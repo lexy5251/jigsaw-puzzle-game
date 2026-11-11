@@ -25,6 +25,7 @@ import 'jigsaw_game.dart';
 import 'puzzle_catalog.dart';
 import 'puzzle_completion.dart';
 import 'puzzle_save.dart';
+import 'studio_surfaces.dart';
 import 'studio_theme.dart';
 
 /// Hosts one running puzzle.
@@ -75,6 +76,7 @@ class GameScreen extends StatefulWidget {
 
 class _GameScreenState extends State<GameScreen> {
   static const _saveStore = SharedPreferencesSaveStore();
+  static const _settingsStore = SharedPreferencesAppSettingsStore();
 
   bool _showCompletionCard = false;
   bool _restarting = false;
@@ -87,6 +89,9 @@ class _GameScreenState extends State<GameScreen> {
   Timer? _revealFallbackTimer;
   bool _edgesOnly = false;
   late bool _showGhostPreview = widget.settings.ghostPreviewDefault;
+  late BoardColorOption _boardColor = boardColorOptionFor(
+    widget.settings.boardColorId,
+  );
 
   /// Null until the game finishes loading, then whether it resumed a save.
   bool? _resumed;
@@ -122,11 +127,42 @@ class _GameScreenState extends State<GameScreen> {
         }
       },
     );
-    // Both setters are safe before the game loads: they store the flag,
-    // and loading applies it.
+    // All three setters are safe before the game loads: they store the
+    // value, and loading applies it. Setting the color here is what keeps
+    // it across restarts and "Next puzzle" chains (each builds a new game).
     game.setEdgesOnlyFilter(_edgesOnly);
     game.setGhostPreview(_showGhostPreview);
+    game.setBoardColor(_boardColor);
     return game;
+  }
+
+  Future<void> _showBoardColorPicker() => showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: StudioColors.ground,
+    // No scrim: the sheet exists to compare swatches against the live
+    // board, so the board must keep its true colors while it's open.
+    barrierColor: Colors.transparent,
+    builder: (_) => _BoardColorPicker(
+      selectedId: _boardColor.id,
+      onSelected: _selectBoardColor,
+    ),
+  );
+
+  void _selectBoardColor(BoardColorOption option) {
+    // setState so the GameWidget rebuilds — Flame only re-reads
+    // backgroundColor() during the widget build (see setBoardColor).
+    setState(() {
+      _boardColor = option;
+      _game.setBoardColor(option);
+    });
+    unawaited(_persistBoardColor(option.id));
+  }
+
+  Future<void> _persistBoardColor(String id) async {
+    // Fresh read before writing: the blob also carries volume/ghost prefs,
+    // and widget.settings may be stale against SettingsScreen edits.
+    final current = await _settingsStore.load();
+    await _settingsStore.save(current.copyWith(boardColorId: id));
   }
 
   /// Confirms, forgets the stored progress, and boots a fresh board.
@@ -317,9 +353,9 @@ class _GameScreenState extends State<GameScreen> {
         19 + textScaler.scale(16) * 1.1 + textScaler.scale(9) * 1.1;
     final tools = <Widget>[
       IconButton(
-        tooltip: 'Fit board to screen',
-        icon: const Icon(Icons.fit_screen),
-        onPressed: () => _game.resetView(),
+        tooltip: 'Board color',
+        icon: const Icon(Icons.format_color_fill),
+        onPressed: _showBoardColorPicker,
       ),
       IconButton(
         tooltip: 'Restart puzzle',
@@ -488,6 +524,100 @@ class _PaletteCounter extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Swatch row for picking the board backdrop. The sheet stays open after a
+/// tap so the player can compare colors against the live board above it;
+/// swipe or the scrim dismisses it.
+class _BoardColorPicker extends StatefulWidget {
+  const _BoardColorPicker({required this.selectedId, required this.onSelected});
+
+  final String selectedId;
+  final ValueChanged<BoardColorOption> onSelected;
+
+  @override
+  State<_BoardColorPicker> createState() => _BoardColorPickerState();
+}
+
+class _BoardColorPickerState extends State<_BoardColorPicker> {
+  late String _selectedId = widget.selectedId;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return SafeArea(
+      // Scrollable so enlarged text can't overflow the sheet's height cap;
+      // the min-sized Column keeps the sheet hugging its content otherwise.
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Board color', style: theme.textTheme.titleLarge),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                for (final option in boardColorOptions)
+                  _BoardColorSwatch(
+                    option: option,
+                    selected: option.id == _selectedId,
+                    onTap: () {
+                      setState(() => _selectedId = option.id);
+                      widget.onSelected(option);
+                    },
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BoardColorSwatch extends StatelessWidget {
+  const _BoardColorSwatch({
+    required this.option,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final BoardColorOption option;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    // The check must read on any fill, so pick ink or cream by luminance.
+    final checkColor = option.background.computeLuminance() < 0.35
+        ? StudioColors.onTerracotta
+        : StudioColors.ink;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: 'Board color: ${option.label}',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: SizedBox(
+          width: 48,
+          height: 48,
+          child: Center(
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                PaintedSwatch(color: option.background, size: 40),
+                if (selected) Icon(Icons.check, size: 22, color: checkColor),
+              ],
+            ),
+          ),
         ),
       ),
     );

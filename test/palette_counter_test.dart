@@ -109,7 +109,7 @@ void main() {
           findsOneWidget,
         );
         for (final tooltip in [
-          'Fit board to screen',
+          'Board color',
           'Restart puzzle',
           'Edge pieces only',
           'Image preview',
