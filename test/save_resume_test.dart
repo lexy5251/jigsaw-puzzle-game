@@ -6,6 +6,8 @@ import 'package:jigsaw_puzzle/jigsaw_game.dart';
 import 'package:jigsaw_puzzle/puzzle_piece.dart';
 import 'package:jigsaw_puzzle/puzzle_save.dart';
 
+import 'test_helpers.dart';
+
 /// Save & resume behavior: snapshots are written as pieces settle and are
 /// restored on boot. Uses the in-memory store, so no platform storage runs.
 void main() {
@@ -86,6 +88,7 @@ void main() {
         trayPieceIndexes: savedTrayOrder,
         lockedPieceIndexes: const [0],
         loosePiecePositions: {1: Vector2(50, 70)},
+        boardWidth: testPhotoWidth,
       ),
     );
 
@@ -120,6 +123,7 @@ void main() {
         trayPieceIndexes: const [0, 1, 2], // written for a different size
         lockedPieceIndexes: const [],
         loosePiecePositions: const {},
+        boardWidth: testPhotoWidth,
       ),
     );
 
@@ -256,6 +260,7 @@ void main() {
           trayPieceIndexes: const [],
           lockedPieceIndexes: const [],
           loosePiecePositions: {0: Vector2(10, 40), 1: Vector2(60, 40)},
+          boardWidth: testPhotoWidth,
         ),
       );
       var completions = 0;
@@ -307,6 +312,7 @@ void main() {
         trayPieceIndexes: const [],
         lockedPieceIndexes: const [0, 1],
         loosePiecePositions: const {},
+        boardWidth: testPhotoWidth,
       ),
     );
     var completions = 0;
@@ -337,6 +343,7 @@ void main() {
         trayPieceIndexes: const [],
         lockedPieceIndexes: const [],
         loosePiecePositions: {0: Vector2(25, 30)},
+        boardWidth: testPhotoWidth,
       ),
     );
     final completionGate = Completer<bool>();
@@ -369,6 +376,7 @@ void main() {
         trayPieceIndexes: const [],
         lockedPieceIndexes: const [],
         loosePiecePositions: {0: Vector2(25, 30)},
+        boardWidth: testPhotoWidth,
       ),
     );
     final newGame = makeGame(store, columns: 1, rows: 1);

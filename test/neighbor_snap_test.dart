@@ -8,6 +8,8 @@ import 'package:jigsaw_puzzle/jigsaw_game.dart';
 import 'package:jigsaw_puzzle/puzzle_piece.dart';
 import 'package:jigsaw_puzzle/puzzle_save.dart';
 
+import 'test_helpers.dart';
+
 class _Sounds implements GameSounds {
   int snaps = 0;
   int drops = 0;
@@ -50,6 +52,7 @@ void main() {
           ],
           lockedPieceIndexes: const [],
           loosePiecePositions: loose,
+          boardWidth: testPhotoWidth,
         ),
       );
     }
@@ -141,6 +144,7 @@ void main() {
         'tray',
         'locked',
         'loose',
+        'board',
       });
       expect(
         saved.loosePiecePositions[1]!.distanceTo(p[1]!.position),

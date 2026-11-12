@@ -56,7 +56,11 @@ class JigsawGame extends FlameGame
     this.sounds,
     this.onCompleted,
     this.onBoardLoaded,
-  });
+  }) {
+    // Claim at construction, not load: a restart creates the new game before
+    // the old one disposes, so the handover keeps the cached photo warm.
+    _imageOwners[imageAsset] = _imageOwnerToken;
+  }
 
   /// Owned by this game and disposed with it; null keeps the game silent.
   final GameSounds? sounds;
@@ -120,6 +124,26 @@ class JigsawGame extends FlameGame
     return key == null || identical(_saveKeyOwners[key], _saveOwnerToken);
   }
 
+  // Which game instance currently owns each cached source photo. The cache
+  // (global Flame.images by default) never evicts on its own, and at 3072px
+  // a decoded photo holds ~25MB — so the owning game drops it on dispose.
+  // Ownership prevents a late-disposing game (route pop after its exit
+  // animation) from yanking an image a newer game of the same photo uses.
+  static final Map<String, Object> _imageOwners = {};
+  final Object _imageOwnerToken = Object();
+
+  /// True while [_loadPuzzle] runs. A dispose that lands mid-load must not
+  /// release the source photo — pending piece bakes still draw from it — so
+  /// the loader's own disposed-early exits release it instead.
+  bool _loadInFlight = false;
+
+  void _releaseSourceImageIfOwner() {
+    if (identical(_imageOwners[imageAsset], _imageOwnerToken)) {
+      _imageOwners.remove(imageAsset);
+      images.clear(imageAsset);
+    }
+  }
+
   // Live piece state: the tray holds unused pieces; world holds board pieces.
   PieceTray? _tray;
   _ElevatedPieceOverlay? _elevatedOverlay;
@@ -179,10 +203,13 @@ class JigsawGame extends FlameGame
       return;
     }
     try {
+      _loadInFlight = true;
       await _loadPuzzle();
     } catch (_) {
       _disposePieceImages();
       rethrow;
+    } finally {
+      _loadInFlight = false;
     }
   }
 
@@ -197,6 +224,7 @@ class JigsawGame extends FlameGame
 
     final image = await images.load(imageAsset);
     if (_disposed || _discardingProgress) {
+      if (_disposed) _releaseSourceImageIfOwner();
       return;
     }
 
@@ -234,11 +262,13 @@ class JigsawGame extends FlameGame
     // Disposal can happen while the rasterizer is still producing images.
     if (_disposed || _discardingProgress) {
       _disposePieceImages();
+      if (_disposed) _releaseSourceImageIfOwner();
       return;
     }
     final allPieces = _createPieceData(shapedImages, pieceSize);
-    final savedState = await _loadSavedProgress(allPieces.length);
+    final savedState = await _loadSavedProgress(allPieces.length, image.width);
     if (_disposed || _discardingProgress) {
+      if (_disposed) _releaseSourceImageIfOwner();
       return;
     }
 
@@ -277,6 +307,9 @@ class JigsawGame extends FlameGame
     }
     _disposed = true;
     _disposePieceImages();
+    if (!_loadInFlight) {
+      _releaseSourceImageIfOwner();
+    }
     unawaited(sounds?.dispose());
     super.onDispose();
   }
@@ -777,7 +810,10 @@ class JigsawGame extends FlameGame
 
   /// Returns a usable save, or null to start fresh.
   /// Storage may be disabled, or the save may be missing or invalid.
-  Future<PuzzleSaveState?> _loadSavedProgress(int totalPieces) async {
+  Future<PuzzleSaveState?> _loadSavedProgress(
+    int totalPieces,
+    int boardWidth,
+  ) async {
     final store = saveStore;
     final key = saveKey;
     if (store == null || key == null) {
@@ -785,6 +821,12 @@ class JigsawGame extends FlameGame
     }
     final state = await store.load(key);
     if (state == null || !state.isConsistentFor(totalPieces)) {
+      return null;
+    }
+    // World coordinates are image pixels: a snapshot written against a
+    // different image width (or before the field existed) would restore at
+    // the wrong scale, so the puzzle starts fresh instead.
+    if (state.boardWidth != boardWidth) {
       return null;
     }
     return state;
@@ -900,6 +942,7 @@ class JigsawGame extends FlameGame
       lockedPieceIndexes: lockedPieceIndexes,
       loosePiecePositions: loosePiecePositions,
       startedDay: _runStartedDay,
+      boardWidth: _boardSize.x.round(),
     );
   }
 }

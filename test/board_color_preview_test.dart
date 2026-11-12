@@ -10,29 +10,24 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show FontLoader;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jigsaw_puzzle/piece_renderer.dart';
 import 'package:jigsaw_puzzle/piece_shapes.dart';
 import 'package:jigsaw_puzzle/studio_theme.dart';
+
+import 'test_helpers.dart';
 
 const _panelWidth = 620.0;
 const _panelHeight = 440.0;
 const _columns = 3;
 
 void main() {
-  final enabled = Platform.environment['BOARD_COLOR_PREVIEW'] == '1';
+  final enabled = previewEnabled('BOARD_COLOR_PREVIEW');
 
   testWidgets('render the board-color preview sheet', (tester) async {
     await tester.runAsync(() async {
       // Real font so the hex captions are readable (tests default to Ahem).
-      final fontLoader = FontLoader('Nunito')
-        ..addFont(
-          File(
-            'assets/fonts/Nunito-Bold.ttf',
-          ).readAsBytes().then((bytes) => bytes.buffer.asByteData()),
-        );
-      await fontLoader.load();
+      await loadStudioFonts();
 
       Future<List<ShapedPieceImage>> cutPieces(String path, int seed) async {
         final bytes = await File(path).readAsBytes();
@@ -56,7 +51,7 @@ void main() {
       // The motivating case: a white-heavy snow photo, hard to see on the
       // current tan. test_photo is the colorful control.
       final snowPieces = await cutPieces(
-        'assets/images/landscapes/snowcapped_lake.jpg',
+        'assets/images/landscapes/snowcapped_lake.webp',
         7,
       );
       final controlPieces = await cutPieces('assets/images/test_photo.jpg', 11);
@@ -142,10 +137,7 @@ void main() {
       );
       picture.dispose();
       addTearDown(sheet.dispose);
-      final png = await sheet.toByteData(format: ui.ImageByteFormat.png);
-      final out = File('docs/board-color-preview.png');
-      await out.writeAsBytes(png!.buffer.asUint8List());
-      debugPrint('board-color preview written to ${out.absolute.path}');
+      await writePreviewPng(sheet, 'docs/board-color-preview.png');
     });
   }, skip: !enabled);
 }

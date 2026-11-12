@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jigsaw_puzzle/game_screen.dart';
 import 'package:jigsaw_puzzle/puzzle_catalog.dart';
@@ -12,14 +11,8 @@ import 'test_helpers.dart';
 /// Covers the palette piece-counter in the game screen's app bar.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  setUpAll(() async {
-    // Default test fonts have different metrics from the shipped counter.
-    final loader = FontLoader('Nunito');
-    for (final weight in ['Regular', 'SemiBold', 'Bold', 'ExtraBold']) {
-      loader.addFont(rootBundle.load('assets/fonts/Nunito-$weight.ttf'));
-    }
-    await loader.load();
-  });
+  // Default test fonts have different metrics from the shipped counter.
+  setUpAll(loadStudioFonts);
 
   late MockSharedPreferences prefs;
   setUp(() {
@@ -60,6 +53,7 @@ void main() {
           trayPieceIndexes: [for (var i = 200; i < 216; i++) i],
           lockedPieceIndexes: [for (var i = 0; i < 200; i++) i],
           loosePiecePositions: const {},
+          boardWidth: testPhotoWidth,
         ).toJsonString();
         await tester.runAsync(() async {
           await tester.pumpWidget(

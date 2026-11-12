@@ -8,6 +8,8 @@ import 'package:jigsaw_puzzle/piece_tray.dart';
 import 'package:jigsaw_puzzle/puzzle_piece.dart';
 import 'package:jigsaw_puzzle/puzzle_save.dart';
 
+import 'test_helpers.dart';
+
 /// A piece carried across the tray must stay visible (2026-11-06 phone
 /// request): the tray overlay re-renders exactly the elevated pieces.
 void main() {
@@ -67,6 +69,7 @@ void main() {
           trayPieceIndexes: [for (var i = 1; i < 24; i++) i],
           lockedPieceIndexes: const [],
           loosePiecePositions: {0: Vector2(300, 220)},
+          boardWidth: testPhotoWidth,
         ),
       );
       final game = JigsawGame(

@@ -5,6 +5,8 @@ import 'package:jigsaw_puzzle/puzzle_logic.dart';
 import 'package:jigsaw_puzzle/puzzle_piece.dart';
 import 'package:jigsaw_puzzle/puzzle_save.dart';
 
+import 'test_helpers.dart';
+
 /// Covers the two board helper toggles: the edges-only tray filter and the
 /// ghost image preview. Both can be flipped before the game finishes loading
 /// (the buttons exist immediately), so that path is tested too.
@@ -77,6 +79,7 @@ void main() {
             trayPieceIndexes: List.generate(24, (i) => i),
             lockedPieceIndexes: const [],
             loosePiecePositions: const {},
+            boardWidth: testPhotoWidth,
           ),
         );
         final game = await bootGame(

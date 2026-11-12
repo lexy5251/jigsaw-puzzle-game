@@ -24,6 +24,7 @@ void main() {
         loosePiecePositions: {
           for (var i = 0; i < placed; i++) i: Vector2(300, 220),
         },
+        boardWidth: testPhotoWidth,
       ).toJsonString();
       final game = await bootGameScreen(
         tester,

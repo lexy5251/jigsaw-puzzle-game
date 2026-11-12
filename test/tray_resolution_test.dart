@@ -17,6 +17,8 @@ import 'package:jigsaw_puzzle/puzzle_piece.dart';
 import 'package:jigsaw_puzzle/puzzle_save.dart';
 import 'package:jigsaw_puzzle/studio_theme.dart';
 
+import 'test_helpers.dart';
+
 void main() {
   PieceTray trayOf(JigsawGame game) =>
       game.camera.viewport.children.whereType<PieceTray>().single;
@@ -197,6 +199,7 @@ void main() {
         ],
         lockedPieceIndexes: const [],
         loosePiecePositions: {8: Vector2(8 % 6 * width, 8 ~/ 6 * height)},
+        boardWidth: testPhotoWidth,
       ),
     );
     final game = JigsawGame(

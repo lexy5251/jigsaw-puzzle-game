@@ -91,6 +91,7 @@ void main() {
     final source = await tester.runAsync(
       () => old.images.load(singlePieceImage.fileName),
     );
+    expect(old.images.containsKey(singlePieceImage.fileName), isTrue);
 
     await confirmRestart(tester);
     final next = await finishRestart(tester, old);
@@ -107,6 +108,10 @@ void main() {
     expect(sounds.map((audio) => audio.disposals), [1, 1, 0]);
     await tester.pumpWidget(const SizedBox.shrink());
     expect(sounds.map((audio) => audio.disposals), [1, 1, 1]);
+    // The last run owned the cached source photo and dropped it on dispose —
+    // restarts hand the entry over, leaving the screen frees it.
+    expect(next.images.containsKey(singlePieceImage.fileName), isFalse);
+    expect(source.debugDisposed, isTrue);
   });
 
   testWidgets('late drops cannot save while the restart deletion is pending', (

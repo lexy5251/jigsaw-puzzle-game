@@ -52,9 +52,7 @@ void main() {
       await tester.tap(landscapesCard);
       await tester.pumpAndSettle();
 
-      final catalogTitle = find.bySemanticsIdentifier(
-        'catalog-puzzle-alpine-lakes-panorama',
-      );
+      final catalogTitle = catalogPuzzleCard('alpine-lakes-panorama');
       await scrollSelectScreenTo(tester, catalogTitle, delta: 150);
       expect(catalogTitle, findsOneWidget);
       expect(tester.getSemantics(catalogTitle).label, 'Alpine Lakes Panorama');

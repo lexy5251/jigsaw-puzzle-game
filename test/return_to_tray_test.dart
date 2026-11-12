@@ -5,6 +5,8 @@ import 'package:jigsaw_puzzle/piece_tray.dart';
 import 'package:jigsaw_puzzle/puzzle_piece.dart';
 import 'package:jigsaw_puzzle/puzzle_save.dart';
 
+import 'test_helpers.dart';
+
 /// Returning pieces to the tray (2026-11-05 phone request): a lone loose
 /// piece dropped over the tray leaves the board and rejoins the strip,
 /// while chunks and locked pieces stay on the board.
@@ -29,6 +31,7 @@ void main() {
         ],
         lockedPieceIndexes: const [],
         loosePiecePositions: loose,
+        boardWidth: testPhotoWidth,
       ),
     );
     final game = JigsawGame(

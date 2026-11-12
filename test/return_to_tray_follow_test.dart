@@ -11,6 +11,8 @@ import 'package:jigsaw_puzzle/piece_tray.dart';
 import 'package:jigsaw_puzzle/puzzle_piece.dart';
 import 'package:jigsaw_puzzle/puzzle_save.dart';
 
+import 'test_helpers.dart';
+
 void main() {
   const key = 'return-follow-tests';
   const width = 1600 / 6;
@@ -31,6 +33,7 @@ void main() {
         ],
         lockedPieceIndexes: const [],
         loosePiecePositions: loose,
+        boardWidth: testPhotoWidth,
       ),
     );
     final game = JigsawGame(

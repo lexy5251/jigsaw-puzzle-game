@@ -12,8 +12,10 @@ import 'package:jigsaw_puzzle/piece_renderer.dart';
 import 'package:jigsaw_puzzle/piece_shapes.dart';
 import 'package:jigsaw_puzzle/studio_theme.dart';
 
+import 'test_helpers.dart';
+
 void main() {
-  final enabled = Platform.environment['PIECE_PREVIEW'] == '1';
+  final enabled = previewEnabled('PIECE_PREVIEW');
 
   testWidgets('render the piece-look preview sheet', (tester) async {
     await tester.runAsync(() async {
@@ -68,10 +70,7 @@ void main() {
       final sheet = await picture.toImage(1240, 760);
       picture.dispose();
       addTearDown(sheet.dispose);
-      final png = await sheet.toByteData(format: ui.ImageByteFormat.png);
-      final out = File('docs/piece-look-preview.png');
-      await out.writeAsBytes(png!.buffer.asUint8List());
-      debugPrint('piece-look preview written to ${out.absolute.path}');
+      await writePreviewPng(sheet, 'docs/piece-look-preview.png');
     });
   }, skip: !enabled);
 }

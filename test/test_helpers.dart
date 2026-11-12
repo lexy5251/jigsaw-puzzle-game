@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
@@ -32,18 +34,86 @@ final singlePieceProgressKey =
 final singlePieceCompletionKey =
     'flutter.${puzzleCompletionKey(imageId: singlePieceImage.id, columns: singlePieceSize.columns, rows: singlePieceSize.rows)}';
 
+/// Width of assets/images/test_photo.jpg. Injected saves must stamp it as
+/// [PuzzleSaveState.boardWidth] or the game discards them as written against
+/// a different image resolution.
+const testPhotoWidth = 1600;
+
 /// One loose piece at its target; a settle completes the puzzle.
 PuzzleSaveState singleLoosePieceSave({String? startedDay}) => PuzzleSaveState(
   trayPieceIndexes: const [],
   lockedPieceIndexes: const [],
   loosePiecePositions: {0: Vector2.zero()},
   startedDay: startedDay,
+  boardWidth: testPhotoWidth,
 );
 
 /// Extracts the game currently hosted by the screen, including after restart.
 JigsawGame currentGame(WidgetTester tester) => tester
     .widget<GameWidget<JigsawGame>>(find.byType(GameWidget<JigsawGame>))
     .game!;
+
+/// The category page's photo card for one catalog image — the same semantics
+/// identifier the Maestro flows tap.
+Finder catalogPuzzleCard(String id) =>
+    find.bySemanticsIdentifier('catalog-puzzle-$id');
+
+/// True when the named preview harness was explicitly requested, e.g.
+/// CATEGORY_GRID_PREVIEW=1 flutter test test/category_grid_preview_test.dart
+bool previewEnabled(String envVar) => Platform.environment[envVar] == '1';
+
+/// Loads every bundled font so previews and pixel tests render in the real
+/// studio type instead of the test-default Ahem boxes.
+Future<void> loadStudioFonts() async {
+  const families = {
+    'Fredoka': ['Fredoka-Medium', 'Fredoka-SemiBold'],
+    'Nunito': [
+      'Nunito-Regular',
+      'Nunito-SemiBold',
+      'Nunito-Bold',
+      'Nunito-ExtraBold',
+    ],
+  };
+  for (final family in families.entries) {
+    final loader = FontLoader(family.key);
+    for (final file in family.value) {
+      loader.addFont(rootBundle.load('assets/fonts/$file.ttf'));
+    }
+    await loader.load();
+  }
+}
+
+/// Encodes a captured preview to PNG and announces the absolute path (the
+/// owner's preview harnesses all land under docs/, which stays out of Git).
+Future<void> writePreviewPng(ui.Image shot, String path) async {
+  final png = await shot.toByteData(format: ui.ImageByteFormat.png);
+  final out = File(path);
+  await out.parent.create(recursive: true);
+  await out.writeAsBytes(png!.buffer.asUint8List());
+  debugPrint('preview written to ${out.absolute.path}');
+}
+
+/// Sizes the test surface like a phone (the owner's 390x844 portrait by
+/// default) and pumps [home] under the studio theme. [boundaryKey], when
+/// given, wraps the app in a RepaintBoundary for preview captures.
+Future<void> pumpPhoneApp(
+  WidgetTester tester,
+  Widget home, {
+  Size size = const Size(390, 844),
+  Key? boundaryKey,
+}) async {
+  tester.view.physicalSize = size;
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
+  final app = MaterialApp(
+    theme: studioTheme(),
+    debugShowCheckedModeBanner: false,
+    home: home,
+  );
+  await tester.pumpWidget(
+    boundaryKey == null ? app : RepaintBoundary(key: boundaryKey, child: app),
+  );
+}
 
 /// Channel-backed preferences with controllable storage failures.
 class MockSharedPreferences {

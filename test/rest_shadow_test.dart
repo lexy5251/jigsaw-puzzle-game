@@ -10,6 +10,8 @@ import 'package:jigsaw_puzzle/jigsaw_game.dart';
 import 'package:jigsaw_puzzle/puzzle_piece.dart';
 import 'package:jigsaw_puzzle/puzzle_save.dart';
 
+import 'test_helpers.dart';
+
 void main() {
   const columns = 6;
   const rows = 4;
@@ -30,6 +32,7 @@ void main() {
         ],
         lockedPieceIndexes: const [3],
         loosePiecePositions: {8: Vector2(2 * width, 1.5 * height)},
+        boardWidth: testPhotoWidth,
       ),
     );
     final game = JigsawGame(

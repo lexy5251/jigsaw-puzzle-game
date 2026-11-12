@@ -298,7 +298,12 @@ class _GameScreenState extends State<GameScreen> {
   /// on the home windowsill — the completion card stays celebration-free
   /// (owner's UI-4 ruling).
   Future<bool> _recordDailyCompletion(String? startedDay) async {
-    final day = dailyCreditDay(widget.image.id, _now, startedDay: startedDay);
+    final day = dailyCreditDay(
+      widget.image.id,
+      _now,
+      startedDay: startedDay,
+      catalog: widget.catalog,
+    );
     if (day == null) {
       return true;
     }

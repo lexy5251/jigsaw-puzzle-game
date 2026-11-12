@@ -47,7 +47,7 @@ void main() {
     return source;
   }
 
-  testWidgets('leaving the game disposes its pieces, not the shared source', (
+  testWidgets('leaving the game disposes its pieces and the cached source', (
     tester,
   ) async {
     final game = JigsawGame(imageAsset: 'test_photo.jpg', columns: 6, rows: 4);
@@ -60,10 +60,14 @@ void main() {
     // 24 pieces x two bakes each (body + contact shadow).
     expect(generated.length, 48);
     expect(generated.every((image) => !image.debugDisposed), isTrue);
+    expect(game.images.containsKey('test_photo.jpg'), isTrue);
 
     await tester.pumpWidget(const SizedBox.shrink());
     expect(generated.every((image) => image.debugDisposed), isTrue);
-    expect(source.debugDisposed, isFalse);
+    // The game owned the source photo, so leaving evicts it from the cache
+    // (at 3072px a lingering decode holds ~25MB per puzzle played).
+    expect(source.debugDisposed, isTrue);
+    expect(game.images.containsKey('test_photo.jpg'), isFalse);
     // Cleanup is safe if the owner receives a repeated disposal request.
     game.onDispose();
   });
@@ -99,7 +103,8 @@ void main() {
     expect(reportedLoaded, isFalse);
     expect(game.trayPieceIndexes, isEmpty);
     expect(await store.exists('leaving-during-load'), isFalse);
-    expect(source.debugDisposed, isFalse);
+    // The loader's disposed-early exit released the owned source.
+    expect(source.debugDisposed, isTrue);
   });
 
   testWidgets(
@@ -127,7 +132,9 @@ void main() {
       expect(generated.every((image) => image.debugDisposed), isTrue);
       expect(reportedLoaded, isFalse);
       expect(game.trayPieceIndexes, isEmpty);
-      expect(source.debugDisposed, isFalse);
+      // The source outlived the in-flight bakes (disposing it mid-bake would
+      // crash them) and was released once rasterization finished.
+      expect(source.debugDisposed, isTrue);
     },
   );
 }

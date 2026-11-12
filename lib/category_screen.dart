@@ -1,6 +1,10 @@
-// One collection's page: its puzzles in a responsive grid under the
-// category's mascot header. Tapping a painting opens the shared size
-// sheet → game flow.
+// One collection's page: its puzzles as a responsive grid of rounded,
+// slightly hand-tilted photo cards under the category's mascot header — no
+// titles and no torn frame, the picture is the whole pitch (owner's UI-6
+// rulings: bare images get straight edges; names live in semantics only).
+// Tapping a painting opens the shared size sheet → game flow.
+
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -11,15 +15,25 @@ import 'puzzle_launcher.dart';
 import 'puzzle_save.dart';
 import 'studio_mascots.dart';
 import 'studio_surfaces.dart';
+import 'studio_theme.dart';
 
 class CategoryScreen extends StatefulWidget {
-  const CategoryScreen({super.key, required this.category, this.clock});
+  const CategoryScreen({
+    super.key,
+    required this.category,
+    this.clock,
+    this.catalog = puzzleCatalog,
+  });
 
   final PuzzleCategory category;
 
   /// Returns "now"; tests fix the date to make daily credit deterministic.
   /// Defaults to [DateTime.now].
   final DateTime Function()? clock;
+
+  /// Where this category's images come from. Tests supply a small fixture
+  /// catalog so grid tests stay independent of the real bundled photos.
+  final List<PuzzleImage> catalog;
 
   @override
   State<CategoryScreen> createState() => _CategoryScreenState();
@@ -36,7 +50,8 @@ class _CategoryScreenState extends State<CategoryScreen> {
   /// must be able to spot a started puzzle without opening its size sheet).
   var _inProgressImageIds = <String>{};
 
-  List<PuzzleImage> get _images => imagesInCategory(widget.category.id);
+  List<PuzzleImage> get _images =>
+      imagesInCategory(widget.category.id, catalog: widget.catalog);
 
   @override
   void initState() {
@@ -82,7 +97,14 @@ class _CategoryScreenState extends State<CategoryScreen> {
   }
 
   Future<void> _open(PuzzleImage image) async {
-    await startPuzzleFlow(context, image, clock: widget.clock);
+    // Forward this screen's catalog so "Next puzzle" picks from the same
+    // set the grid shows (a fixture catalog in tests, the global one live).
+    await startPuzzleFlow(
+      context,
+      image,
+      clock: widget.clock,
+      catalog: widget.catalog,
+    );
     // The puzzle may have been started or finished while the game was open.
     await _refreshPuzzleStates();
   }
@@ -111,13 +133,15 @@ class _CategoryScreenState extends State<CategoryScreen> {
       ),
       body: GridView.builder(
         padding: const EdgeInsets.all(16),
-        // Max width instead of a fixed column count: ~3 across on phones,
-        // more on tablets and the web build (2026-11-05 ruling, issue #4).
+        // Max width instead of a fixed column count: 2 across on phones so
+        // the photo is big enough to judge (UI-6 ruling, amending #4's ~3),
+        // more columns on tablets and the web build.
         gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-          maxCrossAxisExtent: 130,
+          maxCrossAxisExtent: 200,
           mainAxisSpacing: 12,
           crossAxisSpacing: 12,
-          childAspectRatio: 0.85,
+          // Near the photos' own 3:2, so BoxFit.cover crops little.
+          childAspectRatio: 1.4,
         ),
         itemCount: images.length,
         itemBuilder: (context, index) {
@@ -145,9 +169,18 @@ class _PuzzleCard extends StatelessWidget {
     required this.onTap,
   });
 
+  /// Corner rounding of the photo card (owner's UI-6 round-2 pick:
+  /// style C at a smaller radius than the sheet's 18).
+  static const cornerRadius = Radius.circular(12);
+
+  /// Alternating hair's-width tilt, in radians: hand-placed, not torn —
+  /// straight edges are the UI-6 ruling for bare images.
+  static double tiltFor(int variant) =>
+      (variant.isEven ? -0.9 : 0.8) * math.pi / 180;
+
   final PuzzleImage image;
 
-  /// Wobble preset for [PaintedCard]; the grid passes its item index.
+  /// Grid item index: drives the alternating tilt direction.
   final int variant;
 
   /// Finished at least once, at any size: shows the check badge.
@@ -160,48 +193,58 @@ class _PuzzleCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return PaintedCard(
-      variant: variant,
-      onTap: onTap,
-      padding: const EdgeInsets.fromLTRB(9, 9, 9, 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
+    // No visible title (UI-6 ruling) — the name lives on in the semantics
+    // label for screen readers, and the identifier keeps e2e taps working.
+    return Semantics(
+      identifier: 'catalog-puzzle-${image.id}',
+      label: image.title,
+      button: true,
+      child: Transform.rotate(
+        angle: tiltFor(variant),
+        child: Container(
+          decoration: const BoxDecoration(
+            // Opaque surface so the tile reads as a card while the photo is
+            // still decoding (or if it ever fails), not a floating shadow.
+            color: StudioColors.card,
+            borderRadius: BorderRadius.all(cornerRadius),
+            boxShadow: [PaintedCard.groundShadow],
+          ),
+          child: ClipRRect(
+            borderRadius: const BorderRadius.all(cornerRadius),
             child: Stack(
               fit: StackFit.expand,
               children: [
-                FramedArt(
-                  // The grid index: neighboring frames tear differently.
-                  seed: variant,
-                  child: Image.asset(
-                    image.assetPath,
-                    fit: BoxFit.cover,
-                    // Decode smaller previews to reduce memory use.
-                    cacheWidth: 640,
+                Image.asset(
+                  image.assetPath,
+                  fit: BoxFit.cover,
+                  // Decode smaller previews to reduce memory use.
+                  cacheWidth: 640,
+                  // A photo that fails to decode would otherwise leave an
+                  // anonymous blank card — fall back to the visible title.
+                  errorBuilder: (context, _, _) => Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Text(
+                        image.title,
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
                   ),
                 ),
                 if (isCompleted)
                   const Positioned(top: 8, right: 8, child: _CompletedBadge()),
                 if (isInProgress)
                   const Positioned(top: 8, left: 8, child: _InProgressBadge()),
+                // Above the photo so the tap ripple shows on it.
+                Material(
+                  type: MaterialType.transparency,
+                  child: InkWell(onTap: onTap),
+                ),
               ],
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(2, 8, 2, 0),
-            child: Semantics(
-              // Distinguish this catalog tile from the daily card in e2e tests.
-              identifier: 'catalog-puzzle-${image.id}',
-              child: Text(
-                image.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -215,6 +258,9 @@ class _InProgressBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Semantics(
+      // Own node: without this the label merges into the card's
+      // title-labelled node (UI-6 wrapper) and disappears for a11y/e2e.
+      container: true,
       label: 'In progress',
       child: Container(
         width: 28,
@@ -235,16 +281,23 @@ class _CompletedBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        shape: BoxShape.circle,
-      ),
-      child: Icon(
-        Icons.check_circle,
-        size: 20,
-        color: Theme.of(context).colorScheme.primary,
+    return Semantics(
+      // Own node, like the sprout badge: without it the label would merge
+      // into the card's title-labelled node and completed state would be
+      // inaudible to screen readers.
+      container: true,
+      label: 'Completed',
+      child: Container(
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          shape: BoxShape.circle,
+        ),
+        child: Icon(
+          Icons.check_circle,
+          size: 20,
+          color: Theme.of(context).colorScheme.primary,
+        ),
       ),
     );
   }

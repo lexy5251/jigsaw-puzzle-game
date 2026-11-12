@@ -27,6 +27,7 @@ class PuzzleSaveState {
     required this.lockedPieceIndexes,
     required this.loosePiecePositions,
     this.startedDay,
+    this.boardWidth,
   });
 
   /// Pieces still in the tray, in display order.
@@ -43,6 +44,14 @@ class PuzzleSaveState {
   /// cannot claim a day it was not actually begun on. Null for saves written
   /// before the field existed — those credit nothing.
   final String? startedDay;
+
+  /// Source-image width in pixels when the snapshot was written. World
+  /// coordinates ARE image pixels, so a snapshot only restores onto an image
+  /// of the same width — against a resized photo its positions and group
+  /// offsets are at the wrong scale (pieces pile into one corner, joined
+  /// chunks dissolve). Null for saves written before the field existed
+  /// (i.e. before the 3072px photo swap) — those start fresh.
+  final int? boardWidth;
 
   /// True when every piece appears exactly once. Guards against loading a
   /// snapshot written for a different grid size, or corrupted data.
@@ -70,6 +79,7 @@ class PuzzleSaveState {
         '${entry.key}': [entry.value.x, entry.value.y],
     },
     if (startedDay != null) 'started': startedDay,
+    if (boardWidth != null) 'board': boardWidth,
   });
 
   /// Returns null when [raw] is not a valid snapshot.
@@ -84,6 +94,7 @@ class PuzzleSaveState {
           data['loose'] as Map<String, dynamic>,
         ),
         startedDay: data['started'] as String?,
+        boardWidth: data['board'] as int?,
       );
     } on Object {
       return null; // Malformed data: treat as "no save".

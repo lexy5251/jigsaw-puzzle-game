@@ -13,7 +13,7 @@ import 'test_helpers.dart';
 /// Covers the select → size picker → game screen navigation flow.
 void main() {
   test('every catalog size keeps columns:rows = 3:2 so pieces stay square', () {
-    // Catalog images are 1536x1024 (3:2); any other grid ratio stretches
+    // Catalog images are 3072x2048 (3:2); any other grid ratio stretches
     // the pieces (the 2026-11-05 phone-test finding).
     for (final size in puzzleSizes) {
       expect(
@@ -47,8 +47,8 @@ void main() {
       await tester.tap(landscapesCard);
       await tester.pumpAndSettle();
 
-      // No daily card here, so the title appears exactly once.
-      final firstImage = find.text('Alpine Lakes Panorama');
+      // Cards carry no visible title; the semantics identifier is the hook.
+      final firstImage = catalogPuzzleCard('alpine-lakes-panorama');
       // The tile may start below the fold. Bring it fully on-screen before
       // tapping, even if it has already been built by the grid.
       await scrollSelectScreenTo(tester, firstImage);
@@ -117,7 +117,7 @@ void main() {
       await tester.tap(landscapesCard);
       await tester.pumpAndSettle();
 
-      final catalogImage = find.text('Alpine Lakes Panorama');
+      final catalogImage = catalogPuzzleCard('alpine-lakes-panorama');
       await scrollSelectScreenTo(tester, catalogImage);
       await tester.tap(catalogImage);
       await tester.pumpAndSettle();
