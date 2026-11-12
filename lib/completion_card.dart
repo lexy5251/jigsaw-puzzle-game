@@ -172,7 +172,11 @@ class CompletionCard extends StatelessWidget {
     // AspectRatio keeps that true whatever width the layout grants.
     aspectRatio: 3 / 2,
     child: FramedArt(
-      child: Image.asset(image.assetPath, fit: BoxFit.cover, cacheWidth: 640),
+      child: Image.asset(
+        image.assetPath,
+        fit: BoxFit.cover,
+        cacheWidth: TiltedPhotoCard.thumbnailCacheWidth,
+      ),
     ),
   );
 

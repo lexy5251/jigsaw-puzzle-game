@@ -28,6 +28,49 @@ void main() {
     expect({a, b, c}, hasLength(3));
   });
 
+  test('parsePuzzleCompletionKey round-trips what the builder makes', () {
+    expect(
+      parsePuzzleCompletionKey(
+        puzzleCompletionKey(imageId: 'misty-harbor', columns: 15, rows: 10),
+      ),
+      (imageId: 'misty-harbor', columns: 15, rows: 10),
+    );
+    // Ids are dot-free today, but a future dot must not shift the grid.
+    expect(
+      parsePuzzleCompletionKey(
+        puzzleCompletionKey(imageId: 'cat.v2', columns: 6, rows: 4),
+      ),
+      (imageId: 'cat.v2', columns: 6, rows: 4),
+    );
+  });
+
+  test('keys that do not follow the completion format parse as null', () {
+    const foreign = [
+      'save.cat.6x4', // the progress store's namespace
+      'daily.days', // streak data
+      'done.cat', // no grid
+      'done.cat.6by4',
+      'done..6x4', // empty image id
+      'done.cat.99999999999999999999x9', // digits beyond the regex cap
+    ];
+    for (final key in foreign) {
+      expect(parsePuzzleCompletionKey(key), isNull, reason: key);
+    }
+  });
+
+  test('listCompletedKeys lists records and ignores foreign namespaces',
+      () async {
+    final store = InMemoryCompletionStore();
+    await store.markCompleted('done.cat.6x4');
+    await store.markCompleted('done.cat.12x8');
+    await store.markCompleted('save.cat.6x4'); // wrong namespace, never listed
+
+    expect(
+      (await store.listCompletedKeys())..sort(),
+      ['done.cat.12x8', 'done.cat.6x4'],
+    );
+  });
+
   test('marking twice increments the count and updates the date', () async {
     final store = InMemoryCompletionStore();
     const key = 'done.test.6x4';

@@ -4,10 +4,10 @@
 //   CATEGORY_GRID_PREVIEW=1 flutter test test/category_grid_preview_test.dart
 
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jigsaw_puzzle/category_screen.dart';
 import 'package:jigsaw_puzzle/puzzle_catalog.dart';
+import 'package:jigsaw_puzzle/studio_surfaces.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'test_helpers.dart';
@@ -24,11 +24,8 @@ void main() {
 
       final category = puzzleCategories.firstWhere((c) => c.id == 'landscapes');
 
-      // His phone-ish portrait plus the narrowest supported width.
-      for (final (width, height, name) in [
-        (390.0, 844.0, 'phone-390'),
-        (320.0, 568.0, 'narrow-320'),
-      ]) {
+      // The shared judging sizes.
+      for (final (width, height, name) in previewPhoneSizes) {
         final boundaryKey = GlobalKey();
         await pumpPhoneApp(
           tester,
@@ -38,22 +35,18 @@ void main() {
         );
 
         // Deterministic decode wait: warm the exact image-cache entries the
-        // grid's Image.asset(cacheWidth: 640) resolves, then paint a frame.
-        final context = tester.element(find.byType(CategoryScreen));
-        for (final image in imagesInCategory(category.id)) {
-          await precacheImage(
-            ResizeImage(AssetImage(image.assetPath), width: 640),
-            context,
-          );
-        }
+        // grid's Image.asset(cacheWidth: thumbnailCacheWidth) resolves, then paint a frame.
+        await precachePreviewImages(
+          tester.element(find.byType(CategoryScreen)),
+          [for (final image in imagesInCategory(category.id)) image.assetPath],
+          width: TiltedPhotoCard.thumbnailCacheWidth,
+        );
         await tester.pump();
 
-        final boundary =
-            boundaryKey.currentContext!.findRenderObject()!
-                as RenderRepaintBoundary;
-        final shot = await boundary.toImage(pixelRatio: 3);
-        addTearDown(shot.dispose);
-        await writePreviewPng(shot, 'docs/category-grid-preview-$name.png');
+        await capturePreviewPng(
+          boundaryKey,
+          'docs/category-grid-preview-$name.png',
+        );
       }
     });
   }, skip: !enabled);

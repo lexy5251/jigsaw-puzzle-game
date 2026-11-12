@@ -49,6 +49,34 @@ void main() {
     );
   }
 
+  test('listCompletedKeys filters to the completion namespace', () async {
+    expect(await store.markCompleted('done.cat.6x4'), isTrue);
+    expect(await store.markCompleted('done.cat.12x8'), isTrue);
+    prefs.storage['flutter.save.cat.6x4'] = 'a progress save';
+    // Direct storage seeding bypasses the preferences cache.
+    SharedPreferences.resetStatic();
+
+    expect(
+      (await store.listCompletedKeys())..sort(),
+      ['done.cat.12x8', 'done.cat.6x4'],
+    );
+  });
+
+  test('a corrupt record reads as "never completed" everywhere', () async {
+    prefs.storage['flutter.done.corrupt.6x4'] = 'not json';
+    SharedPreferences.resetStatic();
+
+    // Badges, the size sheet, and the Finished wall must agree on it.
+    expect(await store.isCompleted('done.corrupt.6x4'), isFalse);
+    expect(await store.record('done.corrupt.6x4'), isNull);
+  });
+
+  test('a listing failure reads as "no completions"', () async {
+    prefs.readError = PlatformException(code: 'storage_unavailable');
+
+    expect(await store.listCompletedKeys(), isEmpty);
+  });
+
   test(
     'a read failure does not overwrite the existing completion history',
     () async {

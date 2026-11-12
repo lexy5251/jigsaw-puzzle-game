@@ -271,6 +271,117 @@ class FramedArt extends StatelessWidget {
   }
 }
 
+/// The photo grids' shared geometry (2 across on phones — UI-6 ruling):
+/// category pages and My Puzzles must render identically, so both read
+/// this one spec.
+const photoGridPadding = EdgeInsets.all(16);
+const photoGridDelegate = SliverGridDelegateWithMaxCrossAxisExtent(
+  maxCrossAxisExtent: 200,
+  mainAxisSpacing: 12,
+  crossAxisSpacing: 12,
+  // Near the photos' own 3:2, so BoxFit.cover crops little.
+  childAspectRatio: 1.4,
+);
+
+/// A catalog photo as a bare, hand-placed card: straight rounded edges, a
+/// hair's-width alternating tilt, and no visible title — the UI-6 ruling
+/// for photo grids (names live on in the semantics label). Shared by the
+/// category pages and My Puzzles so the two grids cannot drift apart.
+class TiltedPhotoCard extends StatelessWidget {
+  const TiltedPhotoCard({
+    super.key,
+    required this.assetPath,
+    required this.title,
+    required this.semanticsIdentifier,
+    required this.variant,
+    required this.onTap,
+    this.overlays = const [],
+  });
+
+  /// Corner rounding of the photo card (owner's UI-6 round-2 pick:
+  /// style C at a smaller radius than the sheet's 18).
+  static const cornerRadius = Radius.circular(12);
+
+  /// Decode width for every photo thumbnail surface. The ImageCache keys
+  /// on this value, so all surfaces (and the preview harnesses' warm-up)
+  /// must share it or the same photo decodes twice.
+  static const thumbnailCacheWidth = 640;
+
+  /// Alternating hair's-width tilt, in radians: hand-placed, not torn —
+  /// straight edges are the UI-6 ruling for bare images.
+  static double tiltFor(int variant) =>
+      (variant.isEven ? -0.9 : 0.8) * math.pi / 180;
+
+  final String assetPath;
+
+  /// Screen-reader name and decode-failure fallback; never painted.
+  final String title;
+
+  /// Lets e2e tests tap one specific photo without matching its title.
+  final String semanticsIdentifier;
+
+  /// Grid item index: drives the alternating tilt direction.
+  final int variant;
+
+  final VoidCallback onTap;
+
+  /// Stacked over the photo, under the tap ripple (badges, count chips).
+  final List<Widget> overlays;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      identifier: semanticsIdentifier,
+      label: title,
+      button: true,
+      child: Transform.rotate(
+        angle: tiltFor(variant),
+        child: Container(
+          decoration: const BoxDecoration(
+            // Opaque surface so the tile reads as a card while the photo is
+            // still decoding (or if it ever fails), not a floating shadow.
+            color: StudioColors.card,
+            borderRadius: BorderRadius.all(cornerRadius),
+            boxShadow: [PaintedCard.groundShadow],
+          ),
+          child: ClipRRect(
+            borderRadius: const BorderRadius.all(cornerRadius),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Image.asset(
+                  assetPath,
+                  fit: BoxFit.cover,
+                  // Decode smaller previews to reduce memory use.
+                  cacheWidth: thumbnailCacheWidth,
+                  // A photo that fails to decode would otherwise leave an
+                  // anonymous blank card — fall back to the visible title.
+                  errorBuilder: (context, _, _) => Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Text(
+                        title,
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
+                  ),
+                ),
+                ...overlays,
+                // Above the photo so the tap ripple shows on it.
+                Material(
+                  type: MaterialType.transparency,
+                  child: InkWell(onTap: onTap),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// A small organic-edged dot of accent paint (category swatches).
 class PaintedSwatch extends StatelessWidget {
   const PaintedSwatch({super.key, required this.color, this.size = 14});

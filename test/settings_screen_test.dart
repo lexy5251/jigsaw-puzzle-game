@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jigsaw_puzzle/app_settings.dart';
+import 'package:jigsaw_puzzle/home_shell.dart';
 import 'package:jigsaw_puzzle/settings_screen.dart';
 import 'package:jigsaw_puzzle/studio_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
-import 'test_helpers.dart';
 
 Future<InMemorySettingsStore> pumpSettings(
   WidgetTester tester, {
@@ -66,15 +65,31 @@ void main() {
     expect(store.saves, 2);
   });
 
-  testWidgets('the select screen gear opens settings', (tester) async {
+  testWidgets('the Settings tab opens settings', (tester) async {
     SharedPreferences.setMockInitialValues({});
-    await pumpSelectScreen(tester, clock: () => DateTime(2026, 11, 6, 14));
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: studioTheme(),
+        home: HomeShell(clock: () => DateTime(2026, 11, 6, 14)),
+      ),
+    );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Settings'));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(NavigationBar),
+        matching: find.text('Settings'),
+      ),
+    );
     await tester.pumpAndSettle();
 
-    expect(find.text('Settings'), findsOneWidget);
+    expect(find.byType(SettingsScreen), findsOneWidget);
+    // Exactly one title: the nav label must not leak into the AppBar.
+    expect(
+      find.descendant(of: find.byType(AppBar), matching: find.text('Settings')),
+      findsOneWidget,
+    );
     expect(find.byType(Slider), findsOneWidget);
   });
+
 }

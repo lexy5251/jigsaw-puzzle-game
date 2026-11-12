@@ -194,12 +194,7 @@ void main() {
         imageId: daily.id,
         columns: size.columns,
         rows: size.rows,
-      ): PuzzleSaveState(
-        trayPieceIndexes: List.generate(size.pieceCount, (index) => index),
-        lockedPieceIndexes: const [],
-        loosePiecePositions: const {},
-        startedDay: '2026-11-05',
-      ).toJsonString(),
+      ): fullTraySave(size.pieceCount, startedDay: '2026-11-05').toJsonString(),
     });
     await pumpSelectScreen(tester, clock: fixedNow);
     await tester.pumpAndSettle();

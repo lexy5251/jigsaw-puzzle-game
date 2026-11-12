@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jigsaw_puzzle/app_settings.dart';
@@ -48,6 +49,39 @@ PuzzleSaveState singleLoosePieceSave({String? startedDay}) => PuzzleSaveState(
   boardWidth: testPhotoWidth,
 );
 
+/// A mid-way snapshot: the first [placed] pieces locked in place, the rest
+/// in the tray.
+PuzzleSaveState partiallyPlacedSave(
+  int pieceCount, {
+  required int placed,
+  String? startedDay,
+  int? boardWidth,
+}) => PuzzleSaveState(
+  trayPieceIndexes: [for (var i = placed; i < pieceCount; i++) i],
+  lockedPieceIndexes: [for (var i = 0; i < placed; i++) i],
+  loosePiecePositions: const {},
+  startedDay: startedDay,
+  boardWidth: boardWidth,
+);
+
+/// Every piece still in the tray — the standard "just started, resumable"
+/// fixture. Stamp [boardWidth] with [testPhotoWidth] when the game itself
+/// must accept the save (the scale guard discards other widths).
+PuzzleSaveState fullTraySave(
+  int pieceCount, {
+  String? startedDay,
+  int? boardWidth,
+}) => partiallyPlacedSave(
+  pieceCount,
+  placed: 0,
+  startedDay: startedDay,
+  boardWidth: boardWidth,
+);
+
+/// A completion record finished [count] times, newest on [day].
+CompletionRecord completionOn(DateTime day, {int count = 1}) =>
+    CompletionRecord(count: count, lastCompletedAt: day);
+
 /// Extracts the game currently hosted by the screen, including after restart.
 JigsawGame currentGame(WidgetTester tester) => tester
     .widget<GameWidget<JigsawGame>>(find.byType(GameWidget<JigsawGame>))
@@ -83,6 +117,18 @@ Future<void> loadStudioFonts() async {
   }
 }
 
+/// Loads the SDK's Material icon glyphs — the test environment renders
+/// every Icons.* as a box otherwise. Only previews need the real glyphs.
+Future<void> loadMaterialIcons() async {
+  final flutterRoot = Platform.environment['FLUTTER_ROOT']!;
+  final bytes = await File(
+    '$flutterRoot/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf',
+  ).readAsBytes();
+  final loader = FontLoader('MaterialIcons')
+    ..addFont(Future.value(ByteData.sublistView(bytes)));
+  await loader.load();
+}
+
 /// Encodes a captured preview to PNG and announces the absolute path (the
 /// owner's preview harnesses all land under docs/, which stays out of Git).
 Future<void> writePreviewPng(ui.Image shot, String path) async {
@@ -91,6 +137,41 @@ Future<void> writePreviewPng(ui.Image shot, String path) async {
   await out.parent.create(recursive: true);
   await out.writeAsBytes(png!.buffer.asUint8List());
   debugPrint('preview written to ${out.absolute.path}');
+}
+
+/// The owner's judging sizes — his phone-ish portrait plus the narrowest
+/// supported width. Every preview harness renders this same set so a
+/// layout verdict made on one harness holds on the others.
+const previewPhoneSizes = [
+  (390.0, 844.0, 'phone-390'),
+  (320.0, 568.0, 'narrow-320'),
+];
+
+/// Captures [boundaryKey]'s RepaintBoundary at the shared preview pixel
+/// ratio and writes the PNG to [path]. Both preview harnesses go through
+/// here so the owner's renders always use the same scale.
+Future<void> capturePreviewPng(GlobalKey boundaryKey, String path) async {
+  final boundary =
+      boundaryKey.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+  final shot = await boundary.toImage(pixelRatio: 3);
+  try {
+    await writePreviewPng(shot, path);
+  } finally {
+    shot.dispose();
+  }
+}
+
+/// Warms the exact image-cache entries `Image.asset(cacheWidth: width)`
+/// resolves — [width] must match the widget's cacheWidth or the preview
+/// paints before the real decode lands and shows gray thumbnails.
+Future<void> precachePreviewImages(
+  BuildContext context,
+  Iterable<String> assetPaths, {
+  required int width,
+}) async {
+  for (final path in assetPaths) {
+    await precacheImage(ResizeImage(AssetImage(path), width: width), context);
+  }
 }
 
 /// Sizes the test surface like a phone (the owner's 390x844 portrait by

@@ -136,10 +136,7 @@ void main() {
   testWidgets('a completed image announces Completed', (tester) async {
     SharedPreferences.setMockInitialValues({
       puzzleCompletionKey(imageId: 'first', columns: 6, rows: 4):
-          CompletionRecord(
-            count: 1,
-            lastCompletedAt: DateTime(2026, 11, 1),
-          ).toJsonString(),
+          completionOn(DateTime(2026, 11, 1)).toJsonString(),
     });
     await pumpCategory(tester);
 

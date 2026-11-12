@@ -13,12 +13,42 @@ import 'package:flame/components.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// Prefix of every progress-save key. [puzzleSaveKey] builds on it and
+/// [parsePuzzleSaveKey] strips it, so the key format lives in this file only.
+const puzzleSaveKeyPrefix = 'save.';
+
 /// Key under which a puzzle's progress is stored: one save per image + size.
 String puzzleSaveKey({
   required String imageId,
   required int columns,
   required int rows,
-}) => 'save.$imageId.${columns}x$rows';
+}) => '$puzzleSaveKeyPrefix$imageId.${columns}x$rows';
+
+/// Greedy image id, so the grid suffix anchors at the key's LAST dot (ids
+/// are dot-free today, but a foreign dot must not shift the grid). Grid
+/// digits are capped at 4 so an overflow-length run is rejected the same
+/// way on every platform (web ints would parse it instead of overflowing).
+final _saveKeyPattern = RegExp(r'^(.+)\.(\d{1,4})x(\d{1,4})$');
+
+/// The image and grid a save key was built for, or null for keys that do
+/// not follow the [puzzleSaveKey] format (foreign preference entries).
+({String imageId, int columns, int rows})? parsePuzzleSaveKey(String key) {
+  if (!key.startsWith(puzzleSaveKeyPrefix)) {
+    return null;
+  }
+  final match = _saveKeyPattern.firstMatch(
+    key.substring(puzzleSaveKeyPrefix.length),
+  );
+  if (match == null) {
+    return null;
+  }
+  // The 4-digit cap above makes these parses safe on VM and web alike.
+  return (
+    imageId: match.group(1)!,
+    columns: int.parse(match.group(2)!),
+    rows: int.parse(match.group(3)!),
+  );
+}
 
 /// Snapshot of one puzzle in progress.
 class PuzzleSaveState {
@@ -123,6 +153,9 @@ abstract class PuzzleSaveStore {
   Future<void> save(String key, PuzzleSaveState state);
   Future<void> delete(String key);
   Future<bool> exists(String key);
+
+  /// Keys of every stored save, in no particular order.
+  Future<List<String>> listSavedKeys();
 }
 
 /// Device-local storage. Failures are logged in debug builds and handled
@@ -186,6 +219,20 @@ class SharedPreferencesSaveStore implements PuzzleSaveStore {
     }
   }
 
+  @override
+  Future<List<String>> listSavedKeys() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs
+          .getKeys()
+          .where((key) => key.startsWith(puzzleSaveKeyPrefix))
+          .toList();
+    } on Object catch (error) {
+      _logFailure('list', '$puzzleSaveKeyPrefix*', error);
+      return const [];
+    }
+  }
+
   void _logFailure(String operation, String key, Object error) {
     if (kDebugMode) {
       debugPrint('Puzzle storage: $operation failed for "$key": $error');
@@ -215,4 +262,8 @@ class InMemorySaveStore implements PuzzleSaveStore {
 
   @override
   Future<bool> exists(String key) async => _entries.containsKey(key);
+
+  @override
+  Future<List<String>> listSavedKeys() async =>
+      _entries.keys.where((key) => key.startsWith(puzzleSaveKeyPrefix)).toList();
 }

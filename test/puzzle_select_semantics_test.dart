@@ -26,11 +26,9 @@ void main() {
           imageId: daily.id,
           columns: savedSize.columns,
           rows: savedSize.rows,
-        ): PuzzleSaveState(
-          trayPieceIndexes: List.generate(savedSize.pieceCount, (i) => i),
-          lockedPieceIndexes: const [],
-          loosePiecePositions: const {},
-          // Begun today, so the daily card counts it as in progress.
+        // Begun today, so the daily card counts it as in progress.
+        ): fullTraySave(
+          savedSize.pieceCount,
           startedDay: '2026-11-20',
         ).toJsonString(),
       });

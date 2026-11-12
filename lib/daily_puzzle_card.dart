@@ -107,7 +107,7 @@ class DailyPuzzleCard extends StatelessWidget {
             // Same decode width as the catalog tiles, so the daily
             // image shares their ImageCache entry instead of
             // decoding the asset a second time.
-            cacheWidth: 640,
+            cacheWidth: TiltedPhotoCard.thumbnailCacheWidth,
           ),
         ),
         const SizedBox(width: 14),

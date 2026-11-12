@@ -10,12 +10,45 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// Prefix of every completion key. [puzzleCompletionKey] builds on it and
+/// [parsePuzzleCompletionKey] strips it, so the key format lives in this
+/// file only.
+const puzzleCompletionKeyPrefix = 'done.';
+
 /// Key under which a puzzle's completion record is stored.
 String puzzleCompletionKey({
   required String imageId,
   required int columns,
   required int rows,
-}) => 'done.$imageId.${columns}x$rows';
+}) => '$puzzleCompletionKeyPrefix$imageId.${columns}x$rows';
+
+/// Greedy image id, so the grid suffix anchors at the key's LAST dot (ids
+/// are dot-free today, but a foreign dot must not shift the grid). Grid
+/// digits are capped at 4 so an overflow-length run is rejected the same
+/// way on every platform (web ints would parse it instead of overflowing).
+final _completionKeyPattern = RegExp(r'^(.+)\.(\d{1,4})x(\d{1,4})$');
+
+/// The image and grid a completion key was built for, or null for keys that
+/// do not follow the [puzzleCompletionKey] format.
+({String imageId, int columns, int rows})? parsePuzzleCompletionKey(
+  String key,
+) {
+  if (!key.startsWith(puzzleCompletionKeyPrefix)) {
+    return null;
+  }
+  final match = _completionKeyPattern.firstMatch(
+    key.substring(puzzleCompletionKeyPrefix.length),
+  );
+  if (match == null) {
+    return null;
+  }
+  // The 4-digit cap above makes these parses safe on VM and web alike.
+  return (
+    imageId: match.group(1)!,
+    columns: int.parse(match.group(2)!),
+    rows: int.parse(match.group(3)!),
+  );
+}
 
 /// The permanent record of finishing one puzzle.
 class CompletionRecord {
@@ -50,6 +83,9 @@ abstract class PuzzleCompletionStore {
   /// Returns true only when storage accepts the completion record.
   Future<bool> markCompleted(String key, {DateTime? completedAt});
   Future<bool> isCompleted(String key);
+
+  /// Keys of every stored completion record, in no particular order.
+  Future<List<String>> listCompletedKeys();
 }
 
 /// The one shared way to ask "was this image finished at this grid?" —
@@ -117,12 +153,22 @@ class SharedPreferencesCompletionStore implements PuzzleCompletionStore {
 
   @override
   Future<bool> isCompleted(String key) async {
+    // Parse, not just containsKey: a corrupt record must read the same
+    // "never completed" on every surface (badges, sheet, Finished wall).
+    return await record(key) != null;
+  }
+
+  @override
+  Future<List<String>> listCompletedKeys() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      return prefs.containsKey(key);
+      return prefs
+          .getKeys()
+          .where((key) => key.startsWith(puzzleCompletionKeyPrefix))
+          .toList();
     } on Object catch (error) {
-      _logFailure('check', key, error);
-      return false;
+      _logFailure('list', '$puzzleCompletionKeyPrefix*', error);
+      return const [];
     }
   }
 
@@ -154,5 +200,10 @@ class InMemoryCompletionStore implements PuzzleCompletionStore {
   }
 
   @override
-  Future<bool> isCompleted(String key) async => _entries.containsKey(key);
+  Future<bool> isCompleted(String key) async => await record(key) != null;
+
+  @override
+  Future<List<String>> listCompletedKeys() async => _entries.keys
+      .where((key) => key.startsWith(puzzleCompletionKeyPrefix))
+      .toList();
 }

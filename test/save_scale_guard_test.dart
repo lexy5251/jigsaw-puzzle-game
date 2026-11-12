@@ -66,4 +66,17 @@ void main() {
 
     expect(await bootAndReportResumed(tester, store), isFalse);
   });
+
+  testWidgets('opening replaces a rejected save with the fresh run', (
+    tester,
+  ) async {
+    final store = InMemorySaveStore();
+    await store.save(key, saveWith(boardWidth: testPhotoWidth * 2));
+
+    expect(await bootAndReportResumed(tester, store), isFalse);
+
+    // The rejected save is dead data no code path can restore; the opening
+    // snapshot replaces it so the in-progress surfaces describe THIS run.
+    expect((await store.load(key))!.boardWidth, testPhotoWidth);
+  });
 }

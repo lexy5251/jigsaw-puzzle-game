@@ -49,6 +49,34 @@ Future<Set<PuzzleSize>> _completedSizesFor(PuzzleImage image) async {
   return completedSizes;
 }
 
+/// Resolves both status sets, then opens the size sheet. Returns the chosen
+/// size, or null when the sheet was dismissed or the host screen removed.
+Future<PuzzleSize?> _pickSizeFromSheet(
+  BuildContext context,
+  PuzzleImage image,
+) async {
+  // Resolve each size's state BEFORE opening the sheet, so the sheet
+  // itself stays plain synchronous UI (an async lookup inside its build
+  // would re-trigger itself on every rebuild).
+  final inProgressSizes = await _savedSizesFor(image);
+  final completedSizes = await _completedSizesFor(image);
+  if (!context.mounted) {
+    return null;
+  }
+
+  return showModalBottomSheet<PuzzleSize>(
+    context: context,
+    // Canvas ground behind the options' linen cards — the themed sheet
+    // default is the same linen, which would make the cards invisible.
+    backgroundColor: StudioColors.ground,
+    builder: (_) => _PuzzleSizePicker(
+      image: image,
+      inProgressSizes: inProgressSizes,
+      completedSizes: completedSizes,
+    ),
+  );
+}
+
 /// Opens the size sheet for [image] and, if a size is chosen, runs the game —
 /// chaining straight into each "Next puzzle" pick at the same size until the
 /// player exits. Returns once the player is truly back, so callers can
@@ -62,11 +90,6 @@ Future<void> startPuzzleFlow(
   // The run belongs to the day the player tapped, even if the size sheet
   // below stays open across midnight.
   var startedDay = dayKey((clock ?? DateTime.now)());
-  // Resolve each size's state BEFORE opening the sheet, so the sheet
-  // itself stays plain synchronous UI (an async lookup inside its build
-  // would re-trigger itself on every rebuild).
-  final inProgressSizes = await _savedSizesFor(image);
-  final completedSizes = await _completedSizesFor(image);
   // Read once here so GameScreen stays synchronous; mid-game settings
   // changes apply from the next puzzle on.
   var settings = await _settingsStore.load();
@@ -74,18 +97,7 @@ Future<void> startPuzzleFlow(
     return;
   }
 
-  final selectedSize = await showModalBottomSheet<PuzzleSize>(
-    context: context,
-    // Canvas ground behind the options' linen cards — the themed sheet
-    // default is the same linen, which would make the cards invisible.
-    backgroundColor: StudioColors.ground,
-    builder: (_) => _PuzzleSizePicker(
-      image: image,
-      inProgressSizes: inProgressSizes,
-      completedSizes: completedSizes,
-    ),
-  );
-
+  final selectedSize = await _pickSizeFromSheet(context, image);
   // The sheet can be dismissed, or the host screen removed while it is open.
   if (selectedSize == null || !context.mounted) {
     return;

@@ -291,6 +291,9 @@ class JigsawGame extends FlameGame
     if (savedState == null) {
       // Save right away: opening a puzzle marks it "in progress", and the
       // shuffled tray order survives an app restart instead of reshuffling.
+      // This also replaces any save the guards above rejected — dead data
+      // no code path can restore, so one open makes every surface truthful
+      // again instead of advertising a run that resumes nowhere.
       persistProgress();
     }
     _fitCameraToBoard();

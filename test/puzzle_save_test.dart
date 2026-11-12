@@ -90,6 +90,55 @@ void main() {
     expect({a, b, c}, hasLength(3));
   });
 
+  test('parsePuzzleSaveKey round-trips what puzzleSaveKey builds', () {
+    expect(
+      parsePuzzleSaveKey(
+        puzzleSaveKey(imageId: 'misty-harbor', columns: 12, rows: 8),
+      ),
+      (imageId: 'misty-harbor', columns: 12, rows: 8),
+    );
+    // Ids are dot-free today, but a future dot must not shift the grid.
+    expect(
+      parsePuzzleSaveKey(
+        puzzleSaveKey(imageId: 'cat.v2', columns: 6, rows: 4),
+      ),
+      (imageId: 'cat.v2', columns: 6, rows: 4),
+    );
+  });
+
+  test('keys that do not follow the save format parse as null', () {
+    const foreign = [
+      'done.cat.6x4', // the completion store's namespace
+      'daily.days', // streak data
+      'save.cat', // no grid
+      'save.cat.6by4',
+      'save.cat.x4',
+      'save.cat.6x',
+      'save..6x4', // empty image id
+      'save.cat.99999999999999999999x9', // digits beyond the regex cap
+    ];
+    for (final key in foreign) {
+      expect(parsePuzzleSaveKey(key), isNull, reason: key);
+    }
+  });
+
+  test('listSavedKeys lists saves and ignores foreign namespaces', () async {
+    final store = InMemorySaveStore();
+    const state = PuzzleSaveState(
+      trayPieceIndexes: [0],
+      lockedPieceIndexes: [],
+      loosePiecePositions: {},
+    );
+    await store.save('save.cat.6x4', state);
+    await store.save('save.dog.12x8', state);
+    await store.save('done.cat.6x4', state); // wrong namespace, never listed
+
+    expect(
+      (await store.listSavedKeys())..sort(),
+      ['save.cat.6x4', 'save.dog.12x8'],
+    );
+  });
+
   test('InMemorySaveStore saves, loads, reports, and deletes', () async {
     final store = InMemorySaveStore();
     const key = 'save.test.2x2';

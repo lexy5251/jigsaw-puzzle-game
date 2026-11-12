@@ -67,6 +67,31 @@ void main() {
     expect(messages, everyElement(contains('Storage returned false.')));
   });
 
+  test('listSavedKeys filters to the save namespace', () async {
+    prefs.storage.addAll({
+      'flutter.save.cat.6x4': state.toJsonString(),
+      'flutter.save.dog.12x8': state.toJsonString(),
+      'flutter.done.cat.6x4': 'a completion record',
+      'flutter.daily.days': 'streak data',
+    });
+
+    expect(
+      (await store.listSavedKeys())..sort(),
+      ['save.cat.6x4', 'save.dog.12x8'],
+    );
+    expect(messages, isEmpty);
+  });
+
+  test('a listing failure reads as "no saves" and is logged', () async {
+    prefs.readError = PlatformException(code: 'storage_unavailable');
+
+    expect(await store.listSavedKeys(), isEmpty);
+    expect(
+      messages.single,
+      allOf(contains('list failed'), contains('storage_unavailable')),
+    );
+  });
+
   test('missing saves are quiet and malformed saves are logged', () async {
     prefs.storage['flutter.$key'] = 'invalid JSON';
 

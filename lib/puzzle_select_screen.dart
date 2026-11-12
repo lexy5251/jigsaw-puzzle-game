@@ -21,16 +21,20 @@ import 'daily_streak.dart';
 import 'puzzle_catalog.dart';
 import 'puzzle_launcher.dart';
 import 'puzzle_save.dart';
-import 'settings_screen.dart';
 import 'studio_surfaces.dart';
 import 'studio_theme.dart';
 
 class PuzzleSelectScreen extends StatefulWidget {
-  const PuzzleSelectScreen({super.key, this.clock});
+  const PuzzleSelectScreen({super.key, this.clock, this.isActive = true});
 
   /// Returns "now"; tests fix the date to make the daily puzzle
   /// deterministic. Defaults to [DateTime.now].
   final DateTime Function()? clock;
+
+  /// Whether the shell currently shows this tab; the daily status reloads
+  /// when the tab becomes visible again (a daily can be finished from the
+  /// My Puzzles tab's flows).
+  final bool isActive;
 
   @override
   State<PuzzleSelectScreen> createState() => _PuzzleSelectScreenState();
@@ -66,6 +70,14 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      unawaited(_refreshDailyStatus());
+    }
+  }
+
+  @override
+  void didUpdateWidget(PuzzleSelectScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive && !oldWidget.isActive) {
       unawaited(_refreshDailyStatus());
     }
   }
@@ -172,20 +184,8 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
         if (imagesInCategory(category.id).isNotEmpty) category,
     ];
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Choose a puzzle'),
-        actions: [
-          IconButton(
-            // Constant tooltip doubles as the semantics label for e2e tests.
-            tooltip: 'Settings',
-            icon: const Icon(Icons.settings_outlined),
-            onPressed: () => Navigator.push<void>(
-              context,
-              MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
-            ),
-          ),
-        ],
-      ),
+      // Settings moved from a gear here to its own bottom-nav tab.
+      appBar: AppBar(title: const Text('Choose a puzzle')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -285,14 +285,14 @@ class _CategoryCard extends StatelessWidget {
                   categoryCoverPath(category.id),
                   fit: BoxFit.cover,
                   // Decode smaller previews to reduce memory use.
-                  cacheWidth: 640,
+                  cacheWidth: TiltedPhotoCard.thumbnailCacheWidth,
                   // A category without a cover file yet (e.g. a freshly
                   // added one) degrades to the old rule: first catalog
                   // painting.
                   errorBuilder: (context, _, _) => Image.asset(
                     images.first.assetPath,
                     fit: BoxFit.cover,
-                    cacheWidth: 640,
+                    cacheWidth: TiltedPhotoCard.thumbnailCacheWidth,
                   ),
                 ),
               ),

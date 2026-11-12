@@ -203,6 +203,13 @@ ThemeData studioTheme() {
       );
 
   final base = ThemeData(colorScheme: scheme, fontFamily: 'Nunito');
+  // Inactive nav/tab items: half-strength ink, one value for icons and
+  // labels alike so the pieces can't drift apart.
+  final mutedInk = StudioColors.ink.withValues(alpha: 0.5);
+  Color navItemColor(Set<WidgetState> states) =>
+      states.contains(WidgetState.selected)
+      ? StudioColors.terracotta
+      : mutedInk;
   final textTheme = base.textTheme
       .apply(bodyColor: StudioColors.ink, displayColor: StudioColors.ink)
       .copyWith(
@@ -258,6 +265,44 @@ ThemeData studioTheme() {
       backgroundColor: StudioColors.card,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+    ),
+    // Top tabs (My Puzzles): terracotta for the active tab, half-strength
+    // ink for the rest, no hairline divider on the wallpaper.
+    tabBarTheme: TabBarThemeData(
+      labelColor: StudioColors.terracotta,
+      indicatorColor: StudioColors.terracotta,
+      unselectedLabelColor: mutedInk,
+      dividerColor: Colors.transparent,
+      labelStyle: const TextStyle(
+        fontFamily: 'Nunito',
+        fontSize: 14,
+        fontWeight: FontWeight.w800,
+      ),
+      unselectedLabelStyle: const TextStyle(
+        fontFamily: 'Nunito',
+        fontSize: 14,
+        fontWeight: FontWeight.w700,
+      ),
+    ),
+    // The mockup's bottom nav: items sit straight on the wallpaper, the
+    // active one in accent with a chip-colored dot behind its icon,
+    // inactive ones at half strength.
+    navigationBarTheme: NavigationBarThemeData(
+      backgroundColor: StudioColors.ground,
+      elevation: 0,
+      indicatorColor: StudioColors.chip,
+      indicatorShape: const StadiumBorder(),
+      iconTheme: WidgetStateProperty.resolveWith(
+        (states) => IconThemeData(color: navItemColor(states)),
+      ),
+      labelTextStyle: WidgetStateProperty.resolveWith(
+        (states) => TextStyle(
+          fontFamily: 'Nunito',
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: navItemColor(states),
+        ),
       ),
     ),
   );

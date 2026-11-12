@@ -127,7 +127,6 @@ const puzzleCatalog = [
     categoryId: 'landscapes',
     fileName: 'landscapes/wildflower_peaks.webp',
   ),
-
   // -- Cozy Places --
   PuzzleImage(
     id: 'country-stone-cottage',

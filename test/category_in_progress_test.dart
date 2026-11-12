@@ -22,10 +22,8 @@ void main() {
     final images = imagesInCategory('landscapes');
     final started = images.first;
     SharedPreferences.setMockInitialValues({
-      puzzleSaveKey(imageId: started.id, columns: 6, rows: 4): PuzzleSaveState(
-        trayPieceIndexes: List.generate(24, (index) => index),
-        lockedPieceIndexes: const [],
-        loosePiecePositions: const {},
+      puzzleSaveKey(imageId: started.id, columns: 6, rows: 4): fullTraySave(
+        24,
       ).toJsonString(),
     });
     await pumpSelectScreen(tester, clock: fixedNow);

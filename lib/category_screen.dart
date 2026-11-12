@@ -4,8 +4,6 @@
 // rulings: bare images get straight edges; names live in semantics only).
 // Tapping a painting opens the shared size sheet → game flow.
 
-import 'dart:math' as math;
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -15,7 +13,6 @@ import 'puzzle_launcher.dart';
 import 'puzzle_save.dart';
 import 'studio_mascots.dart';
 import 'studio_surfaces.dart';
-import 'studio_theme.dart';
 
 class CategoryScreen extends StatefulWidget {
   const CategoryScreen({
@@ -132,17 +129,11 @@ class _CategoryScreenState extends State<CategoryScreen> {
         ),
       ),
       body: GridView.builder(
-        padding: const EdgeInsets.all(16),
+        padding: photoGridPadding,
         // Max width instead of a fixed column count: 2 across on phones so
         // the photo is big enough to judge (UI-6 ruling, amending #4's ~3),
         // more columns on tablets and the web build.
-        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-          maxCrossAxisExtent: 200,
-          mainAxisSpacing: 12,
-          crossAxisSpacing: 12,
-          // Near the photos' own 3:2, so BoxFit.cover crops little.
-          childAspectRatio: 1.4,
-        ),
+        gridDelegate: photoGridDelegate,
         itemCount: images.length,
         itemBuilder: (context, index) {
           final image = images[index];
@@ -169,15 +160,6 @@ class _PuzzleCard extends StatelessWidget {
     required this.onTap,
   });
 
-  /// Corner rounding of the photo card (owner's UI-6 round-2 pick:
-  /// style C at a smaller radius than the sheet's 18).
-  static const cornerRadius = Radius.circular(12);
-
-  /// Alternating hair's-width tilt, in radians: hand-placed, not torn —
-  /// straight edges are the UI-6 ruling for bare images.
-  static double tiltFor(int variant) =>
-      (variant.isEven ? -0.9 : 0.8) * math.pi / 180;
-
   final PuzzleImage image;
 
   /// Grid item index: drives the alternating tilt direction.
@@ -193,59 +175,18 @@ class _PuzzleCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // No visible title (UI-6 ruling) — the name lives on in the semantics
-    // label for screen readers, and the identifier keeps e2e taps working.
-    return Semantics(
-      identifier: 'catalog-puzzle-${image.id}',
-      label: image.title,
-      button: true,
-      child: Transform.rotate(
-        angle: tiltFor(variant),
-        child: Container(
-          decoration: const BoxDecoration(
-            // Opaque surface so the tile reads as a card while the photo is
-            // still decoding (or if it ever fails), not a floating shadow.
-            color: StudioColors.card,
-            borderRadius: BorderRadius.all(cornerRadius),
-            boxShadow: [PaintedCard.groundShadow],
-          ),
-          child: ClipRRect(
-            borderRadius: const BorderRadius.all(cornerRadius),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                Image.asset(
-                  image.assetPath,
-                  fit: BoxFit.cover,
-                  // Decode smaller previews to reduce memory use.
-                  cacheWidth: 640,
-                  // A photo that fails to decode would otherwise leave an
-                  // anonymous blank card — fall back to the visible title.
-                  errorBuilder: (context, _, _) => Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(8),
-                      child: Text(
-                        image.title,
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                    ),
-                  ),
-                ),
-                if (isCompleted)
-                  const Positioned(top: 8, right: 8, child: _CompletedBadge()),
-                if (isInProgress)
-                  const Positioned(top: 8, left: 8, child: _InProgressBadge()),
-                // Above the photo so the tap ripple shows on it.
-                Material(
-                  type: MaterialType.transparency,
-                  child: InkWell(onTap: onTap),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+    return TiltedPhotoCard(
+      assetPath: image.assetPath,
+      title: image.title,
+      semanticsIdentifier: 'catalog-puzzle-${image.id}',
+      variant: variant,
+      onTap: onTap,
+      overlays: [
+        if (isCompleted)
+          const Positioned(top: 8, right: 8, child: _CompletedBadge()),
+        if (isInProgress)
+          const Positioned(top: 8, left: 8, child: _InProgressBadge()),
+      ],
     );
   }
 }

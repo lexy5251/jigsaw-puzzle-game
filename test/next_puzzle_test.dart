@@ -209,10 +209,7 @@ void main() {
       tester,
     ) async {
       prefs.storage[completionKeyFor(secondTestImage, singlePieceSize)] =
-          CompletionRecord(
-            count: 1,
-            lastCompletedAt: DateTime.utc(2026),
-          ).toJsonString();
+          completionOn(DateTime.utc(2026)).toJsonString();
       final game = await bootGameScreen(
         tester,
         image: singlePieceImage,
@@ -237,10 +234,7 @@ void main() {
             secondTestImage,
             const PuzzleSize(columns: 2, rows: 2),
           )] =
-          CompletionRecord(
-            count: 1,
-            lastCompletedAt: DateTime.utc(2026),
-          ).toJsonString();
+          completionOn(DateTime.utc(2026)).toJsonString();
       final game = await bootGameScreen(
         tester,
         image: singlePieceImage,
