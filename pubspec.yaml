@@ -69,6 +69,7 @@ flutter:
     - assets/images/animals/
     - assets/images/flowers/
     - assets/images/cities/
+    - assets/images/vintage_prints/
     - assets/images/art/
 
   # Bundled OFL fonts (licenses alongside the files in assets/fonts/).

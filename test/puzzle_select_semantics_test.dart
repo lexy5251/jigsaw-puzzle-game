@@ -17,7 +17,8 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
 
-      DateTime fixedNow() => DateTime(2026, 11, 20, 14);
+      // An Alpine daily under the current 70-image catalog.
+      DateTime fixedNow() => DateTime(2026, 12, 12, 14);
       final daily = dailyPuzzleFor(fixedNow());
       expect(daily.id, 'alpine-lakes-panorama');
       final savedSize = puzzleSizes[easyInProgress ? 0 : 1];
@@ -29,7 +30,7 @@ void main() {
         // Begun today, so the daily card counts it as in progress.
         ): fullTraySave(
           savedSize.pieceCount,
-          startedDay: '2026-11-20',
+          startedDay: '2026-12-12',
         ).toJsonString(),
       });
       await pumpSelectScreen(tester, clock: fixedNow);
@@ -39,7 +40,7 @@ void main() {
       // but must never satisfy the size picker's progress selector.
       expect(find.text('In progress'), findsOneWidget);
       final easyStatus = find.bySemanticsIdentifier(
-        'puzzle-in-progress-alpine-lakes-panorama-6x4',
+        'puzzle-in-progress-alpine-lakes-panorama-5x5',
       );
       expect(easyStatus, findsNothing);
 
@@ -53,15 +54,15 @@ void main() {
       final catalogTitle = catalogPuzzleCard('alpine-lakes-panorama');
       await scrollSelectScreenTo(tester, catalogTitle, delta: 150);
       expect(catalogTitle, findsOneWidget);
-      expect(tester.getSemantics(catalogTitle).label, 'Alpine Lakes Panorama');
+      expect(tester.getSemantics(catalogTitle).label, 'Alpine Lake Morning');
       await tester.tap(catalogTitle);
       await tester.pumpAndSettle();
 
       final easyOption = find.bySemanticsIdentifier(
-        'puzzle-size-alpine-lakes-panorama-6x4',
+        'puzzle-size-alpine-lakes-panorama-5x5',
       );
       expect(easyOption.hitTestable(), findsOneWidget);
-      expect(tester.getSemantics(easyOption).label, '24 pieces');
+      expect(tester.getSemantics(easyOption).label, '25 pieces');
       expect(easyStatus, easyInProgress ? findsOneWidget : findsNothing);
       if (easyInProgress) {
         expect(tester.getSemantics(easyStatus).label, 'In progress');

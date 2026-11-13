@@ -31,6 +31,7 @@ const categoryMascots = <String, StudioMascot>{
   'animals': StudioMascot.cat,
   'flowers': StudioMascot.daisy,
   'cities': StudioMascot.houses,
+  'vintage_prints': StudioMascot.sunflower,
   'art': StudioMascot.palette,
 };
 

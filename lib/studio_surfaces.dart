@@ -279,8 +279,8 @@ const photoGridDelegate = SliverGridDelegateWithMaxCrossAxisExtent(
   maxCrossAxisExtent: 200,
   mainAxisSpacing: 12,
   crossAxisSpacing: 12,
-  // Near the photos' own 3:2, so BoxFit.cover crops little.
-  childAspectRatio: 1.4,
+  // The catalog photos are square (1:1), so square cells crop nothing.
+  childAspectRatio: 1.0,
 );
 
 /// A catalog photo as a bare, hand-placed card: straight rounded edges, a

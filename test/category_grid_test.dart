@@ -120,7 +120,7 @@ void main() {
     await tester.tap(card('first'));
     await tester.pumpAndSettle();
 
-    expect(find.text('24 pieces'), findsOneWidget);
+    expect(find.text('25 pieces'), findsOneWidget);
   });
 
   testWidgets('cards announce as buttons', (tester) async {
@@ -135,7 +135,7 @@ void main() {
 
   testWidgets('a completed image announces Completed', (tester) async {
     SharedPreferences.setMockInitialValues({
-      puzzleCompletionKey(imageId: 'first', columns: 6, rows: 4):
+      puzzleCompletionKey(imageId: 'first', columns: 5, rows: 5):
           completionOn(DateTime(2026, 11, 1)).toJsonString(),
     });
     await pumpCategory(tester);

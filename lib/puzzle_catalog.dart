@@ -47,13 +47,14 @@ class PuzzleSize {
   int get pieceCount => columns * rows;
 }
 
-// Catalog images are 3:2, so columns:rows stays 3:2 — pieces are square
-// only on such grids (6x4, 12x8, 15x10, ...). Counts follow from that.
+// Catalog images are square (1:1, since the 2026-11 regeneration), so
+// grids stay square too — pieces are square only on such grids. Counts
+// follow from that.
 const puzzleSizes = [
-  PuzzleSize(columns: 6, rows: 4),
-  PuzzleSize(columns: 12, rows: 8),
-  PuzzleSize(columns: 15, rows: 10),
-  PuzzleSize(columns: 18, rows: 12),
+  PuzzleSize(columns: 5, rows: 5),
+  PuzzleSize(columns: 10, rows: 10),
+  PuzzleSize(columns: 12, rows: 12),
+  PuzzleSize(columns: 15, rows: 15),
 ];
 
 const puzzleCategories = [
@@ -62,6 +63,7 @@ const puzzleCategories = [
   PuzzleCategory(id: 'animals', title: 'Animals'),
   PuzzleCategory(id: 'flowers', title: 'Flowers & Gardens'),
   PuzzleCategory(id: 'cities', title: 'Cities & Travel'),
+  PuzzleCategory(id: 'vintage_prints', title: 'Vintage Prints'),
   PuzzleCategory(id: 'art', title: 'Art & Patterns'),
 ];
 
@@ -69,33 +71,15 @@ const puzzleCatalog = [
   // -- Landscapes --
   PuzzleImage(
     id: 'alpine-lakes-panorama',
-    title: 'Alpine Lakes Panorama',
+    title: 'Alpine Lake Morning',
     categoryId: 'landscapes',
     fileName: 'landscapes/alpine_lakes_panorama.webp',
-  ),
-  PuzzleImage(
-    id: 'emerald-lake-vista',
-    title: 'Emerald Lake Vista',
-    categoryId: 'landscapes',
-    fileName: 'landscapes/emerald_lake_vista.webp',
-  ),
-  PuzzleImage(
-    id: 'snowcapped-lake',
-    title: 'Snowcapped Lake',
-    categoryId: 'landscapes',
-    fileName: 'landscapes/snowcapped_lake.webp',
   ),
   PuzzleImage(
     id: 'wild-coast-cliffs',
     title: 'Wild Coast Cliffs',
     categoryId: 'landscapes',
     fileName: 'landscapes/wild_coast_cliffs.webp',
-  ),
-  PuzzleImage(
-    id: 'autumn-reflections',
-    title: 'Autumn Reflections',
-    categoryId: 'landscapes',
-    fileName: 'landscapes/autumn_reflections.webp',
   ),
   PuzzleImage(
     id: 'tuscan-sunset-hills',
@@ -116,16 +100,34 @@ const puzzleCatalog = [
     fileName: 'landscapes/red_canyon_river.webp',
   ),
   PuzzleImage(
-    id: 'turquoise-cove',
-    title: 'Turquoise Cove',
+    id: 'autumn-forest-path',
+    title: 'Autumn Forest Path',
     categoryId: 'landscapes',
-    fileName: 'landscapes/turquoise_cove.webp',
+    fileName: 'landscapes/autumn_forest_path.webp',
   ),
   PuzzleImage(
-    id: 'wildflower-peaks',
-    title: 'Wildflower Peaks',
+    id: 'wildflower-meadow',
+    title: 'Wildflower Meadow',
     categoryId: 'landscapes',
-    fileName: 'landscapes/wildflower_peaks.webp',
+    fileName: 'landscapes/wildflower_meadow.webp',
+  ),
+  PuzzleImage(
+    id: 'snowy-pine-valley',
+    title: 'Snowy Pine Valley',
+    categoryId: 'landscapes',
+    fileName: 'landscapes/snowy_pine_valley.webp',
+  ),
+  PuzzleImage(
+    id: 'lavender-field-evening',
+    title: 'Lavender Field Evening',
+    categoryId: 'landscapes',
+    fileName: 'landscapes/lavender_field_evening.webp',
+  ),
+  PuzzleImage(
+    id: 'mossy-waterfall-gorge',
+    title: 'Waterfall Gorge',
+    categoryId: 'landscapes',
+    fileName: 'landscapes/mossy_waterfall_gorge.webp',
   ),
   // -- Cozy Places --
   PuzzleImage(
@@ -135,22 +137,22 @@ const puzzleCatalog = [
     fileName: 'cozy/country_stone_cottage.webp',
   ),
   PuzzleImage(
-    id: 'forest-cabin',
-    title: 'Forest Cabin',
+    id: 'fireplace-room',
+    title: 'Fireplace Room',
     categoryId: 'cozy',
-    fileName: 'cozy/forest_cabin.webp',
+    fileName: 'cozy/fireplace_room.webp',
   ),
   PuzzleImage(
-    id: 'rainy-street-cafe',
-    title: 'Rainy Street Café',
+    id: 'reading-nook',
+    title: 'Reading Nook',
     categoryId: 'cozy',
-    fileName: 'cozy/rainy_street_cafe.webp',
+    fileName: 'cozy/reading_nook.webp',
   ),
   PuzzleImage(
-    id: 'lakefront-cabin-deck',
-    title: 'Lakefront Cabin Deck',
+    id: 'rainy-cafe-interior',
+    title: 'Rainy Café Interior',
     categoryId: 'cozy',
-    fileName: 'cozy/lakefront_cabin_deck.webp',
+    fileName: 'cozy/rainy_cafe_interior.webp',
   ),
   PuzzleImage(
     id: 'old-village-lane',
@@ -165,43 +167,30 @@ const puzzleCatalog = [
     fileName: 'cozy/snowy_woodland_chalet.webp',
   ),
   PuzzleImage(
-    id: 'rainy-cafe-interior',
-    title: 'Rainy Café Interior',
+    id: 'farm-kitchen-morning',
+    title: 'Farm Kitchen Morning',
     categoryId: 'cozy',
-    fileName: 'cozy/rainy_cafe_interior.webp',
+    fileName: 'cozy/farm_kitchen_morning.webp',
   ),
   PuzzleImage(
-    id: 'reading-nook',
-    title: 'Reading Nook',
+    id: 'greenhouse-corner',
+    title: 'Greenhouse Corner',
     categoryId: 'cozy',
-    fileName: 'cozy/reading_nook.webp',
+    fileName: 'cozy/greenhouse_corner.webp',
   ),
   PuzzleImage(
-    id: 'autumn-lake-cabin',
-    title: 'Autumn Lake Cabin',
+    id: 'attic-art-studio',
+    title: 'Attic Art Studio',
     categoryId: 'cozy',
-    fileName: 'cozy/autumn_lake_cabin.webp',
+    fileName: 'cozy/attic_art_studio.webp',
   ),
   PuzzleImage(
-    id: 'fireplace-room',
-    title: 'Fireplace Room',
+    id: 'village-bakery-front',
+    title: 'Village Bakery',
     categoryId: 'cozy',
-    fileName: 'cozy/fireplace_room.webp',
+    fileName: 'cozy/village_bakery_front.webp',
   ),
-
   // -- Animals --
-  PuzzleImage(
-    id: 'city-window-cat-nap',
-    title: 'City Window Cat Nap',
-    categoryId: 'animals',
-    fileName: 'animals/city_window_cat_nap.webp',
-  ),
-  PuzzleImage(
-    id: 'evening-cat-nap',
-    title: 'Evening Cat Nap',
-    categoryId: 'animals',
-    fileName: 'animals/evening_cat_nap.webp',
-  ),
   PuzzleImage(
     id: 'pets-in-the-reading-nook',
     title: 'Pets in the Reading Nook',
@@ -221,66 +210,53 @@ const puzzleCatalog = [
     fileName: 'animals/dog_by_the_fire.webp',
   ),
   PuzzleImage(
-    id: 'lakeside-camper-cat',
-    title: 'Lakeside Camper Cat',
+    id: 'ducklings-pond-morning',
+    title: 'Ducklings on the Pond',
     categoryId: 'animals',
-    fileName: 'animals/lakeside_camper_cat.webp',
+    fileName: 'animals/ducklings_pond_morning.webp',
   ),
   PuzzleImage(
-    id: 'cafe-companion',
-    title: 'Café Companion',
+    id: 'garden-rabbits',
+    title: 'Garden Rabbits',
     categoryId: 'animals',
-    fileName: 'animals/cafe_companion.webp',
+    fileName: 'animals/garden_rabbits.webp',
   ),
   PuzzleImage(
-    id: 'bookshop-nap',
-    title: 'Bookshop Nap',
+    id: 'meadow-horses',
+    title: 'Meadow Horses',
     categoryId: 'animals',
-    fileName: 'animals/bookshop_nap.webp',
+    fileName: 'animals/meadow_horses.webp',
   ),
   PuzzleImage(
-    id: 'campfire-collie',
-    title: 'Campfire Collie',
+    id: 'winter-fox',
+    title: 'Winter Fox',
     categoryId: 'animals',
-    fileName: 'animals/campfire_collie.webp',
+    fileName: 'animals/winter_fox.webp',
   ),
   PuzzleImage(
-    id: 'lakeside-camp-dog',
-    title: 'Lakeside Camp Dog',
+    id: 'bird-feeder-gathering',
+    title: 'At the Bird Feeder',
     categoryId: 'animals',
-    fileName: 'animals/lakeside_camp_dog.webp',
+    fileName: 'animals/bird_feeder_gathering.webp',
   ),
-
+  PuzzleImage(
+    id: 'hillside-sheep',
+    title: 'Hillside Sheep',
+    categoryId: 'animals',
+    fileName: 'animals/hillside_sheep.webp',
+  ),
+  PuzzleImage(
+    id: 'koi-pond-lanterns',
+    title: 'Koi Pond',
+    categoryId: 'animals',
+    fileName: 'animals/koi_pond_lanterns.webp',
+  ),
   // -- Flowers & Gardens --
   PuzzleImage(
-    id: 'rose-terrace-sunset',
-    title: 'Rose Terrace Sunset',
+    id: 'peony-bouquet',
+    title: 'Peony Bouquet',
     categoryId: 'flowers',
-    fileName: 'flowers/rose_terrace_sunset.webp',
-  ),
-  PuzzleImage(
-    id: 'hydrangea-water-garden',
-    title: 'Hydrangea Water Garden',
-    categoryId: 'flowers',
-    fileName: 'flowers/hydrangea_water_garden.webp',
-  ),
-  PuzzleImage(
-    id: 'peony-courtyard',
-    title: 'Peony Courtyard',
-    categoryId: 'flowers',
-    fileName: 'flowers/peony_courtyard.webp',
-  ),
-  PuzzleImage(
-    id: 'wisteria-patio',
-    title: 'Wisteria Patio',
-    categoryId: 'flowers',
-    fileName: 'flowers/wisteria_patio.webp',
-  ),
-  PuzzleImage(
-    id: 'garden-arch-view',
-    title: 'Garden Arch View',
-    categoryId: 'flowers',
-    fileName: 'flowers/garden_arch_view.webp',
+    fileName: 'flowers/peony_bouquet.webp',
   ),
   PuzzleImage(
     id: 'tulips-and-windmill',
@@ -289,48 +265,59 @@ const puzzleCatalog = [
     fileName: 'flowers/tulips_and_windmill.webp',
   ),
   PuzzleImage(
+    id: 'wisteria-patio',
+    title: 'Wisteria Patio',
+    categoryId: 'flowers',
+    fileName: 'flowers/wisteria_patio.webp',
+  ),
+  PuzzleImage(
     id: 'cherry-blossom-pond',
     title: 'Cherry Blossom Pond',
     categoryId: 'flowers',
     fileName: 'flowers/cherry_blossom_pond.webp',
   ),
   PuzzleImage(
-    id: 'cottage-garden-sunset',
-    title: 'Cottage Garden Sunset',
+    id: 'hydrangea-water-garden',
+    title: 'Hydrangea Water Garden',
     categoryId: 'flowers',
-    fileName: 'flowers/cottage_garden_sunset.webp',
+    fileName: 'flowers/hydrangea_water_garden.webp',
   ),
   PuzzleImage(
-    id: 'peony-bouquet',
-    title: 'Peony Bouquet',
+    id: 'sunflower-field-noon',
+    title: 'Sunflower Field',
     categoryId: 'flowers',
-    fileName: 'flowers/peony_bouquet.webp',
+    fileName: 'flowers/sunflower_field_noon.webp',
   ),
   PuzzleImage(
-    id: 'poppy-meadow-sunset',
-    title: 'Poppy Meadow Sunset',
+    id: 'flower-market-stall',
+    title: 'Flower Market Stall',
     categoryId: 'flowers',
-    fileName: 'flowers/poppy_meadow_sunset.webp',
+    fileName: 'flowers/flower_market_stall.webp',
   ),
-
+  PuzzleImage(
+    id: 'windowsill-botanicals',
+    title: 'Windowsill Botanicals',
+    categoryId: 'flowers',
+    fileName: 'flowers/windowsill_botanicals.webp',
+  ),
+  PuzzleImage(
+    id: 'rose-arch-gate',
+    title: 'Rose Arch Gate',
+    categoryId: 'flowers',
+    fileName: 'flowers/rose_arch_gate.webp',
+  ),
+  PuzzleImage(
+    id: 'lavender-harvest-still-life',
+    title: 'Lavender Harvest',
+    categoryId: 'flowers',
+    fileName: 'flowers/lavender_harvest_still_life.webp',
+  ),
   // -- Cities & Travel --
-  PuzzleImage(
-    id: 'old-town-charm',
-    title: 'Old Town Charm',
-    categoryId: 'cities',
-    fileName: 'cities/old_town_charm.webp',
-  ),
   PuzzleImage(
     id: 'santorini-coast',
     title: 'Santorini Coast',
     categoryId: 'cities',
     fileName: 'cities/santorini_coast.webp',
-  ),
-  PuzzleImage(
-    id: 'roman-architecture',
-    title: 'Roman Architecture',
-    categoryId: 'cities',
-    fileName: 'cities/roman_architecture.webp',
   ),
   PuzzleImage(
     id: 'venice-canal',
@@ -339,10 +326,10 @@ const puzzleCatalog = [
     fileName: 'cities/venice_canal.webp',
   ),
   PuzzleImage(
-    id: 'japanese-landmark',
-    title: 'Japanese Landmark',
+    id: 'paris-street',
+    title: 'Paris Street',
     categoryId: 'cities',
-    fileName: 'cities/japanese_landmark.webp',
+    fileName: 'cities/paris_street.webp',
   ),
   PuzzleImage(
     id: 'london-riverside-dusk',
@@ -351,22 +338,28 @@ const puzzleCatalog = [
     fileName: 'cities/london_riverside_dusk.webp',
   ),
   PuzzleImage(
+    id: 'amsterdam-canal-bikes',
+    title: 'Amsterdam Canal',
+    categoryId: 'cities',
+    fileName: 'cities/amsterdam_canal_bikes.webp',
+  ),
+  PuzzleImage(
+    id: 'japanese-temple-lane',
+    title: 'Japanese Temple Lane',
+    categoryId: 'cities',
+    fileName: 'cities/japanese_temple_lane.webp',
+  ),
+  PuzzleImage(
     id: 'colorful-seaside-village',
     title: 'Colorful Seaside Village',
     categoryId: 'cities',
     fileName: 'cities/colorful_seaside_village.webp',
   ),
   PuzzleImage(
-    id: 'paris-street',
-    title: 'Paris Street',
+    id: 'old-town-charm',
+    title: 'Old Town Flower Corner',
     categoryId: 'cities',
-    fileName: 'cities/paris_street.webp',
-  ),
-  PuzzleImage(
-    id: 'adriatic-old-city',
-    title: 'Adriatic Old City',
-    categoryId: 'cities',
-    fileName: 'cities/adriatic_old_city.webp',
+    fileName: 'cities/old_town_charm.webp',
   ),
   PuzzleImage(
     id: 'alpine-lakeside-village',
@@ -374,7 +367,73 @@ const puzzleCatalog = [
     categoryId: 'cities',
     fileName: 'cities/alpine_lakeside_village.webp',
   ),
-
+  PuzzleImage(
+    id: 'moroccan-blue-alley',
+    title: 'Blue Alley',
+    categoryId: 'cities',
+    fileName: 'cities/moroccan_blue_alley.webp',
+  ),
+  // -- Vintage Prints --
+  PuzzleImage(
+    id: 'riviera-travel-poster',
+    title: 'Riviera Poster',
+    categoryId: 'vintage_prints',
+    fileName: 'vintage_prints/riviera_travel_poster.webp',
+  ),
+  PuzzleImage(
+    id: 'alpine-train-poster',
+    title: 'Alpine Train Poster',
+    categoryId: 'vintage_prints',
+    fileName: 'vintage_prints/alpine_train_poster.webp',
+  ),
+  PuzzleImage(
+    id: 'balloon-festival-poster',
+    title: 'Balloon Festival',
+    categoryId: 'vintage_prints',
+    fileName: 'vintage_prints/balloon_festival_poster.webp',
+  ),
+  PuzzleImage(
+    id: 'botanical-rose-plate',
+    title: 'Botanical Roses',
+    categoryId: 'vintage_prints',
+    fileName: 'vintage_prints/botanical_rose_plate.webp',
+  ),
+  PuzzleImage(
+    id: 'butterfly-specimen-plate',
+    title: 'Butterflies & Moths',
+    categoryId: 'vintage_prints',
+    fileName: 'vintage_prints/butterfly_specimen_plate.webp',
+  ),
+  PuzzleImage(
+    id: 'orange-crate-label',
+    title: 'Orange Grove Label',
+    categoryId: 'vintage_prints',
+    fileName: 'vintage_prints/orange_crate_label.webp',
+  ),
+  PuzzleImage(
+    id: 'retro-kitchen-still-life',
+    title: 'Retro Kitchen',
+    categoryId: 'vintage_prints',
+    fileName: 'vintage_prints/retro_kitchen_still_life.webp',
+  ),
+  PuzzleImage(
+    id: 'vintage-teatime',
+    title: 'Vintage Teatime',
+    categoryId: 'vintage_prints',
+    fileName: 'vintage_prints/vintage_teatime.webp',
+  ),
+  PuzzleImage(
+    id: 'sea-chart-voyage',
+    title: 'Sea Chart Voyage',
+    categoryId: 'vintage_prints',
+    fileName: 'vintage_prints/sea_chart_voyage.webp',
+  ),
+  PuzzleImage(
+    id: 'flower-bicycle-print',
+    title: 'Flower Bicycle',
+    categoryId: 'vintage_prints',
+    fileName: 'vintage_prints/flower_bicycle_print.webp',
+  ),
   // -- Art & Patterns --
   PuzzleImage(
     id: 'cozy-craft-cabin',

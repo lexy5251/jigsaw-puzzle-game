@@ -35,11 +35,11 @@ void main() {
     final started = images[0];
     final finished = images[1];
     SharedPreferences.setMockInitialValues({
-      puzzleSaveKey(imageId: started.id, columns: 6, rows: 4):
-          partiallyPlacedSave(24, placed: 20).toJsonString(),
-      puzzleCompletionKey(imageId: finished.id, columns: 6, rows: 4):
+      puzzleSaveKey(imageId: started.id, columns: 5, rows: 5):
+          partiallyPlacedSave(25, placed: 20).toJsonString(),
+      puzzleCompletionKey(imageId: finished.id, columns: 5, rows: 5):
           completionOn(DateTime(2026, 11, 9)).toJsonString(),
-      puzzleCompletionKey(imageId: finished.id, columns: 12, rows: 8):
+      puzzleCompletionKey(imageId: finished.id, columns: 10, rows: 10):
           completionOn(DateTime(2026, 11, 10)).toJsonString(),
     });
     await pumpMyPuzzles(tester);
@@ -50,7 +50,7 @@ void main() {
       find.bySemanticsIdentifier('my-puzzles-in-progress-${started.id}'),
       findsOneWidget,
     );
-    expect(find.text('20/24 pieces'), findsNothing);
+    expect(find.text('20/25 pieces'), findsNothing);
     expect(find.text(started.title), findsNothing);
     expect(find.textContaining('Nothing on the easel'), findsNothing);
 
@@ -61,7 +61,7 @@ void main() {
       find.bySemanticsIdentifier('my-puzzles-finished-${finished.id}'),
       findsOneWidget,
     );
-    expect(find.text('24 · 96 pieces'), findsOneWidget);
+    expect(find.text('25 · 100 pieces'), findsOneWidget);
     expect(find.text(finished.title), findsNothing);
     expect(find.textContaining("they'll hang here"), findsNothing);
   });
@@ -85,15 +85,15 @@ void main() {
   ) async {
     final images = imagesInCategory('landscapes');
     SharedPreferences.setMockInitialValues({
-      puzzleSaveKey(imageId: images[0].id, columns: 6, rows: 4): '{broken',
+      puzzleSaveKey(imageId: images[0].id, columns: 5, rows: 5): '{broken',
       // Three of 24 pieces: fails the same consistency check as the badges.
-      puzzleSaveKey(imageId: images[1].id, columns: 6, rows: 4): fullTraySave(
+      puzzleSaveKey(imageId: images[1].id, columns: 5, rows: 5): fullTraySave(
         3,
       ).toJsonString(),
-      puzzleSaveKey(imageId: 'gone-photo', columns: 6, rows: 4): fullTraySave(
-        24,
+      puzzleSaveKey(imageId: 'gone-photo', columns: 5, rows: 5): fullTraySave(
+        25,
       ).toJsonString(),
-      puzzleCompletionKey(imageId: 'gone-photo', columns: 6, rows: 4):
+      puzzleCompletionKey(imageId: 'gone-photo', columns: 5, rows: 5):
           completionOn(DateTime(2026, 11, 9)).toJsonString(),
     });
     await pumpMyPuzzles(tester);
@@ -112,15 +112,15 @@ void main() {
     final started = imagesInCategory('landscapes').first;
     SharedPreferences.setMockInitialValues({
       // Two runs of the same photo: the card must appear exactly once.
-      puzzleSaveKey(imageId: started.id, columns: 6, rows: 4):
+      puzzleSaveKey(imageId: started.id, columns: 5, rows: 5):
           partiallyPlacedSave(
-            24,
+            25,
             placed: 20,
             startedDay: '2026-11-12',
           ).toJsonString(),
-      puzzleSaveKey(imageId: started.id, columns: 12, rows: 8):
+      puzzleSaveKey(imageId: started.id, columns: 10, rows: 10):
           partiallyPlacedSave(
-            96,
+            100,
             placed: 57,
             startedDay: '2026-11-10',
           ).toJsonString(),
@@ -150,7 +150,7 @@ void main() {
   testWidgets('tapping a finished card opens the size sheet', (tester) async {
     final finished = imagesInCategory('landscapes').first;
     SharedPreferences.setMockInitialValues({
-      puzzleCompletionKey(imageId: finished.id, columns: 6, rows: 4):
+      puzzleCompletionKey(imageId: finished.id, columns: 5, rows: 5):
           completionOn(DateTime(2026, 11, 9)).toJsonString(),
     });
     await pumpMyPuzzles(tester);

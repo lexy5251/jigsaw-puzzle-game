@@ -22,8 +22,8 @@ void main() {
     final images = imagesInCategory('landscapes');
     final started = images.first;
     SharedPreferences.setMockInitialValues({
-      puzzleSaveKey(imageId: started.id, columns: 6, rows: 4): fullTraySave(
-        24,
+      puzzleSaveKey(imageId: started.id, columns: 5, rows: 5): fullTraySave(
+        25,
       ).toJsonString(),
     });
     await pumpSelectScreen(tester, clock: fixedNow);
@@ -71,7 +71,7 @@ void main() {
     ) async {
       final started = imagesInCategory('landscapes').first;
       SharedPreferences.setMockInitialValues({
-        puzzleSaveKey(imageId: started.id, columns: 6, rows: 4): entry.value,
+        puzzleSaveKey(imageId: started.id, columns: 5, rows: 5): entry.value,
       });
       await pumpSelectScreen(tester, clock: fixedNow);
       await tester.pumpAndSettle();

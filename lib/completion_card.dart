@@ -168,9 +168,9 @@ class CompletionCard extends StatelessWidget {
   }
 
   Widget _photo() => AspectRatio(
-    // Catalog images are 3:2 (the grid-ladder invariant relies on it);
+    // Catalog images are square (the grid-ladder invariant relies on it);
     // AspectRatio keeps that true whatever width the layout grants.
-    aspectRatio: 3 / 2,
+    aspectRatio: 1,
     child: FramedArt(
       child: Image.asset(
         image.assetPath,

@@ -12,15 +12,11 @@ import 'test_helpers.dart';
 
 /// Covers the select → size picker → game screen navigation flow.
 void main() {
-  test('every catalog size keeps columns:rows = 3:2 so pieces stay square', () {
-    // Catalog images are 3072x2048 (3:2); any other grid ratio stretches
-    // the pieces (the 2026-11-05 phone-test finding).
+  test('every catalog size keeps columns == rows so pieces stay square', () {
+    // Catalog images are square (the 2026-11 1:1 regeneration); any other
+    // grid ratio stretches the pieces (the 2026-11-05 phone-test finding).
     for (final size in puzzleSizes) {
-      expect(
-        size.columns / size.rows,
-        1.5,
-        reason: '${size.columns}x${size.rows}',
-      );
+      expect(size.columns, size.rows, reason: '${size.columns}x${size.rows}');
     }
   });
 
@@ -33,10 +29,13 @@ void main() {
   for (final dailyMatchesCatalog in [false, true]) {
     testWidgets('catalog selection and completion use the fixed date when the daily image '
         '${dailyMatchesCatalog ? 'matches' : 'differs'}', (tester) async {
-      final now = DateTime(2026, 11, dailyMatchesCatalog ? 20 : 2, 14);
+      // Pinned to the current 70-image catalog: an Alpine day vs not.
+      final now = dailyMatchesCatalog
+          ? DateTime(2026, 12, 12, 14)
+          : DateTime(2026, 11, 2, 14);
       // Pin both cases so the duplicate-title regression is always exercised.
       expect(
-        dailyPuzzleFor(now).title == 'Alpine Lakes Panorama',
+        dailyPuzzleFor(now).title == 'Alpine Lake Morning',
         dailyMatchesCatalog,
       );
       await pumpSelectScreen(tester, clock: () => now);
@@ -55,12 +54,12 @@ void main() {
       await tester.tap(firstImage);
       await tester.pumpAndSettle();
 
-      expect(find.text('24 pieces'), findsOneWidget);
-      expect(find.text('96 pieces'), findsOneWidget);
-      expect(find.text('150 pieces'), findsOneWidget);
-      expect(find.text('216 pieces'), findsOneWidget);
+      expect(find.text('25 pieces'), findsOneWidget);
+      expect(find.text('100 pieces'), findsOneWidget);
+      expect(find.text('144 pieces'), findsOneWidget);
+      expect(find.text('225 pieces'), findsOneWidget);
 
-      await tester.tap(find.text('24 pieces'));
+      await tester.tap(find.text('25 pieces'));
       // runAsync lets the real photo load + decode finish while the sheet-close
       // and route animations play. pumpAndSettle would hang here: Flame's game
       // loop keeps scheduling frames forever once the GameWidget mounts.
@@ -75,7 +74,7 @@ void main() {
       await tester.pump();
 
       expect(find.byType(GameScreen), findsOneWidget);
-      expect(find.text('Test Photo · 24 pieces'), findsNothing);
+      expect(find.text('Test Photo · 25 pieces'), findsNothing);
 
       // Simulate Flame's completion notification after navigating from the
       // catalog. Daily credit must use the selection screen's fixed date.
@@ -108,8 +107,9 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
 
-      final now = DateTime(2026, 11, 20, 14);
-      expect(dailyPuzzleFor(now).title, 'Alpine Lakes Panorama');
+      // An Alpine daily under the current 70-image catalog.
+      final now = DateTime(2026, 12, 12, 14);
+      expect(dailyPuzzleFor(now).title, 'Alpine Lake Morning');
       await pumpSelectScreen(tester, clock: () => now);
 
       final landscapesCard = find.text('Landscapes');
@@ -127,7 +127,7 @@ void main() {
       expect(
         find.descendant(
           of: sheet,
-          matching: find.text('Alpine Lakes Panorama'),
+          matching: find.text('Alpine Lake Morning'),
         ),
         findsOneWidget,
       );
@@ -136,7 +136,7 @@ void main() {
       // The last option starts below the short sheet's fold.
       final lastOption = find.descendant(
         of: sheet,
-        matching: find.text('216 pieces'),
+        matching: find.text('225 pieces'),
       );
       expect(lastOption.hitTestable(), findsNothing);
       await tester.scrollUntilVisible(

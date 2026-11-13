@@ -24,11 +24,11 @@ void main() {
       find.descendant(of: firstCard, matching: find.byType(InkWell)).first,
     );
     await tester.pumpAndSettle();
-    expect(find.text('24 pieces'), findsOneWidget);
+    expect(find.text('25 pieces'), findsOneWidget);
     expect(find.textContaining('In progress'), findsNothing);
 
     // Start the 24-piece game and let it fully load (writes the fresh save).
-    await tester.tap(find.text('24 pieces'));
+    await tester.tap(find.text('25 pieces'));
     await tester.runAsync(() async {
       await tester.pumpAndSettle();
       final game = currentGame(tester);

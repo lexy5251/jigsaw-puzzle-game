@@ -170,6 +170,11 @@ const studioCategoryStyles = <String, StudioCategoryStyle>{
     accent: Color(0xFF71908B),
     tint: Color(0xFFDAE3DF),
   ),
+  // Dusty rose — the vintage half of the approved sage/rose direction.
+  'vintage_prints': StudioCategoryStyle(
+    accent: Color(0xFFAD6A74),
+    tint: Color(0xFFF2DCDC),
+  ),
   'art': StudioCategoryStyle(
     accent: Color(0xFF9D6A80),
     tint: Color(0xFFEAD9E0),

@@ -162,7 +162,7 @@ void main() {
       );
       await tester.tap(find.text('open'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('24 pieces'));
+      await tester.tap(find.text('25 pieces'));
       await tester.runAsync(() async {
         // Fixed pumps: with a warm image cache the game loads instantly and
         // its ticker keeps scheduling frames, so pumpAndSettle cannot settle.
@@ -196,7 +196,7 @@ void main() {
       }
       final chained = tester.widget<GameScreen>(find.byType(GameScreen));
       expect(chained.image.id, secondTestImage.id);
-      expect(find.text('24 pieces'), findsNothing); // straight in, no sheet
+      expect(find.text('25 pieces'), findsNothing); // straight in, no sheet
       expect(flowDone, isFalse, reason: 'The flow ends at the real exit.');
 
       await tester.pageBack();

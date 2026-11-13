@@ -230,7 +230,7 @@ void main() {
     await tester.tap(find.text("TODAY'S PAINTING"));
     await tester.pumpAndSettle();
 
-    expect(find.text('24 pieces'), findsOneWidget);
+    expect(find.text('25 pieces'), findsOneWidget);
     // The sheet repeats the daily image's title above the size list.
     expect(
       find.descendant(
@@ -247,8 +247,8 @@ void main() {
     SharedPreferences.setMockInitialValues({
       puzzleSaveKey(
         imageId: daily.id,
-        columns: 6,
-        rows: 4,
+        columns: 5,
+        rows: 5,
       ): const PuzzleSaveState(
         trayPieceIndexes: [],
         lockedPieceIndexes: [],

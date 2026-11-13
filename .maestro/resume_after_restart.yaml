@@ -33,9 +33,9 @@ appId: com.lexy5251.jigsawpuzzle
 
 # Pick the easiest size. No save exists yet, so the board must start fresh.
 - assertNotVisible:
-    id: "puzzle-in-progress-alpine-lakes-panorama-6x4"
+    id: "puzzle-in-progress-alpine-lakes-panorama-5x5"
 - tapOn:
-    id: "puzzle-size-alpine-lakes-panorama-6x4"
+    id: "puzzle-size-alpine-lakes-panorama-5x5"
 - assertVisible: "Puzzle board, new puzzle"
 
 # Kill the app completely, then relaunch WITHOUT clearing state.
@@ -57,11 +57,11 @@ appId: com.lexy5251.jigsawpuzzle
 - tapOn:
     id: "catalog-puzzle-alpine-lakes-panorama"
 - assertVisible:
-    id: "puzzle-in-progress-alpine-lakes-panorama-6x4"
+    id: "puzzle-in-progress-alpine-lakes-panorama-5x5"
     text: "In progress"
 
 # And it actually reopens into the saved puzzle — "resumed" proves the game
 # restored the save rather than starting a fresh board.
 - tapOn:
-    id: "puzzle-size-alpine-lakes-panorama-6x4"
+    id: "puzzle-size-alpine-lakes-panorama-5x5"
 - assertVisible: "Puzzle board, resumed"
