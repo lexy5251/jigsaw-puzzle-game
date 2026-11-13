@@ -3,22 +3,26 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jigsaw_puzzle/jigsaw_game.dart';
 import 'package:jigsaw_puzzle/piece_tray.dart';
+import 'package:jigsaw_puzzle/puzzle_logic.dart';
 import 'package:jigsaw_puzzle/puzzle_piece.dart';
 
 /// Two-row tray from the 2026-11-05 phone-test rulings (#2): more pieces
 /// visible at once, columns filling top-to-bottom, horizontal scroll kept.
 void main() {
-  // Test surface is 800x600: the tray (30% of height, max 200) is 180 tall
-  // and spans y=420..600; each thumbnail row is 75 tall.
+  // Test surface is 800x600: the phone-size piece ceiling (74) binds under
+  // the 75 the row height would allow, so the two rows need exactly 178 —
+  // just below trayHeightCap's 180 — and the tray spans y=422..600.
   Future<JigsawGame> bootGame(
     WidgetTester tester, {
     int columns = 6,
     int rows = 4,
+    double? trayMaxThumbnailHeight = trayThumbnailHeightCap,
   }) async {
     final game = JigsawGame(
       imageAsset: 'test_photo.jpg',
       columns: columns,
       rows: rows,
+      trayMaxThumbnailHeight: trayMaxThumbnailHeight,
     );
     // runAsync lets the real asset load + image decode inside onLoad finish.
     await tester.runAsync(() async {
@@ -67,7 +71,7 @@ void main() {
   testWidgets('thumbnails fill two rows, column by column', (tester) async {
     final game = await bootGame(tester);
     final tray = trayOf(game);
-    expect(tray.size.y, 180);
+    expect(tray.size.y, 178);
 
     final positions = tray.thumbnailPositions;
     // Second thumbnail sits below the first; third starts the next column.
@@ -95,7 +99,7 @@ void main() {
     expect(piece.index, order[1]);
   });
 
-  // The row gap spans y=505..515, so its midpoint is y=510.
+  // The row gap spans y=506..516, so its midpoint is y=511.
   for (final (touchY, expectedRow) in [(508.0, 0), (512.0, 1)]) {
     testWidgets('a gap touch at y=$touchY lifts the nearest row', (
       tester,
@@ -138,7 +142,7 @@ void main() {
     expect(tray.scrollOffset, closeTo(maxScroll, 0.001));
   });
 
-  testWidgets('a phone-width tray fits six full columns with no overlap', (
+  testWidgets('a phone-width tray fits five full columns with no overlap', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(400, 800);
@@ -153,7 +157,41 @@ void main() {
 
     // Slots advance by the full sprite box plus a gap: overlap impossible.
     expect(slotWidth, greaterThanOrEqualTo(tray.thumbnailSize.x));
-    // Six columns (12 pieces) sit fully inside the 400-wide tray.
-    expect(positions[10].x + tray.thumbnailSize.x, lessThanOrEqualTo(400));
+    // Five columns (10 pieces) sit fully inside the 400-wide tray...
+    expect(positions[8].x + tray.thumbnailSize.x, lessThanOrEqualTo(400));
+    // ...and a sixth full column would NOT fit — the density really is five.
+    // (Under the rejected 6-column geometry this sum is 396, inside 400.)
+    expect(positions[10].x + tray.thumbnailSize.x, greaterThan(400));
+  });
+
+  testWidgets('a tall narrow surface lets the tray grow past the legacy cap', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    // Uncapped pieces: the shipped phone-size ceiling would keep the rows
+    // at 178 and never reach the cap this test exists to exercise.
+    final game = await bootGame(tester, trayMaxThumbnailHeight: null);
+    final tray = trayOf(game);
+    // The 3:2 board is width-bound here with ~620px of slack below it, so
+    // the cap no longer clamps to the legacy 200 and the tray takes its
+    // preferred height (~338). This pins the slack branch end to end: a
+    // flipped board aspect in the game's cap wiring would fall back to 200.
+    final srcSize = tray.spriteSrcSizeFor(game.trayPieceIndexes.first)!;
+    expect(
+      tray.size.y,
+      closeTo(
+        preferredTrayHeight(
+          800,
+          srcSize.x / srcSize.y,
+          maxThumbnailHeight: null,
+        ),
+        0.001,
+      ),
+    );
+    expect(tray.size.y, greaterThan(300));
   });
 }

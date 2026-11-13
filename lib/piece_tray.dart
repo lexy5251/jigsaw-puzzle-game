@@ -62,13 +62,21 @@ class PieceTray extends PositionComponent
     required List<PieceData> pieces,
     required this.pieceWorldSize,
     required this.isEdgePiece,
+    this.visibleColumns = trayVisibleColumns,
+    this.maxThumbnailHeight = trayThumbnailHeightCap,
     required super.position,
     required super.size,
   }) : _remainingPieces = List.of(pieces);
 
-  // Row count, column density, and spacing live in puzzle_logic.dart
+  // Row count, default column density, and spacing live in puzzle_logic.dart
   // (trayRows, trayVisibleColumns, trayPadding, traySlotGap).
   static const _liftDistanceAboveTray = 4.0;
+
+  /// How many columns must fit across the tray; sets the thumbnail size.
+  final int visibleColumns;
+
+  /// Thumbnail height ceiling (phone-size pieces everywhere); null = none.
+  final double? maxThumbnailHeight;
 
   /// Full size on the board; tray previews preserve this aspect ratio.
   final Vector2 pieceWorldSize;
@@ -100,8 +108,13 @@ class PieceTray extends PositionComponent
   late final RectangleComponent _background;
   late final ClipComponent _trayClip;
 
-  double get _thumbnailHeight =>
-      trayThumbnailHeight(size.x, size.y, _thumbnailAspect);
+  double get _thumbnailHeight => trayThumbnailHeight(
+    size.x,
+    size.y,
+    _thumbnailAspect,
+    visibleColumns: visibleColumns,
+    maxThumbnailHeight: maxThumbnailHeight,
+  );
   double get _rowSlotHeight => _thumbnailHeight + trayPadding;
 
   // Previews show the shaped piece images, which carry a transparent bleed

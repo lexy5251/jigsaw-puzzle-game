@@ -76,16 +76,59 @@ void main() {
 
   group('tray geometry', () {
     test('thumbnail height is bounded by rows and by visible columns', () {
-      // Wide tray: the row height binds — (180 - 30) / 2.
-      expect(trayThumbnailHeight(800, 180, 1), 75);
-      // Narrow tray: the six-column rule binds — (390 / 6) - 4.
-      expect(trayThumbnailHeight(400, 400, 1), 61);
+      // Wide tray, uncapped: the row height binds — (180 - 30) / 2.
+      expect(trayThumbnailHeight(800, 180, 1, maxThumbnailHeight: null), 75);
+      // Same tray with the shipped ceiling: phone-size pieces win.
+      expect(trayThumbnailHeight(800, 180, 1), trayThumbnailHeightCap);
+      // Narrow tray: the five-column rule binds — (390 / 5) - 4.
+      expect(trayThumbnailHeight(400, 400, 1), 74);
     });
 
     test('preferred height is exactly what the two rows need', () {
       final height = preferredTrayHeight(400, 1);
-      expect(height, 2 * 61 + 30);
-      expect(trayThumbnailHeight(400, height, 1), closeTo(61, 1e-9));
+      expect(height, 2 * 74 + 30);
+      expect(trayThumbnailHeight(400, height, 1), closeTo(74, 1e-9));
+    });
+
+    test('a thumbnail ceiling bounds wide screens only', () {
+      // 1180-wide: the five-column rule would allow 230, the rows 185 —
+      // the ceiling wins and the preferred height follows it.
+      expect(trayThumbnailHeight(1180, 400, 1, maxThumbnailHeight: 74), 74);
+      expect(preferredTrayHeight(1180, 1, maxThumbnailHeight: 74), 2 * 74 + 30);
+      // Narrow screens under the ceiling keep their width-driven size.
+      expect(trayThumbnailHeight(320, 400, 1, maxThumbnailHeight: 74), 58);
+    });
+  });
+
+  group('trayHeightCap', () {
+    test('falls back to the legacy cap before the image is loaded', () {
+      // min(30% of 844, 200) with no board aspect to measure slack against.
+      expect(trayHeightCap(screenWidth: 390, screenHeight: 844), 200);
+    });
+
+    test('keeps the legacy cap when the board is height-bound', () {
+      // Landscape: a 3:2 board already fills the height; no slack to take.
+      expect(
+        trayHeightCap(screenWidth: 844, screenHeight: 390, boardAspect: 2 / 3),
+        closeTo(117, 1e-9),
+      );
+    });
+
+    test('absorbs the slack a width-bound square board leaves', () {
+      // 390x700 portrait, square board: the board needs 390 * 0.92 / 0.85
+      // of height; everything below is the tray's to take.
+      expect(
+        trayHeightCap(screenWidth: 390, screenHeight: 700, boardAspect: 1),
+        closeTo(700 - 390 * 0.92 / 0.85, 1e-9),
+      );
+    });
+
+    test('never exceeds 45% of the screen even with more slack', () {
+      // The owner's phone: slack is ~422 px, but the guard stops at 45%.
+      expect(
+        trayHeightCap(screenWidth: 390, screenHeight: 844, boardAspect: 1),
+        closeTo(844 * 0.45, 1e-9),
+      );
     });
   });
 

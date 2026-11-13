@@ -56,6 +56,8 @@ class JigsawGame extends FlameGame
     this.sounds,
     this.onCompleted,
     this.onBoardLoaded,
+    this.trayColumns = trayVisibleColumns,
+    this.trayMaxThumbnailHeight = trayThumbnailHeightCap,
   }) {
     // Claim at construction, not load: a restart creates the new game before
     // the old one disposes, so the handover keeps the cached photo warm.
@@ -79,6 +81,16 @@ class JigsawGame extends FlameGame
   final String imageAsset;
   final int columns;
   final int rows;
+
+  /// How many tray columns must fit across the screen — the knob that sets
+  /// tray piece size. Defaults to the shipped density; the preview harness
+  /// renders candidate densities with it.
+  final int trayColumns;
+
+  /// Ceiling on tray piece height — wide screens would otherwise scale
+  /// pieces up with the column rule. Defaults to the shipped phone-size
+  /// ceiling; the preview harness passes candidates (null = no ceiling).
+  final double? trayMaxThumbnailHeight;
 
   /// Reads and writes saved progress. Tests can omit storage to play in memory.
   final PuzzleSaveStore? saveStore;
@@ -165,19 +177,39 @@ class JigsawGame extends FlameGame
   double _fitZoom = 1;
   double _zoomAtPinchStart = 1;
 
-  // The tray takes exactly what its two rows need (six columns always fit —
-  // see the tray geometry in puzzle_logic.dart), capped so the board keeps
-  // most of the screen. Until the pieces are cut, the cap stands in.
+  // The tray takes exactly what its rows need (trayColumns always fit — see
+  // the tray geometry in puzzle_logic.dart), capped by trayHeightCap so a
+  // width-bound board's slack is used first. Until the pieces are cut, the
+  // cap stands in.
   double get _trayHeight {
-    final cap = min(size.y * 0.30, 200.0);
+    final cap = trayHeightCap(
+      screenWidth: size.x,
+      screenHeight: size.y,
+      boardAspect: _boardAspect,
+    );
     final aspect = _traySpriteAspect;
     if (aspect == null) {
       return cap;
     }
-    return min(cap, preferredTrayHeight(size.x, aspect));
+    return min(
+      cap,
+      preferredTrayHeight(
+        size.x,
+        aspect,
+        visibleColumns: trayColumns,
+        maxThumbnailHeight: trayMaxThumbnailHeight,
+      ),
+    );
   }
 
   double? _traySpriteAspect;
+
+  /// Board height / width for the tray cap's slack math. Derived from
+  /// [_boardSize] so the cap can never disagree with the camera fit; gated
+  /// on [_traySpriteAspect], which _loadPuzzle assigns strictly after
+  /// [_boardSize] — the gate is what makes reading the late field safe.
+  double? get _boardAspect =>
+      _traySpriteAspect == null ? null : _boardSize.y / _boardSize.x;
 
   BoardColorOption _boardColor = defaultBoardColorOption;
   RectangleComponent? _boardOutline;
@@ -414,6 +446,8 @@ class JigsawGame extends FlameGame
       pieces: pieces,
       pieceWorldSize: pieceSize,
       isEdgePiece: (pieceIndex) => isEdgePiece(pieceIndex, columns, rows),
+      visibleColumns: trayColumns,
+      maxThumbnailHeight: trayMaxThumbnailHeight,
       position: Vector2(0, size.y - _trayHeight),
       size: Vector2(size.x, _trayHeight),
     )..setEdgesOnly(_edgesOnlyFilter);
@@ -452,8 +486,8 @@ class JigsawGame extends FlameGame
   void _fitCameraToBoard() {
     final availableBoardSize = Vector2(size.x, size.y - _trayHeight);
     _fitZoom = min(
-      availableBoardSize.x * 0.92 / _boardSize.x,
-      availableBoardSize.y * 0.85 / _boardSize.y,
+      availableBoardSize.x * boardFitWidthFraction / _boardSize.x,
+      availableBoardSize.y * boardFitHeightFraction / _boardSize.y,
     );
 
     // Offset the camera so the board is centered in the space above the tray.

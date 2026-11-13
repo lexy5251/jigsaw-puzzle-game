@@ -147,18 +147,55 @@ const previewPhoneSizes = [
   (320.0, 568.0, 'narrow-320'),
 ];
 
-/// Captures [boundaryKey]'s RepaintBoundary at the shared preview pixel
-/// ratio and writes the PNG to [path]. Both preview harnesses go through
-/// here so the owner's renders always use the same scale.
-Future<void> capturePreviewPng(GlobalKey boundaryKey, String path) async {
+/// The one pixel ratio every preview render uses, so a size verdict made on
+/// one harness's output holds on the others.
+const previewPixelRatio = 3.0;
+
+/// Captures [boundaryKey]'s RepaintBoundary at [previewPixelRatio]. The
+/// caller owns (and must dispose) the returned image.
+Future<ui.Image> capturePreviewImage(GlobalKey boundaryKey) {
   final boundary =
       boundaryKey.currentContext!.findRenderObject()! as RenderRepaintBoundary;
-  final shot = await boundary.toImage(pixelRatio: 3);
+  return boundary.toImage(pixelRatio: previewPixelRatio);
+}
+
+/// Captures [boundaryKey]'s RepaintBoundary at the shared preview pixel
+/// ratio and writes the PNG to [path]. All preview harnesses go through
+/// here so the owner's renders always use the same scale.
+Future<void> capturePreviewPng(GlobalKey boundaryKey, String path) async {
+  final shot = await capturePreviewImage(boundaryKey);
   try {
     await writePreviewPng(shot, path);
   } finally {
     shot.dispose();
   }
+}
+
+/// Decodes a bundled asset image to pixels. Preview harnesses only — the
+/// app itself always goes through Flame's image cache or Image.asset.
+Future<ui.Image> decodeAssetImage(String assetPath) async {
+  final bytes = await rootBundle.load(assetPath);
+  final codec = await ui.instantiateImageCodec(bytes.buffer.asUint8List());
+  try {
+    return (await codec.getNextFrame()).image;
+  } finally {
+    codec.dispose();
+  }
+}
+
+/// Shared no-op sounds for suites that only need silence; tests that count
+/// cues keep their own recording fakes.
+class SilentGameSounds implements GameSounds {
+  @override
+  Future<void> preload() async {}
+  @override
+  void playDrop() {}
+  @override
+  void playSnap() {}
+  @override
+  void playComplete() {}
+  @override
+  Future<void> dispose() async {}
 }
 
 /// Warms the exact image-cache entries `Image.asset(cacheWidth: width)`

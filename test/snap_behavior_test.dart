@@ -10,9 +10,10 @@ import 'package:jigsaw_puzzle/puzzle_piece.dart';
 /// delta AHEAD of the finger, which once made carried pieces overshoot the
 /// drop point and miss the snap window (see PieceTray.onDragUpdate).
 void main() {
-  // Test surface is 800x600, so the two-row tray (30% of height, max 200) is
-  // 180 tall and starts at y=420. (50, 550) is the first column's bottom-row
-  // thumbnail — lifting from row two also exercises the two-row hit test.
+  // Test surface is 800x600: the phone-size piece ceiling makes the two
+  // rows need 178 (under the 180 legacy cap), so the tray starts at y=422.
+  // (50, 550) is the first column's bottom-row thumbnail — lifting from
+  // row two also exercises the two-row hit test.
   const trayThumbTouch = Offset(50, 550);
   const liftedTouch = Offset(50, 400); // above the tray: piece is on the board
 

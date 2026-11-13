@@ -24,6 +24,7 @@ import 'game_sounds.dart';
 import 'jigsaw_game.dart';
 import 'puzzle_catalog.dart';
 import 'puzzle_completion.dart';
+import 'puzzle_logic.dart';
 import 'puzzle_save.dart';
 import 'studio_surfaces.dart';
 import 'studio_theme.dart';
@@ -39,6 +40,8 @@ class GameScreen extends StatefulWidget {
     this.startedDay,
     this.settings = const AppSettings(),
     this.catalog = puzzleCatalog,
+    this.trayColumns = trayVisibleColumns,
+    this.trayMaxThumbnailHeight = trayThumbnailHeightCap,
   });
 
   final PuzzleImage image;
@@ -58,6 +61,14 @@ class GameScreen extends StatefulWidget {
   /// Returns "now"; tests fix the date to make the daily puzzle
   /// deterministic. Defaults to [DateTime.now].
   final DateTime Function()? clock;
+
+  /// Tray piece density, forwarded to the game; the preview harness renders
+  /// candidate densities with it.
+  final int trayColumns;
+
+  /// Optional tray piece height ceiling, forwarded to the game; the preview
+  /// harness renders the large-screen candidates with it.
+  final double? trayMaxThumbnailHeight;
 
   /// Day key stamped on a FRESH board's save — the day the player committed
   /// to this run. The select screen passes the day its card was tapped, so
@@ -120,6 +131,8 @@ class _GameScreenState extends State<GameScreen> {
       saveStore: _saveStore,
       saveKey: _saveKey,
       startedDay: widget.startedDay ?? dayKey(_now),
+      trayColumns: widget.trayColumns,
+      trayMaxThumbnailHeight: widget.trayMaxThumbnailHeight,
       onCompleted: () => _onPuzzleCompleted(game),
       onBoardLoaded: (resumed) {
         if (mounted && !_restarting && identical(_game, game)) {
