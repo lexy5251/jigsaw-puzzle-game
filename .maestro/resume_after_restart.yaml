@@ -31,11 +31,14 @@ appId: com.lexy5251.jigsawpuzzle
 - tapOn:
     id: "catalog-puzzle-alpine-lakes-panorama"
 
-# Pick the easiest size. No save exists yet, so the board must start fresh.
+# Pick the easiest size, then launch with the sheet's button (size rows
+# only select since the 2026-11-13 redesign). No save yet: fresh board.
 - assertNotVisible:
     id: "puzzle-in-progress-alpine-lakes-panorama-5x5"
 - tapOn:
     id: "puzzle-size-alpine-lakes-panorama-5x5"
+- tapOn:
+    id: "puzzle-start"
 - assertVisible: "Puzzle board, new puzzle"
 
 # Kill the app completely, then relaunch WITHOUT clearing state.
@@ -64,4 +67,6 @@ appId: com.lexy5251.jigsawpuzzle
 # restored the save rather than starting a fresh board.
 - tapOn:
     id: "puzzle-size-alpine-lakes-panorama-5x5"
+- tapOn:
+    id: "puzzle-start"
 - assertVisible: "Puzzle board, resumed"

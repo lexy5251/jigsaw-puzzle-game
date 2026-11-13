@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jigsaw_puzzle/daily_puzzle.dart';
 import 'package:jigsaw_puzzle/puzzle_catalog.dart';
@@ -67,6 +68,31 @@ void main() {
       if (easyInProgress) {
         expect(tester.getSemantics(easyStatus).label, 'In progress');
       }
+
+      // Screen-reader activation: the labeled chip node must own the tap
+      // action, so a semantics tap (TalkBack/VoiceOver double-tap) changes
+      // the selection — the InkWell's separate node is not what's focused.
+      final otherOption = find.bySemanticsIdentifier(
+        'puzzle-size-alpine-lakes-panorama-'
+        '${easyInProgress ? '10x10' : '5x5'}',
+      );
+      final otherNode = tester.getSemantics(otherOption);
+      expect(
+        otherNode.getSemanticsData().hasAction(SemanticsAction.tap),
+        isTrue,
+      );
+      tester.binding.performSemanticsAction(
+        SemanticsActionEvent(
+          type: SemanticsAction.tap,
+          viewId: tester.view.viewId,
+          nodeId: otherNode.id,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Start · ${easyInProgress ? 100 : 25} pieces'),
+        findsOneWidget,
+      );
       expect(tester.takeException(), isNull);
     });
   }

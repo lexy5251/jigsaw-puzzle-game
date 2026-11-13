@@ -120,7 +120,7 @@ void main() {
     await tester.tap(card('first'));
     await tester.pumpAndSettle();
 
-    expect(find.text('25 pieces'), findsOneWidget);
+    expect(find.bySemanticsIdentifier('puzzle-start'), findsOneWidget);
   });
 
   testWidgets('cards announce as buttons', (tester) async {

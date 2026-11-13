@@ -5,6 +5,12 @@
 
 import 'package:flutter/material.dart';
 
+/// Status wording shared by every surface that names a run's state (size
+/// sheet, category badges, daily card). The Maestro e2e flows assert these
+/// exact texts — change them here and in .maestro/ together.
+const statusInProgressLabel = 'In progress';
+const statusCompletedLabel = 'Completed';
+
 /// Design tokens. Hex values come from the approved mockup
 /// (docs/design/brushwork-mockup.html) and must stay in sync with the plan.
 abstract final class StudioColors {

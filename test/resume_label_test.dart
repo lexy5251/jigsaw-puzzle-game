@@ -24,11 +24,12 @@ void main() {
       find.descendant(of: firstCard, matching: find.byType(InkWell)).first,
     );
     await tester.pumpAndSettle();
-    expect(find.text('25 pieces'), findsOneWidget);
+    // Fresh puzzle: the smallest size is pre-selected and reads as a start.
+    expect(find.text('Start · 25 pieces'), findsOneWidget);
     expect(find.textContaining('In progress'), findsNothing);
 
-    // Start the 24-piece game and let it fully load (writes the fresh save).
-    await tester.tap(find.text('25 pieces'));
+    // Start the 25-piece game and let it fully load (writes the fresh save).
+    await tester.tap(find.bySemanticsIdentifier('puzzle-start'));
     await tester.runAsync(() async {
       await tester.pumpAndSettle();
       final game = currentGame(tester);
@@ -41,11 +42,18 @@ void main() {
     await tester.pageBack();
     await tester.pumpAndSettle();
 
-    // Re-open the same puzzle's sheet: the label must be there.
+    // Re-open the same puzzle's sheet: the saved run must be pre-selected,
+    // wearing its progress mark, with a resume (not restart) button.
     await tester.tap(
       find.descendant(of: find.byType(GridView), matching: find.byType(InkWell)).first,
     );
     await tester.pumpAndSettle();
-    expect(find.text('In progress'), findsOneWidget);
+    expect(
+      find.bySemanticsIdentifier(
+        'puzzle-in-progress-alpine-lakes-panorama-5x5',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Resume · 25 pieces'), findsOneWidget);
   });
 }

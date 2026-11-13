@@ -4,6 +4,7 @@ import 'daily_puzzle.dart';
 import 'puzzle_catalog.dart';
 import 'studio_mascots.dart';
 import 'studio_surfaces.dart';
+import 'studio_theme.dart';
 
 /// The daily-puzzle "Begin card": today's image, its status, and the one
 /// action. Deliberately no tracker elements — the streak lives in the
@@ -155,7 +156,7 @@ class DailyPuzzleCard extends StatelessWidget {
 
   /// The e2e tests assert on these texts. There is no done text: the
   /// bloomed pot alone marks a finished day.
-  String _statusText() => inProgress ? 'In progress' : 'Not started';
+  String _statusText() => inProgress ? statusInProgressLabel : 'Not started';
 }
 
 /// The streak, demoted to ambient decor: the current week as a small row of

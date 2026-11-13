@@ -135,16 +135,53 @@ void main() {
     await tester.tap(card);
     await tester.pumpAndSettle();
 
-    // The sheet disambiguates the sizes: both runs show their status.
+    // The sheet disambiguates the sizes: both runs wear their progress mark,
+    // and the first in-progress size is pre-selected as a resume.
     expect(find.byType(BottomSheet), findsOneWidget);
     expect(
-      find.descendant(
-        of: find.byType(BottomSheet),
-        matching: find.text('In progress'),
-      ),
-      findsNWidgets(2),
+      find.bySemanticsIdentifier('puzzle-in-progress-${started.id}-5x5'),
+      findsOneWidget,
     );
+    expect(
+      find.bySemanticsIdentifier('puzzle-in-progress-${started.id}-10x10'),
+      findsOneWidget,
+    );
+    expect(find.text('Resume · 25 pieces'), findsOneWidget);
     expect(find.byType(GameScreen), findsNothing);
+  });
+
+  testWidgets('a size finished before but mid-replay reads In progress', (
+    tester,
+  ) async {
+    final photo = imagesInCategory('landscapes').first;
+    SharedPreferences.setMockInitialValues({
+      // The same size carries a saved replay AND its completion record.
+      // Owner's precedence rule: the row says "In progress" (one word,
+      // never "Completed") and the button resumes — flipping either
+      // branch would re-enable the silent restart the sheet exists to
+      // prevent.
+      puzzleSaveKey(imageId: photo.id, columns: 5, rows: 5):
+          partiallyPlacedSave(
+            25,
+            placed: 3,
+            startedDay: '2026-11-12',
+          ).toJsonString(),
+      puzzleCompletionKey(imageId: photo.id, columns: 5, rows: 5):
+          completionOn(DateTime(2026, 11, 9)).toJsonString(),
+    });
+    await pumpMyPuzzles(tester);
+
+    await tester.tap(
+      find.bySemanticsIdentifier('my-puzzles-in-progress-${photo.id}'),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.bySemanticsIdentifier('puzzle-in-progress-${photo.id}-5x5'),
+      findsOneWidget,
+    );
+    expect(find.text('Completed'), findsNothing);
+    expect(find.text('Resume · 25 pieces'), findsOneWidget);
   });
 
   testWidgets('tapping a finished card opens the size sheet', (tester) async {
@@ -163,8 +200,15 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(BottomSheet), findsOneWidget);
-    // The sheet sees the same record the card was built from.
-    expect(find.text('Completed ✓'), findsOneWidget);
+    // The next unfinished size is pre-selected, so the finished one is not
+    // the default — picking its chip flips the button to an explicit
+    // replay (never a silent restart).
+    expect(find.text('Start · 100 pieces'), findsOneWidget);
+    await tester.tap(
+      find.bySemanticsIdentifier('puzzle-size-${finished.id}-5x5'),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Play again · 25 pieces'), findsOneWidget);
     expect(find.byType(GameScreen), findsNothing);
   });
 }

@@ -82,6 +82,31 @@ PuzzleSaveState fullTraySave(
 CompletionRecord completionOn(DateTime day, {int count = 1}) =>
     CompletionRecord(count: count, lastCompletedAt: day);
 
+/// [completionOn] in the stored form prefs seeds need.
+String completionJson(DateTime day, {int count = 1}) =>
+    completionOn(day, count: count).toJsonString();
+
+/// The frozen clock every preview harness renders at — one clock, so the
+/// daily pick and "recent vs old" completion states match across harnesses
+/// and a verdict made on one holds on the others.
+DateTime previewNow() => DateTime(2026, 11, 12, 14);
+
+/// Settles a game launched through the UI (tap → route → Flame boot).
+/// pumpAndSettle never settles against Flame's ticker, so fixed pumps
+/// cover the sheet-close + route animations and the photo decode, then the
+/// game's load future and a few frames to mount the pieces. Call inside
+/// [WidgetTester.runAsync] — the decode needs real async. The pump counts
+/// are tuned; change them here, not at a call site.
+Future<void> settleLaunchedGame(WidgetTester tester) async {
+  for (var i = 0; i < 12; i++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+  await currentGame(tester).loaded;
+  for (var i = 0; i < 3; i++) {
+    await tester.pump(const Duration(milliseconds: 16));
+  }
+}
+
 /// Extracts the game currently hosted by the screen, including after restart.
 JigsawGame currentGame(WidgetTester tester) => tester
     .widget<GameWidget<JigsawGame>>(find.byType(GameWidget<JigsawGame>))

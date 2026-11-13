@@ -6,6 +6,8 @@ import 'package:jigsaw_puzzle/daily_streak.dart';
 import 'package:jigsaw_puzzle/game_screen.dart';
 import 'package:jigsaw_puzzle/jigsaw_game.dart';
 import 'package:jigsaw_puzzle/puzzle_catalog.dart';
+import 'package:jigsaw_puzzle/puzzle_launcher.dart';
+import 'package:jigsaw_puzzle/puzzle_save.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'test_helpers.dart';
@@ -18,6 +20,24 @@ void main() {
     for (final size in puzzleSizes) {
       expect(size.columns, size.rows, reason: '${size.columns}x${size.rows}');
     }
+  });
+
+  test('the sheet opens on a resumable run, else the smallest unfinished', () {
+    Set<PuzzleSize> at(List<int> indexes) => {
+      for (final i in indexes) puzzleSizes[i],
+    };
+    // Fresh puzzle: the smallest size.
+    expect(initialSheetSize(inProgress: at([]), completed: at([])),
+        puzzleSizes[0]);
+    // A saved run wins, even when smaller sizes are untouched.
+    expect(initialSheetSize(inProgress: at([2]), completed: at([0])),
+        puzzleSizes[2]);
+    // No run: the first size not finished yet.
+    expect(initialSheetSize(inProgress: at([]), completed: at([0, 1])),
+        puzzleSizes[2]);
+    // Everything finished: back to the smallest.
+    expect(initialSheetSize(inProgress: at([]), completed: at([0, 1, 2, 3])),
+        puzzleSizes[0]);
   });
 
   setUp(() {
@@ -54,12 +74,19 @@ void main() {
       await tester.tap(firstImage);
       await tester.pumpAndSettle();
 
-      expect(find.text('25 pieces'), findsOneWidget);
-      expect(find.text('100 pieces'), findsOneWidget);
-      expect(find.text('144 pieces'), findsOneWidget);
-      expect(find.text('225 pieces'), findsOneWidget);
+      // All four size chips, plus the launch button on the fresh default
+      // (smallest size pre-selected).
+      for (final size in puzzleSizes) {
+        expect(
+          find.bySemanticsIdentifier(
+            'puzzle-size-alpine-lakes-panorama-${size.columns}x${size.rows}',
+          ),
+          findsOneWidget,
+        );
+      }
+      expect(find.text('Start · 25 pieces'), findsOneWidget);
 
-      await tester.tap(find.text('25 pieces'));
+      await tester.tap(find.bySemanticsIdentifier('puzzle-start'));
       // runAsync lets the real photo load + decode finish while the sheet-close
       // and route animations play. pumpAndSettle would hang here: Flame's game
       // loop keeps scheduling frames forever once the GameWidget mounts.
@@ -100,7 +127,7 @@ void main() {
   }
 
   testWidgets(
-    'catalog size picker scrolls in a short window on an Alpine daily',
+    'catalog size list scrolls in a short window on an Alpine daily',
     (tester) async {
       tester.view.physicalSize = const Size(800, 400);
       tester.view.devicePixelRatio = 1;
@@ -133,10 +160,20 @@ void main() {
       );
       expect(tester.takeException(), isNull);
 
-      // The last option starts below the short sheet's fold.
+      // The launch button is pinned below the list, so it stays tappable
+      // in a short window while the size rows scroll to fit.
+      final startButton = find.descendant(
+        of: sheet,
+        matching: find.bySemanticsIdentifier('puzzle-start'),
+      );
+      expect(startButton.hitTestable(), findsOneWidget);
+
+      // The last size starts below the list's fold and scrolls into reach.
       final lastOption = find.descendant(
         of: sheet,
-        matching: find.text('225 pieces'),
+        matching: find.bySemanticsIdentifier(
+          'puzzle-size-alpine-lakes-panorama-15x15',
+        ),
       );
       expect(lastOption.hitTestable(), findsNothing);
       await tester.scrollUntilVisible(
@@ -149,6 +186,53 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(lastOption.hitTestable(), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'the pre-selected saved size is revealed in a short window',
+    (tester) async {
+      tester.view.physicalSize = const Size(800, 400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final now = DateTime(2026, 12, 12, 14);
+      // A save on the last size — the row deepest below the list's fold.
+      final saved = puzzleSizes.last;
+      SharedPreferences.setMockInitialValues({
+        puzzleSaveKey(
+          imageId: 'alpine-lakes-panorama',
+          columns: saved.columns,
+          rows: saved.rows,
+        ): fullTraySave(
+          saved.pieceCount,
+          startedDay: '2026-12-12',
+        ).toJsonString(),
+      });
+      await pumpSelectScreen(tester, clock: () => now);
+
+      final landscapesCard = find.text('Landscapes');
+      await scrollSelectScreenTo(tester, landscapesCard);
+      await tester.tap(landscapesCard);
+      await tester.pumpAndSettle();
+
+      final catalogImage = catalogPuzzleCard('alpine-lakes-panorama');
+      await scrollSelectScreenTo(tester, catalogImage);
+      await tester.tap(catalogImage);
+      await tester.pumpAndSettle();
+
+      // The sheet must open with the resumable row scrolled into view —
+      // not hidden below the fold while the button already names it.
+      expect(
+        find.text('Resume · ${saved.pieceCount} pieces'),
+        findsOneWidget,
+      );
+      final savedRow = find.bySemanticsIdentifier(
+        'puzzle-size-alpine-lakes-panorama-'
+        '${saved.columns}x${saved.rows}',
+      );
+      expect(savedRow.hitTestable(), findsOneWidget);
     },
   );
 }

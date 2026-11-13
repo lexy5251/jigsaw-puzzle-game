@@ -13,6 +13,7 @@ import 'puzzle_launcher.dart';
 import 'puzzle_save.dart';
 import 'studio_mascots.dart';
 import 'studio_surfaces.dart';
+import 'studio_theme.dart';
 
 class CategoryScreen extends StatefulWidget {
   const CategoryScreen({
@@ -202,7 +203,7 @@ class _InProgressBadge extends StatelessWidget {
       // Own node: without this the label merges into the card's
       // title-labelled node (UI-6 wrapper) and disappears for a11y/e2e.
       container: true,
-      label: 'In progress',
+      label: statusInProgressLabel,
       child: Container(
         width: 28,
         height: 28,
@@ -227,7 +228,7 @@ class _CompletedBadge extends StatelessWidget {
       // into the card's title-labelled node and completed state would be
       // inaudible to screen readers.
       container: true,
-      label: 'Completed',
+      label: statusCompletedLabel,
       child: Container(
         padding: const EdgeInsets.all(4),
         decoration: BoxDecoration(

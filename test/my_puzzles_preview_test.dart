@@ -20,10 +20,6 @@ import 'test_helpers.dart';
 
 void main() {
   final enabled = previewEnabled('MY_PUZZLES_PREVIEW');
-  DateTime fixedNow() => DateTime(2026, 11, 12, 14);
-
-  String doneOn(DateTime day, {int count = 1}) =>
-      completionOn(day, count: count).toJsonString();
 
   testWidgets('render the My Puzzles page and nav at phone sizes', (
     tester,
@@ -47,20 +43,20 @@ void main() {
           ).toJsonString(),
       // One photo finished at ALL FOUR sizes: the chip's worst case must
       // render in the preview the owner judges.
-      puzzleCompletionKey(imageId: cozy.id, columns: 6, rows: 4): doneOn(
+      puzzleCompletionKey(imageId: cozy.id, columns: 6, rows: 4): completionJson(
         DateTime(2026, 11, 9),
       ),
-      puzzleCompletionKey(imageId: cozy.id, columns: 12, rows: 8): doneOn(
+      puzzleCompletionKey(imageId: cozy.id, columns: 12, rows: 8): completionJson(
         DateTime(2026, 11, 10),
       ),
-      puzzleCompletionKey(imageId: cozy.id, columns: 15, rows: 10): doneOn(
+      puzzleCompletionKey(imageId: cozy.id, columns: 15, rows: 10): completionJson(
         DateTime(2026, 11, 10),
       ),
-      puzzleCompletionKey(imageId: cozy.id, columns: 18, rows: 12): doneOn(
+      puzzleCompletionKey(imageId: cozy.id, columns: 18, rows: 12): completionJson(
         DateTime(2026, 11, 11),
       ),
       puzzleCompletionKey(imageId: landscapes[1].id, columns: 6, rows: 4):
-          doneOn(DateTime(2026, 11, 8), count: 2),
+          completionJson(DateTime(2026, 11, 8), count: 2),
     };
     final inProgressThumbs = [landscapes[0], animal];
     final finishedThumbs = [cozy, landscapes[1]];
@@ -91,7 +87,7 @@ void main() {
         final boundaryKey = GlobalKey();
         await pumpPhoneApp(
           tester,
-          HomeShell(clock: fixedNow),
+          HomeShell(clock: previewNow),
           size: Size(width, height),
           boundaryKey: boundaryKey,
         );
@@ -128,7 +124,7 @@ void main() {
         final boundaryKey = GlobalKey();
         await pumpPhoneApp(
           tester,
-          HomeShell(clock: fixedNow),
+          HomeShell(clock: previewNow),
           boundaryKey: boundaryKey,
         );
         await tester.pumpAndSettle();
@@ -138,7 +134,7 @@ void main() {
           [
             for (final category in puzzleCategories)
               categoryCoverPath(category.id),
-            dailyPuzzleFor(fixedNow()).assetPath,
+            dailyPuzzleFor(previewNow()).assetPath,
           ],
           width: TiltedPhotoCard.thumbnailCacheWidth,
         );
@@ -152,7 +148,7 @@ void main() {
         final boundaryKey = GlobalKey();
         await pumpPhoneApp(
           tester,
-          HomeShell(clock: fixedNow),
+          HomeShell(clock: previewNow),
           boundaryKey: boundaryKey,
         );
         await tester.pumpAndSettle();

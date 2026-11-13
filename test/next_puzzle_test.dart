@@ -4,7 +4,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jigsaw_puzzle/game_screen.dart';
-import 'package:jigsaw_puzzle/jigsaw_game.dart';
 import 'package:jigsaw_puzzle/puzzle_catalog.dart';
 import 'package:jigsaw_puzzle/puzzle_completion.dart';
 import 'package:jigsaw_puzzle/puzzle_launcher.dart';
@@ -108,20 +107,8 @@ void main() {
         ),
       );
       await tester.tap(find.text('open'));
-      late JigsawGame game;
-      await tester.runAsync(() async {
-        // Fixed pumps: with a warm image cache the game loads instantly and
-        // its ticker keeps scheduling frames, so pumpAndSettle cannot settle.
-        for (var i = 0; i < 12; i++) {
-          await tester.pump(const Duration(milliseconds: 100));
-        }
-        game = currentGame(tester);
-        await game.loaded;
-      });
-      for (var i = 0; i < 3; i++) {
-        await tester.pump(const Duration(milliseconds: 16));
-      }
-      await completePuzzle(tester, game);
+      await tester.runAsync(() => settleLaunchedGame(tester));
+      await completePuzzle(tester, currentGame(tester));
 
       // The chain action leads; the exit is the quiet secondary button.
       expect(find.widgetWithText(FilledButton, 'Next puzzle'), findsOneWidget);
@@ -162,18 +149,8 @@ void main() {
       );
       await tester.tap(find.text('open'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('25 pieces'));
-      await tester.runAsync(() async {
-        // Fixed pumps: with a warm image cache the game loads instantly and
-        // its ticker keeps scheduling frames, so pumpAndSettle cannot settle.
-        for (var i = 0; i < 12; i++) {
-          await tester.pump(const Duration(milliseconds: 100));
-        }
-        await currentGame(tester).loaded;
-      });
-      for (var i = 0; i < 3; i++) {
-        await tester.pump(const Duration(milliseconds: 16));
-      }
+      await tester.tap(find.bySemanticsIdentifier('puzzle-start'));
+      await tester.runAsync(() => settleLaunchedGame(tester));
       expect(
         tester.widget<GameScreen>(find.byType(GameScreen)).image.id,
         singlePieceImage.id,
@@ -183,20 +160,12 @@ void main() {
       Navigator.of(
         tester.element(find.byType(GameScreen)),
       ).pop(secondTestImage);
-      await tester.runAsync(() async {
-        // Fixed pumps: pumpAndSettle never settles against a running Flame
-        // ticker, and the chained game starts loading immediately.
-        for (var i = 0; i < 12; i++) {
-          await tester.pump(const Duration(milliseconds: 100));
-        }
-        await currentGame(tester).loaded;
-      });
-      for (var i = 0; i < 3; i++) {
-        await tester.pump(const Duration(milliseconds: 16));
-      }
+      // The chained game starts loading immediately — same settle dance.
+      await tester.runAsync(() => settleLaunchedGame(tester));
       final chained = tester.widget<GameScreen>(find.byType(GameScreen));
       expect(chained.image.id, secondTestImage.id);
-      expect(find.text('25 pieces'), findsNothing); // straight in, no sheet
+      // Straight into the chained game — no size sheet in between.
+      expect(find.bySemanticsIdentifier('puzzle-start'), findsNothing);
       expect(flowDone, isFalse, reason: 'The flow ends at the real exit.');
 
       await tester.pageBack();
