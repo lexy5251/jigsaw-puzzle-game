@@ -2,22 +2,28 @@
 // 1. Loads the stored settings once, then shows them on painted cards.
 // 2. Every change persists immediately — there is no save button; leaving
 //    the screen never loses a choice. The slider persists once per gesture.
-// 3. A music volume slider joins the sound card when the ambient loop
-//    lands (see the plan's cozy-audio note); effects-only until then.
+// 3. The music slider also drives the app-wide loop live while dragging,
+//    through the player instance the shell owns and hands in.
 
 import 'package:flutter/material.dart';
 
 import 'app_settings.dart';
+import 'background_music.dart';
 import 'studio_surfaces.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
     super.key,
     this.store = const SharedPreferencesAppSettingsStore(),
+    this.music,
   });
 
   /// Tests pass an in-memory store.
   final AppSettingsStore store;
+
+  /// The ambient loop the music slider adjusts live; null leaves the
+  /// slider storage-only (screens under test).
+  final BackgroundMusic? music;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -91,6 +97,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     effectsVolume: value,
                                   ),
                                 ),
+                                onChangeEnd: (_) =>
+                                    widget.store.save(_settings!),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      Text(
+                        'Music: the quiet loop behind every screen.',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                      Row(
+                        children: [
+                          Icon(
+                            settings.musicVolume == 0
+                                ? Icons.volume_off
+                                : Icons.music_note,
+                            color: theme.colorScheme.onSurface,
+                          ),
+                          Expanded(
+                            child: Semantics(
+                              identifier: 'settings-music-volume',
+                              child: Slider(
+                                value: settings.musicVolume,
+                                label:
+                                    '${(settings.musicVolume * 100).round()}%',
+                                // The playing loop follows the drag so muting
+                                // is audible at once; storage still waits for
+                                // the finger to lift.
+                                onChanged: (value) {
+                                  widget.music?.setVolume(value);
+                                  setState(
+                                    () => _settings = settings.copyWith(
+                                      musicVolume: value,
+                                    ),
+                                  );
+                                },
                                 onChangeEnd: (_) =>
                                     widget.store.save(_settings!),
                               ),

@@ -55,7 +55,7 @@ void main() {
     await tester.tap(navDestination('Settings'));
     await tester.pumpAndSettle();
     expect(find.byType(SettingsScreen), findsOneWidget);
-    expect(find.byType(Slider).hitTestable(), findsOneWidget);
+    expect(find.byType(Slider).hitTestable(), findsNWidgets(2));
     expect(find.byType(BackButton), findsNothing);
 
     await tester.tap(navDestination('Gallery'));

@@ -180,10 +180,13 @@ MyPuzzlesSummary buildMyPuzzlesSummary({
 }
 
 /// Reads both stores and builds the summary. The screen passes its injected
-/// stores; defaults are the device-local ones.
+/// stores; defaults are the device-local ones. A caller that already loaded
+/// the completion snapshot (the My Puzzles screen shares one read with the
+/// bonus track) passes it as [completions] so the store is scanned once.
 Future<MyPuzzlesSummary> loadMyPuzzlesSummary({
   PuzzleSaveStore saveStore = const SharedPreferencesSaveStore(),
   PuzzleCompletionStore completionStore = const SharedPreferencesCompletionStore(),
+  Map<String, CompletionRecord>? completions,
   List<PuzzleImage> catalog = puzzleCatalog,
   List<PuzzleSize> sizes = puzzleSizes,
 }) async {
@@ -194,16 +197,9 @@ Future<MyPuzzlesSummary> loadMyPuzzlesSummary({
       saves[key] = state;
     }
   }
-  final completions = <String, CompletionRecord>{};
-  for (final key in await completionStore.listCompletedKeys()) {
-    final record = await completionStore.record(key);
-    if (record != null) {
-      completions[key] = record;
-    }
-  }
   return buildMyPuzzlesSummary(
     saves: saves,
-    completions: completions,
+    completions: completions ?? await completionStore.loadAllCompletionRecords(),
     catalog: catalog,
     sizes: sizes,
   );

@@ -1,5 +1,5 @@
 // My Puzzles screen overview:
-// 1. Two top tabs, one card per photo on each (owner ruling: never repeat
+// 1. Three top tabs, one card per photo on each (owner ruling: never repeat
 //    a photo per size). "In progress" cards are bare photos — the owner
 //    dropped the progress chip for now, it sat heavy on the art;
 //    "Finished" chips name the piece counts done (his explicit pick).
@@ -9,11 +9,19 @@
 // 3. Cards are picture-only like the category grids (names live in the
 //    semantics labels); the lists reload after a game closes and whenever
 //    the shell makes this tab visible again.
+// 4. "Collection" is the bonus track: the current gift painting assembling
+//    piece by piece, then the earned gifts as ordinary playable cards. The
+//    first two tabs track gift paintings too once they are played — the
+//    summary reads the full catalog, gallery and gifts alike.
 
 import 'package:flutter/material.dart';
 
+import 'bonus_board.dart';
+import 'bonus_track.dart';
+import 'daily_streak.dart';
 import 'my_puzzles.dart';
 import 'puzzle_catalog.dart';
+import 'puzzle_completion.dart';
 import 'puzzle_launcher.dart';
 import 'studio_mascots.dart';
 import 'studio_surfaces.dart';
@@ -40,10 +48,13 @@ class _MyPuzzlesScreenState extends State<MyPuzzlesScreen> {
   /// it never flashes an empty state it is about to replace.
   MyPuzzlesSummary? _summary;
 
+  /// Loaded together with [_summary], so the body gate below covers both.
+  BonusTrackState? _bonus;
+
   /// Tilt by catalog position, not list index: these lists reorder by
   /// recency, and an index-based tilt would flip cards between visits.
   static final _tiltVariants = {
-    for (final (index, image) in puzzleCatalog.indexed) image.id: index,
+    for (final (index, image) in fullPuzzleCatalog.indexed) image.id: index,
   };
 
   @override
@@ -62,9 +73,28 @@ class _MyPuzzlesScreenState extends State<MyPuzzlesScreen> {
   }
 
   Future<void> _load() async {
-    final summary = await loadMyPuzzlesSummary();
+    // ONE completion snapshot feeds both the summary tabs and the bonus
+    // track, so the two can never disagree within a single load.
+    final completions = await const SharedPreferencesCompletionStore()
+        .loadAllCompletionRecords();
+    // The full catalog, so played gift paintings reach the first two tabs.
+    final summary = await loadMyPuzzlesSummary(
+      catalog: fullPuzzleCatalog,
+      completions: completions,
+    );
+    final days = await const SharedPreferencesDailyStreakStore()
+        .completedDays();
+    final bonus = bonusTrackStateFor(
+      firstFinishes: galleryFirstFinishCount(
+        imageIdsFromCompletions(completions),
+      ),
+      streakPieces: streakPieces(days),
+    );
     if (mounted) {
-      setState(() => _summary = summary);
+      setState(() {
+        _summary = summary;
+        _bonus = bonus;
+      });
     }
   }
 
@@ -78,19 +108,28 @@ class _MyPuzzlesScreenState extends State<MyPuzzlesScreen> {
   @override
   Widget build(BuildContext context) {
     final summary = _summary;
+    final bonus = _bonus;
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('My Puzzles'),
           bottom: const TabBar(
-            tabs: [Tab(text: 'In progress'), Tab(text: 'Finished')],
+            tabs: [
+              Tab(text: 'In progress'),
+              Tab(text: 'Finished'),
+              Tab(text: 'Collection'),
+            ],
           ),
         ),
-        body: summary == null
+        body: summary == null || bonus == null
             ? const SizedBox.shrink()
             : TabBarView(
-                children: [_inProgressTab(summary), _finishedTab(summary)],
+                children: [
+                  _inProgressTab(summary),
+                  _finishedTab(summary),
+                  _collectionTab(bonus),
+                ],
               ),
       ),
     );
@@ -151,6 +190,70 @@ class _MyPuzzlesScreenState extends State<MyPuzzlesScreen> {
     });
   }
 
+  Widget _collectionTab(BonusTrackState bonus) {
+    // Before the fifth finished painting the journey stays a quiet promise
+    // (owner's design): no board, no gift wall, just the invitation.
+    if (!bonus.journeyUnlocked) {
+      final remaining = bonus.finishesUntilJourney;
+      return ListView(
+        key: const PageStorageKey('my-puzzles-collection'),
+        padding: photoGridPadding,
+        children: [
+          Semantics(
+            identifier: 'journey-teaser',
+            container: true,
+            child: _MessageCard(
+              mascot: StudioMascot.pot,
+              message: remaining == 1
+                  ? 'Finish 1 more puzzle to open the journey.'
+                  : 'Finish $remaining more puzzles to open the journey.',
+            ),
+          ),
+        ],
+      );
+    }
+    final board = bonus.currentBoard;
+    return ListView(
+      key: const PageStorageKey('my-puzzles-collection'),
+      padding: photoGridPadding,
+      children: [
+        if (board != null)
+          BonusBoardCard(
+            image: board,
+            earnedPieces: bonus.piecesOnCurrentBoard,
+          )
+        else
+          const _MessageCard(
+            mascot: StudioMascot.sunflower,
+            message:
+                'Every bonus picture is yours — more are on the way.',
+          ),
+        if (bonus.unlocked.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          GridView.builder(
+            // Scrolls with the ListView around it; the gift wall stays a
+            // handful of cards, so building them all at once is fine.
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            padding: EdgeInsets.zero,
+            gridDelegate: photoGridDelegate,
+            itemCount: bonus.unlocked.length,
+            itemBuilder: (context, index) {
+              final image = bonus.unlocked[index];
+              return TiltedPhotoCard(
+                assetPath: image.assetPath,
+                title: image.title,
+                semanticsIdentifier: 'my-puzzles-collection-${image.id}',
+                variant: _tiltVariants[image.id] ?? 0,
+                onTap: () => _open(image),
+              );
+            },
+          ),
+        ],
+      ],
+    );
+  }
+
   /// The category pages' grid; the storage key keeps each tab's scroll
   /// offset alive across tab switches (TabBarView disposes hidden tabs).
   Widget _photoGrid(
@@ -208,23 +311,32 @@ class _EmptyTab extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListView(
       padding: const EdgeInsets.all(16),
-      children: [
-        PaintedCard(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              MascotArt(mascot, height: 28),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  message,
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ),
-            ],
+      children: [_MessageCard(mascot: mascot, message: message)],
+    );
+  }
+}
+
+/// Mascot + one friendly line on a painted card; the empty tabs and the
+/// Collection's all-earned state share it.
+class _MessageCard extends StatelessWidget {
+  const _MessageCard({required this.mascot, required this.message});
+
+  final StudioMascot mascot;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return PaintedCard(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          MascotArt(mascot, height: 28),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(message, style: Theme.of(context).textTheme.bodySmall),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

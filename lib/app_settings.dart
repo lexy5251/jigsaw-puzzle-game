@@ -16,6 +16,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class AppSettings {
   const AppSettings({
     this.effectsVolume = 1,
+    this.musicVolume = 1,
     this.ghostPreviewDefault = false,
     this.boardColorId = 'tan',
   });
@@ -23,6 +24,9 @@ class AppSettings {
   /// Scales every gameplay sound cue: 0 is silent, 1 is full presence.
   /// The per-cue mix (quiet drop, present chime) is preserved.
   final double effectsVolume;
+
+  /// Scales the ambient music loop: 0 is silent, 1 is full presence.
+  final double musicVolume;
 
   /// Whether a puzzle opens with the ghost image hint already visible.
   final bool ghostPreviewDefault;
@@ -34,11 +38,13 @@ class AppSettings {
 
   AppSettings copyWith({
     double? effectsVolume,
+    double? musicVolume,
     bool? ghostPreviewDefault,
     String? boardColorId,
   }) {
     return AppSettings(
       effectsVolume: effectsVolume ?? this.effectsVolume,
+      musicVolume: musicVolume ?? this.musicVolume,
       ghostPreviewDefault: ghostPreviewDefault ?? this.ghostPreviewDefault,
       boardColorId: boardColorId ?? this.boardColorId,
     );
@@ -46,6 +52,7 @@ class AppSettings {
 
   String toJsonString() => jsonEncode({
     'effectsVolume': effectsVolume,
+    'musicVolume': musicVolume,
     'ghostPreviewDefault': ghostPreviewDefault,
     'boardColorId': boardColorId,
   });
@@ -64,12 +71,16 @@ class AppSettings {
       return defaults;
     }
     final volume = decoded['effectsVolume'];
+    final music = decoded['musicVolume'];
     final ghost = decoded['ghostPreviewDefault'];
     final boardColor = decoded['boardColorId'];
     return AppSettings(
       effectsVolume: volume is num
           ? volume.toDouble().clamp(0, 1)
           : defaults.effectsVolume,
+      musicVolume: music is num
+          ? music.toDouble().clamp(0, 1)
+          : defaults.musicVolume,
       ghostPreviewDefault: ghost is bool ? ghost : defaults.ghostPreviewDefault,
       boardColorId: boardColor is String ? boardColor : defaults.boardColorId,
     );
@@ -79,12 +90,13 @@ class AppSettings {
   bool operator ==(Object other) =>
       other is AppSettings &&
       other.effectsVolume == effectsVolume &&
+      other.musicVolume == musicVolume &&
       other.ghostPreviewDefault == ghostPreviewDefault &&
       other.boardColorId == boardColorId;
 
   @override
   int get hashCode =>
-      Object.hash(effectsVolume, ghostPreviewDefault, boardColorId);
+      Object.hash(effectsVolume, musicVolume, ghostPreviewDefault, boardColorId);
 }
 
 /// Reads and writes the app settings.

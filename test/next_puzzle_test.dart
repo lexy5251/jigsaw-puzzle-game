@@ -80,34 +80,12 @@ void main() {
     testWidgets('the Next puzzle button pops with the chosen painting', (
       tester,
     ) async {
-      PuzzleImage? popResult;
-      var popped = false;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Builder(
-              builder: (context) => TextButton(
-                onPressed: () async {
-                  popResult = await Navigator.push<PuzzleImage>(
-                    context,
-                    MaterialPageRoute<PuzzleImage>(
-                      builder: (_) => GameScreen(
-                        image: singlePieceImage,
-                        size: singlePieceSize,
-                        catalog: testCatalog,
-                      ),
-                    ),
-                  );
-                  popped = true;
-                },
-                child: const Text('open'),
-              ),
-            ),
-          ),
-        ),
+      final route = await pushGameScreen(
+        tester,
+        image: singlePieceImage,
+        size: singlePieceSize,
+        catalog: testCatalog,
       );
-      await tester.tap(find.text('open'));
-      await tester.runAsync(() => settleLaunchedGame(tester));
       await completePuzzle(tester, currentGame(tester));
 
       // The chain action leads; the exit is the quiet secondary button.
@@ -119,8 +97,8 @@ void main() {
 
       await tester.tap(find.text('Next puzzle'));
       await tester.pumpAndSettle();
-      expect(popped, isTrue);
-      expect(popResult?.id, secondTestImage.id);
+      expect(route.popped, isTrue);
+      expect(route.popResult?.id, secondTestImage.id);
       await tester.pumpWidget(const SizedBox.shrink());
     });
 

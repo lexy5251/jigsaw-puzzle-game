@@ -95,6 +95,9 @@ Future<void> startPuzzleFlow(
   PuzzleImage image, {
   DateTime Function()? clock,
   List<PuzzleImage> catalog = puzzleCatalog,
+  // Forwarded like [catalog] so fixture-driven flows stay fixtures across
+  // every chained hop, not just the first screen.
+  List<PuzzleImage> bonusCatalog = bonusPuzzleCatalog,
 }) async {
   // The run belongs to the day the player tapped, even if the size sheet
   // below stays open across midnight.
@@ -126,6 +129,7 @@ Future<void> startPuzzleFlow(
           startedDay: startedDay,
           settings: settings,
           catalog: catalog,
+          bonusCatalog: bonusCatalog,
         ),
       ),
     );

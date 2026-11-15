@@ -23,6 +23,9 @@ class CompletionCard extends StatelessWidget {
     required this.pieceCount,
     required this.onBackToGallery,
     required this.onNextPuzzle,
+    this.bonusUnlock,
+    this.onPlayBonus,
+    this.onSaveBonusForLater,
   });
 
   final PuzzleImage image;
@@ -33,6 +36,17 @@ class CompletionCard extends StatelessWidget {
   /// Starts the category's next unfinished painting; null promotes
   /// "Back to gallery" to the hero button (the category is done).
   final VoidCallback? onNextPuzzle;
+
+  /// The gift painting this completion unlocked; null hides the bonus
+  /// section (the usual case — most finishes land mid-board).
+  final PuzzleImage? bonusUnlock;
+
+  /// Plays the unlocked gift right away (same chain as "Next puzzle").
+  final VoidCallback? onPlayBonus;
+
+  /// Tucks the section away; the gift already waits in the Collection, so
+  /// this loses nothing.
+  final VoidCallback? onSaveBonusForLater;
 
   /// How long the blur, scrim, and card take to fade in. Tests pump this
   /// exact duration, so keep them on this constant.
@@ -128,6 +142,10 @@ class CompletionCard extends StatelessWidget {
               _photo(),
               const SizedBox(height: 18),
               ..._info(context),
+              if (bonusUnlock != null) ...[
+                const SizedBox(height: 14),
+                _bonusSection(context),
+              ],
               const SizedBox(height: 18),
               ..._actions(),
             ],
@@ -156,6 +174,10 @@ class CompletionCard extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   ..._info(context),
+                  if (bonusUnlock != null) ...[
+                    const SizedBox(height: 12),
+                    _bonusSection(context),
+                  ],
                   const SizedBox(height: 16),
                   ..._actions(),
                 ],
@@ -204,6 +226,113 @@ class CompletionCard extends StatelessWidget {
         style: theme.textTheme.bodySmall,
       ),
     ];
+  }
+
+  /// The gift reveal: a quiet canvas-ground inset so it reads as its own
+  /// small event without shouting over the finished painting above it.
+  Widget _bonusSection(BuildContext context) {
+    final theme = Theme.of(context);
+    final bonus = bonusUnlock!;
+    return Semantics(
+      container: true,
+      identifier: 'bonus-unlock-card',
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
+        decoration: const BoxDecoration(
+          color: StudioColors.ground,
+          borderRadius: BorderRadius.all(Radius.circular(14)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                SizedBox.square(
+                  dimension: 56,
+                  child: FramedArt(
+                    child: Image.asset(
+                      bonus.assetPath,
+                      fit: BoxFit.cover,
+                      cacheWidth: TiltedPhotoCard.thumbnailCacheWidth,
+                      errorBuilder: (context, _, _) => ColoredBox(
+                        color: StudioColors.card,
+                        child: Center(
+                          child: Text(
+                            bonus.title,
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.labelSmall,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'BONUS PUZZLE UNLOCKED',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: StudioColors.terracotta,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.6,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(bonus.title, style: theme.textTheme.titleSmall),
+                      Text(
+                        'Saved to your Collection.',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            // An OverflowBar, not a Row: side by side normally, stacked when
+            // enlarged text (or a narrow card) runs out of width.
+            OverflowBar(
+              alignment: MainAxisAlignment.end,
+              overflowAlignment: OverflowBarAlignment.end,
+              spacing: 4,
+              children: [
+                Semantics(
+                  identifier: 'bonus-save-later',
+                  child: TextButton(
+                    onPressed: onSaveBonusForLater,
+                    style: TextButton.styleFrom(
+                      foregroundColor: StudioColors.ink,
+                      textStyle: const TextStyle(
+                        fontFamily: 'Nunito',
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    child: const Text('Save for later'),
+                  ),
+                ),
+                Semantics(
+                  identifier: 'bonus-play-now',
+                  // Moss, not the themed terracotta: the card keeps ONE
+                  // terracotta hero (Next puzzle); the gift's own action
+                  // stays a step quieter.
+                  child: FilledButton(
+                    onPressed: onPlayBonus,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: StudioColors.moss,
+                      foregroundColor: StudioColors.onTerracotta,
+                    ),
+                    child: const Text('Play now'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   // "One more" is the likely mood right after finishing, so the next

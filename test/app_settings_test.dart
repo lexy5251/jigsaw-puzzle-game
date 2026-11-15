@@ -8,10 +8,17 @@ void main() {
     test('round-trips all fields', () {
       const settings = AppSettings(
         effectsVolume: 0.3,
+        musicVolume: 0.7,
         ghostPreviewDefault: true,
         boardColorId: 'charcoal',
       );
       expect(AppSettings.fromJsonString(settings.toJsonString()), settings);
+    });
+
+    test('an old blob without musicVolume gets the default', () {
+      final settings = AppSettings.fromJsonString('{"effectsVolume": 0.5}');
+      expect(settings.effectsVolume, 0.5);
+      expect(settings.musicVolume, 1);
     });
 
     test('malformed text falls back to defaults', () {
@@ -21,10 +28,11 @@ void main() {
 
     test('a bad field falls back alone, keeping the good ones', () {
       final settings = AppSettings.fromJsonString(
-        '{"effectsVolume": "loud", "ghostPreviewDefault": true, '
-        '"boardColorId": 7}',
+        '{"effectsVolume": "loud", "musicVolume": [], '
+        '"ghostPreviewDefault": true, "boardColorId": 7}',
       );
       expect(settings.effectsVolume, 1);
+      expect(settings.musicVolume, 1);
       expect(settings.ghostPreviewDefault, isTrue);
       expect(settings.boardColorId, 'tan');
     });
@@ -36,6 +44,14 @@ void main() {
       );
       expect(
         AppSettings.fromJsonString('{"effectsVolume": -2}').effectsVolume,
+        0,
+      );
+      expect(
+        AppSettings.fromJsonString('{"musicVolume": 3.5}').musicVolume,
+        1,
+      );
+      expect(
+        AppSettings.fromJsonString('{"musicVolume": -2}').musicVolume,
         0,
       );
     });

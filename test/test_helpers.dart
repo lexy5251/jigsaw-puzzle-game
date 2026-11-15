@@ -8,6 +8,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jigsaw_puzzle/app_settings.dart';
+import 'package:jigsaw_puzzle/background_music.dart';
 import 'package:jigsaw_puzzle/completion_card.dart';
 import 'package:jigsaw_puzzle/game_screen.dart';
 import 'package:jigsaw_puzzle/game_sounds.dart';
@@ -117,6 +118,71 @@ JigsawGame currentGame(WidgetTester tester) => tester
 Finder catalogPuzzleCard(String id) =>
     find.bySemanticsIdentifier('catalog-puzzle-$id');
 
+/// Gift-track fixtures shared by the bonus suites (track math and unlock
+/// UI must test the same two-gift catalog).
+const giftImageOne = PuzzleImage(
+  id: 'gift-1',
+  title: 'Gift One',
+  categoryId: bonusCategoryId,
+  fileName: 'test_photo.jpg',
+);
+const giftImageTwo = PuzzleImage(
+  id: 'gift-2',
+  title: 'Gift Two',
+  categoryId: bonusCategoryId,
+  fileName: 'test_photo.jpg',
+);
+const giftFixtures = [giftImageOne, giftImageTwo];
+
+/// The pop result of a [GameScreen] opened through a real pushed route —
+/// the completion card's chain buttons ("Next puzzle", "Play now") pop
+/// with a painting, and these fields capture it.
+class PushedGameRoute {
+  PuzzleImage? popResult;
+  bool popped = false;
+}
+
+/// Pumps a host app, pushes a [GameScreen] route, and settles the launched
+/// game — the one harness for chain-button tests, so the launch recipe
+/// cannot drift between suites.
+Future<PushedGameRoute> pushGameScreen(
+  WidgetTester tester, {
+  required PuzzleImage image,
+  required PuzzleSize size,
+  List<PuzzleImage> catalog = puzzleCatalog,
+  List<PuzzleImage> bonusCatalog = bonusPuzzleCatalog,
+}) async {
+  final route = PushedGameRoute();
+  await tester.pumpWidget(
+    MaterialApp(
+      home: Scaffold(
+        body: Builder(
+          builder: (context) => TextButton(
+            onPressed: () async {
+              route.popResult = await Navigator.push<PuzzleImage>(
+                context,
+                MaterialPageRoute<PuzzleImage>(
+                  builder: (_) => GameScreen(
+                    image: image,
+                    size: size,
+                    catalog: catalog,
+                    bonusCatalog: bonusCatalog,
+                  ),
+                ),
+              );
+              route.popped = true;
+            },
+            child: const Text('open'),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.tap(find.text('open'));
+  await tester.runAsync(() => settleLaunchedGame(tester));
+  return route;
+}
+
 /// True when the named preview harness was explicitly requested, e.g.
 /// CATEGORY_GRID_PREVIEW=1 flutter test test/category_grid_preview_test.dart
 bool previewEnabled(String envVar) => Platform.environment[envVar] == '1';
@@ -221,6 +287,32 @@ class SilentGameSounds implements GameSounds {
   void playComplete() {}
   @override
   Future<void> dispose() async {}
+}
+
+/// Records every call so shell and settings tests can assert how the app
+/// drives the ambient loop.
+class RecordingBackgroundMusic implements BackgroundMusic {
+  final startVolumes = <double>[];
+  final setVolumes = <double>[];
+  int pauses = 0;
+  int resumes = 0;
+  int disposals = 0;
+
+  @override
+  Future<void> start({required double volume}) async =>
+      startVolumes.add(volume);
+
+  @override
+  void setVolume(double volume) => setVolumes.add(volume);
+
+  @override
+  void pause() => pauses++;
+
+  @override
+  void resume() => resumes++;
+
+  @override
+  Future<void> dispose() async => disposals++;
 }
 
 /// Warms the exact image-cache entries `Image.asset(cacheWidth: width)`
@@ -359,6 +451,7 @@ Future<JigsawGame> bootGameScreen(
   AppSettings settings = const AppSettings(),
   GameSounds Function()? soundsFactory,
   List<PuzzleImage> catalog = puzzleCatalog,
+  List<PuzzleImage> bonusCatalog = bonusPuzzleCatalog,
 }) async {
   late JigsawGame game;
   await tester.runAsync(() async {
@@ -371,6 +464,7 @@ Future<JigsawGame> bootGameScreen(
           settings: settings,
           soundsFactory: soundsFactory,
           catalog: catalog,
+          bonusCatalog: bonusCatalog,
         ),
       ),
     );

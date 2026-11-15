@@ -36,7 +36,17 @@ class PuzzleImage {
 
   /// Flutter needs the full asset path.
   String get assetPath => 'assets/images/$fileName';
+
+  /// True for gift-only paintings (the bonus track). The marker lives on
+  /// the data so a surface holding any image can tell, instead of having
+  /// to know which const list it came from.
+  bool get isBonus => categoryId == bonusCategoryId;
 }
+
+/// Category id of the gift-only paintings. Deliberately absent from
+/// [puzzleCategories], which is what keeps gifts off every browsing
+/// surface (Gallery, daily rotation).
+const bonusCategoryId = 'bonus';
 
 class PuzzleSize {
   const PuzzleSize({required this.columns, required this.rows});
@@ -496,6 +506,44 @@ const puzzleCatalog = [
     fileName: 'art/sunny_breakfast_kitchen.webp',
   ),
 ];
+
+/// Gift-only paintings, in unlock order (the bonus track in My Puzzles →
+/// Collection). Deliberately NOT in [puzzleCatalog]: their category id is
+/// not in [puzzleCategories], so no Gallery surface or daily rotation can
+/// ever list them — they are earned, never browsed. Current files are
+/// placeholders (the aged mood pilots) until the owner generates the real
+/// gift set.
+///
+/// APPEND-ONLY once players exist (owner ruling, 2026-11-13): unlocks are
+/// positional — derived from a piece count folded over this list — so
+/// inserting or reordering entries would re-lock gifts players already
+/// earned. New gifts go at the end; shipped entries keep their position
+/// (the order pin in bonus_track_test enforces a conscious update).
+const bonusPuzzleCatalog = [
+  PuzzleImage(
+    id: 'bonus-evening-hearth',
+    title: 'Evening Hearth',
+    categoryId: bonusCategoryId,
+    fileName: 'bonus/evening_hearth.webp',
+  ),
+  PuzzleImage(
+    id: 'bonus-lakeside-gold',
+    title: 'Lakeside Gold',
+    categoryId: bonusCategoryId,
+    fileName: 'bonus/lakeside_gold.webp',
+  ),
+  PuzzleImage(
+    id: 'bonus-peony-table',
+    title: 'Peony Table',
+    categoryId: bonusCategoryId,
+    fileName: 'bonus/peony_table.webp',
+  ),
+];
+
+/// Every playable painting — gallery and gift alike. Surfaces that track
+/// play (My Puzzles, save/completion lookups) read this; browsing surfaces
+/// (Gallery, daily) stay on [puzzleCatalog].
+final fullPuzzleCatalog = [...puzzleCatalog, ...bonusPuzzleCatalog];
 
 /// The images of one category, in catalog order. Tests pass a fixture
 /// [catalog].

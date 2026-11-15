@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:jigsaw_puzzle/bonus_board.dart';
 import 'package:jigsaw_puzzle/game_screen.dart';
 import 'package:jigsaw_puzzle/my_puzzles_screen.dart';
 import 'package:jigsaw_puzzle/puzzle_catalog.dart';
@@ -210,5 +211,136 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Play again · 25 pieces'), findsOneWidget);
     expect(find.byType(GameScreen), findsNothing);
+  });
+
+  testWidgets('Collection teases the journey until five paintings are done', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      puzzleCompletionKey(imageId: 'a', columns: 5, rows: 5): completionJson(
+        DateTime(2026, 11, 1),
+      ),
+      puzzleCompletionKey(imageId: 'b', columns: 10, rows: 10): completionJson(
+        DateTime(2026, 11, 2),
+      ),
+    });
+    await pumpMyPuzzles(tester);
+
+    await tester.tap(find.text('Collection'));
+    await tester.pumpAndSettle();
+
+    expect(find.bySemanticsIdentifier('journey-teaser'), findsOneWidget);
+    expect(
+      find.text('Finish 3 more puzzles to open the journey.'),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsIdentifier('bonus-board-${bonusPuzzleCatalog.first.id}'),
+      findsNothing,
+    );
+  });
+
+  testWidgets('the journey opens at five finishes with the pieces on board', (
+    tester,
+  ) async {
+    // Ids that left the catalog still count as earned pieces (progress
+    // never regresses when the catalog changes) — the summary tabs skip
+    // them, the track does not. The five pre-journey finishes are already
+    // on the board when it appears.
+    SharedPreferences.setMockInitialValues({
+      for (var i = 0; i < 5; i++)
+        puzzleCompletionKey(imageId: 'photo-$i', columns: 5, rows: 5):
+            completionJson(DateTime(2026, 11, 1 + i)),
+    });
+    await pumpMyPuzzles(tester);
+
+    await tester.tap(find.text('Collection'));
+    await tester.pumpAndSettle();
+
+    final firstGift = bonusPuzzleCatalog.first;
+    expect(find.bySemanticsIdentifier('journey-teaser'), findsNothing);
+    expect(
+      find.bySemanticsIdentifier('bonus-board-${firstGift.id}'),
+      findsOneWidget,
+    );
+    expect(find.text('5 of 25 pieces'), findsOneWidget);
+    expect(find.text(bonusBoardHintText), findsOneWidget);
+    // The picture is a surprise until it assembles: no visible title, and
+    // nothing to play yet.
+    expect(find.text(firstGift.title), findsNothing);
+    expect(
+      find.bySemanticsIdentifier('my-puzzles-collection-${firstGift.id}'),
+      findsNothing,
+    );
+  });
+
+  testWidgets('an earned gift hangs in Collection and opens the size sheet', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      for (var i = 0; i < 25; i++)
+        puzzleCompletionKey(imageId: 'photo-$i', columns: 5, rows: 5):
+            completionJson(DateTime(2026, 11, 1)),
+    });
+    await pumpMyPuzzles(tester);
+
+    await tester.tap(find.text('Collection'));
+    await tester.pumpAndSettle();
+
+    // The first board (25 pieces) is complete: its gift hangs below while
+    // the second board starts empty.
+    final firstGift = bonusPuzzleCatalog[0];
+    final secondGift = bonusPuzzleCatalog[1];
+    final giftCard = find.bySemanticsIdentifier(
+      'my-puzzles-collection-${firstGift.id}',
+    );
+    // The gift wall hangs below the board card, past the first fold — and
+    // the scroll must happen in the tab's own list, never the TabBarView's
+    // horizontal scrollable (that would switch tabs).
+    await tester.scrollUntilVisible(
+      giftCard,
+      200,
+      scrollable: find
+          .descendant(
+            of: find.byKey(const PageStorageKey('my-puzzles-collection')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await tester.ensureVisible(giftCard);
+    await tester.pumpAndSettle();
+    expect(giftCard, findsOneWidget);
+    expect(
+      find.bySemanticsIdentifier('bonus-board-${secondGift.id}'),
+      findsOneWidget,
+    );
+    expect(find.text('0 of 25 pieces'), findsOneWidget);
+
+    await tester.tap(giftCard);
+    await tester.pumpAndSettle();
+
+    // Earned gifts start and replay through the same size sheet as any
+    // painting (owner's ruling).
+    expect(find.byType(BottomSheet), findsOneWidget);
+    expect(find.text('Start · 25 pieces'), findsOneWidget);
+    expect(find.byType(GameScreen), findsNothing);
+  });
+
+  testWidgets('streak pieces land on the board too', (tester) async {
+    // Five finishes open the journey; a 6-day streak adds two more pieces.
+    SharedPreferences.setMockInitialValues({
+      for (var i = 0; i < 5; i++)
+        puzzleCompletionKey(imageId: 'photo-$i', columns: 5, rows: 5):
+            completionJson(DateTime(2026, 11, 1 + i)),
+      'daily.days':
+          '["2026-11-01","2026-11-02","2026-11-03",'
+          '"2026-11-04","2026-11-05","2026-11-06"]',
+    });
+    await pumpMyPuzzles(tester);
+
+    await tester.tap(find.text('Collection'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('7 of 25 pieces'), findsOneWidget);
   });
 }

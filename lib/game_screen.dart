@@ -17,6 +17,7 @@ import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 
 import 'app_settings.dart';
+import 'bonus_track.dart';
 import 'completion_card.dart';
 import 'daily_puzzle.dart';
 import 'daily_streak.dart';
@@ -40,6 +41,7 @@ class GameScreen extends StatefulWidget {
     this.startedDay,
     this.settings = const AppSettings(),
     this.catalog = puzzleCatalog,
+    this.bonusCatalog = bonusPuzzleCatalog,
     this.trayColumns = trayVisibleColumns,
     this.trayMaxThumbnailHeight = trayThumbnailHeightCap,
   });
@@ -50,6 +52,10 @@ class GameScreen extends StatefulWidget {
   /// Where "Next puzzle" looks for the category's other paintings; tests
   /// supply a small fixture catalog.
   final List<PuzzleImage> catalog;
+
+  /// The gift paintings of the bonus track, in unlock order; tests supply
+  /// a small fixture list.
+  final List<PuzzleImage> bonusCatalog;
 
   /// Player preferences, read by the caller before this screen opens.
   final AppSettings settings;
@@ -95,6 +101,10 @@ class _GameScreenState extends State<GameScreen> {
   /// The "Next puzzle" offer; null until completion resolves it (and stays
   /// null when the rest of the category is already done at this size).
   PuzzleImage? _nextImage;
+
+  /// The gift painting this completion just unlocked; null when no bonus
+  /// board finished (or the player pressed "Save for later").
+  PuzzleImage? _bonusUnlock;
 
   Timer? _completionTimer;
   Timer? _revealFallbackTimer;
@@ -207,6 +217,7 @@ class _GameScreenState extends State<GameScreen> {
       _restarting = true;
       _showCompletionCard = false;
       _nextImage = null;
+      _bonusUnlock = null;
     });
     // Stop new writes before awaiting any old ones. An already-held finger
     // can still deliver a release after the dialog closes.
@@ -269,6 +280,15 @@ class _GameScreenState extends State<GameScreen> {
       _revealCompletionCard(game);
     }
 
+    // The persisted state BEFORE this completion's writes: the bonus unlock
+    // is "did these writes cross a board boundary", so both sides of the
+    // compare must come from storage, not memory. Read ahead of the writes
+    // below so it cannot interleave with them in the preferences cache.
+    const completionStore = SharedPreferencesCompletionStore();
+    final idsBefore = await completedImageIds(completionStore);
+    final daysBefore = await const SharedPreferencesDailyStreakStore()
+        .completedDays();
+
     // The record writes run UNCONDITIONALLY from here: a completion the
     // player saw must be stored even if a restart or a chained replacement
     // lands while the read above was in flight — only the UI fields are
@@ -281,15 +301,63 @@ class _GameScreenState extends State<GameScreen> {
     // resuming the finished save retries it. A day-late retry still credits via
     // the resumed-save grace, and re-marking an already-stored day is a
     // no-op success.
-    final completionRecorded = await const SharedPreferencesCompletionStore()
-        .markCompleted(
-          puzzleCompletionKey(
-            imageId: widget.image.id,
-            columns: widget.size.columns,
-            rows: widget.size.rows,
-          ),
-        );
+    final completionRecorded = await completionStore.markCompleted(
+      puzzleCompletionKey(
+        imageId: widget.image.id,
+        columns: widget.size.columns,
+        rows: widget.size.rows,
+      ),
+    );
+    if (completionRecorded) {
+      await _offerBonusUnlock(game, idsBefore: idsBefore, daysBefore: daysBefore);
+    }
     return dailyRecorded && completionRecorded;
+  }
+
+  /// Shows the "Bonus puzzle unlocked" section on the completion card when
+  /// the writes that just landed crossed a 25-piece boundary. Pieces come
+  /// from first finishes (gift paintings filtered out — owner ruling) plus
+  /// streak pieces, so a replay's set union is a no-op and nothing unlocks.
+  /// If the completion write failed, the caller skips this entirely: the
+  /// retained save retries the write (and this offer) on resume. A write
+  /// that LANDS but whose card is never seen (exit before the reveal, or
+  /// the late-write guard below) unlocks silently in Collection instead,
+  /// like historic progress — the gift itself is never lost.
+  Future<void> _offerBonusUnlock(
+    JigsawGame game, {
+    required Set<String> idsBefore,
+    required Set<String> daysBefore,
+  }) async {
+    final piecesBefore =
+        galleryFirstFinishCount(idsBefore, bonusCatalog: widget.bonusCatalog) +
+        streakPieces(daysBefore);
+    // The streak write sequenced just before the completion write may have
+    // added a day, so the after-side day set is re-read from storage.
+    final daysAfter = await const SharedPreferencesDailyStreakStore()
+        .completedDays();
+    final piecesAfter =
+        galleryFirstFinishCount(
+          {...idsBefore, widget.image.id},
+          bonusCatalog: widget.bonusCatalog,
+        ) +
+        streakPieces(daysAfter);
+    final unlocked = newlyUnlockedBonus(
+      piecesBefore: piecesBefore,
+      piecesAfter: piecesAfter,
+      bonusCatalog: widget.bonusCatalog,
+    );
+    // The !_showCompletionCard guard: on wedged storage the card can reveal
+    // (via its fallback timer) before the writes land — inserting the gift
+    // section into an already-interactive card would shove the action
+    // buttons mid-tap. The late gift stays silent here and waits in
+    // Collection; the reveal itself must never wait on writes (UI-4 rule).
+    if (unlocked != null &&
+        mounted &&
+        !_restarting &&
+        !_showCompletionCard &&
+        identical(_game, game)) {
+      setState(() => _bonusUnlock = unlocked);
+    }
   }
 
   /// Reveals the completion card (idempotent: a fallback reveal followed by
@@ -331,6 +399,11 @@ class _GameScreenState extends State<GameScreen> {
   /// Candidates are probed lazily in [nextPuzzleAfter]'s own order —
   /// typically one read — instead of prefetching the whole category, which
   /// also keeps the candidate-ordering rule in a single place.
+  ///
+  /// After a GIFT puzzle this is null by design: the bonus category is not
+  /// in the gallery catalog, so the run ends on "Back to gallery" — never
+  /// chain here with [fullPuzzleCatalog], or a finished gift would offer
+  /// still-locked gifts as the next puzzle.
   Future<PuzzleImage?> _findNextPuzzle() async {
     const store = SharedPreferencesCompletionStore();
     final completed = <String>{};
@@ -459,6 +532,15 @@ class _GameScreenState extends State<GameScreen> {
               null => null,
               final next => () => Navigator.pop(context, next),
             },
+            // "Play now" rides the same chain; the gift is already earned,
+            // so "Save for later" just tucks the section away — the painting
+            // waits in My Puzzles → Collection either way.
+            bonusUnlock: _bonusUnlock,
+            onPlayBonus: switch (_bonusUnlock) {
+              null => null,
+              final bonus => () => Navigator.pop(context, bonus),
+            },
+            onSaveBonusForLater: () => setState(() => _bonusUnlock = null),
           ),
       ],
     );

@@ -98,6 +98,21 @@ extension PuzzleCompletionQuery on PuzzleCompletionStore {
     required int rows,
   }) =>
       isCompleted(puzzleCompletionKey(imageId: imageId, columns: columns, rows: rows));
+
+  /// Every stored, VALID completion record by key — the one shared loop
+  /// that decides validity (a corrupt record is simply absent), so the
+  /// surfaces reading "all completions" (My Puzzles, the bonus track)
+  /// cannot drift apart on that rule.
+  Future<Map<String, CompletionRecord>> loadAllCompletionRecords() async {
+    final records = <String, CompletionRecord>{};
+    for (final key in await listCompletedKeys()) {
+      final stored = await record(key);
+      if (stored != null) {
+        records[key] = stored;
+      }
+    }
+    return records;
+  }
 }
 
 /// Device-local storage. Failures are logged in debug builds and handled
