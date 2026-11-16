@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:jigsaw_puzzle/app_settings.dart';
 import 'package:jigsaw_puzzle/background_music.dart';
 import 'package:jigsaw_puzzle/completion_card.dart';
+import 'package:jigsaw_puzzle/daily_puzzle.dart';
 import 'package:jigsaw_puzzle/game_screen.dart';
 import 'package:jigsaw_puzzle/game_sounds.dart';
 import 'package:jigsaw_puzzle/jigsaw_game.dart';
@@ -42,6 +43,24 @@ String saveKeyFor(PuzzleImage image, {int columns = 1, int rows = 1}) =>
 String completionKeyFor(PuzzleImage image, {int columns = 1, int rows = 1}) =>
     'flutter.${puzzleCompletionKey(imageId: image.id, columns: columns, rows: rows)}';
 
+/// UNPREFIXED save key for [SharedPreferences.setMockInitialValues] seeding
+/// (which adds the `flutter.` prefix itself — seeding a [saveKeyFor] key
+/// there double-prefixes and the save is silently ignored). One shared
+/// recipe so suites stop growing private clones of it.
+String seedSaveKey(PuzzleImage image, PuzzleSize size) =>
+    puzzleSaveKey(imageId: image.id, columns: size.columns, rows: size.rows);
+
+/// Catalog paintings that are NOT [now]'s daily — the continue-card suites'
+/// fixture pool, in one place so the test and the owner's preview harness
+/// can never encode different exclusion rules.
+List<PuzzleImage> nonDailyCatalogImages(DateTime now) {
+  final daily = dailyPuzzleFor(now);
+  return [
+    for (final image in puzzleCatalog)
+      if (image.id != daily.id) image,
+  ];
+}
+
 // The shared single-piece fixture's keys, through the same recipe.
 final singlePieceProgressKey = saveKeyFor(singlePieceImage);
 final singlePieceCompletionKey = completionKeyFor(singlePieceImage);
@@ -67,12 +86,14 @@ PuzzleSaveState partiallyPlacedSave(
   required int placed,
   String? startedDay,
   int? boardWidth,
+  DateTime? savedAt,
 }) => PuzzleSaveState(
   trayPieceIndexes: [for (var i = placed; i < pieceCount; i++) i],
   lockedPieceIndexes: [for (var i = 0; i < placed; i++) i],
   loosePiecePositions: const {},
   startedDay: startedDay,
   boardWidth: boardWidth,
+  savedAt: savedAt,
 );
 
 /// Every piece still in the tray — the standard "just started, resumable"
@@ -82,11 +103,13 @@ PuzzleSaveState fullTraySave(
   int pieceCount, {
   String? startedDay,
   int? boardWidth,
+  DateTime? savedAt,
 }) => partiallyPlacedSave(
   pieceCount,
   placed: 0,
   startedDay: startedDay,
   boardWidth: boardWidth,
+  savedAt: savedAt,
 );
 
 /// A completion record finished [count] times, newest on [day].
@@ -176,7 +199,9 @@ Map<String, Object> finishedSceneEntries(int count) => {
       imageId: jigsawStory.stops[i].image.id,
       columns: 5,
       rows: 5,
-    ): completionJson(DateTime(2026, 11, 1 + i)),
+    ): completionJson(
+      DateTime(2026, 11, 1 + i),
+    ),
 };
 
 /// The pop result of a [GameScreen] opened through a real pushed route —
@@ -206,11 +231,8 @@ Future<PushedGameRoute> pushGameScreen(
               route.popResult = await Navigator.push<PuzzleImage>(
                 context,
                 MaterialPageRoute<PuzzleImage>(
-                  builder: (_) => GameScreen(
-                    image: image,
-                    size: size,
-                    catalogs: catalogs,
-                  ),
+                  builder: (_) =>
+                      GameScreen(image: image, size: size, catalogs: catalogs),
                 ),
               );
               route.popped = true;
@@ -455,17 +477,25 @@ class MockSharedPreferences {
   }
 }
 
-/// Pumps the selection screen under the app's real theme with a fixed clock.
+/// Pumps the selection screen under the app's real theme with a fixed
+/// clock and, by default, settles it past the first status load — the body
+/// renders nothing until that lands (the continue card must never pop in
+/// above already-painted content). Pass [settle] false to observe the
+/// gated first frame.
 Future<void> pumpSelectScreen(
   WidgetTester tester, {
   required DateTime Function() clock,
-}) {
-  return tester.pumpWidget(
+  bool settle = true,
+}) async {
+  await tester.pumpWidget(
     MaterialApp(
       theme: studioTheme(),
       home: PuzzleSelectScreen(clock: clock),
     ),
   );
+  if (settle) {
+    await tester.pumpAndSettle();
+  }
 }
 
 /// Scrolls the selection screen until [finder] is fully visible — needed

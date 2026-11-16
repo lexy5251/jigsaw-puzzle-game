@@ -36,17 +36,14 @@ void main() {
     PuzzleSize size, {
     String? startedDay,
     int? boardWidth,
+    DateTime? savedAt,
   }) => fullTraySave(
     size.pieceCount,
     startedDay: startedDay,
     boardWidth: boardWidth,
+    savedAt: savedAt,
   );
 
-  String saveKeyFor(PuzzleImage image, PuzzleSize size) => puzzleSaveKey(
-    imageId: image.id,
-    columns: size.columns,
-    rows: size.rows,
-  );
   String doneKeyFor(PuzzleImage image, PuzzleSize size) => puzzleCompletionKey(
     imageId: image.id,
     columns: size.columns,
@@ -72,10 +69,10 @@ void main() {
   test('photos sort by their newest run, day-less last, one per photo', () {
     final summary = build(
       saves: {
-        saveKeyFor(imageC, small): saveFor(small), // save pre-dates the field
-        saveKeyFor(imageA, small): saveFor(small, startedDay: '2026-11-08'),
-        saveKeyFor(imageB, small): saveFor(small), // older than b's 2x2 run
-        saveKeyFor(imageB, large): saveFor(large, startedDay: '2026-11-10'),
+        seedSaveKey(imageC, small): saveFor(small), // save pre-dates the field
+        seedSaveKey(imageA, small): saveFor(small, startedDay: '2026-11-08'),
+        seedSaveKey(imageB, small): saveFor(small), // older than b's 2x2 run
+        seedSaveKey(imageB, large): saveFor(large, startedDay: '2026-11-10'),
       },
     );
 
@@ -89,12 +86,60 @@ void main() {
     );
   });
 
+  test('the savedAt stamp outranks the started day, stamp-less last', () {
+    final summary = build(
+      saves: {
+        // Started earliest but touched most recently — must lead.
+        seedSaveKey(imageC, small): saveFor(
+          small,
+          startedDay: '2026-11-01',
+          savedAt: DateTime(2026, 11, 12, 21),
+        ),
+        seedSaveKey(imageA, small): saveFor(
+          small,
+          startedDay: '2026-11-10',
+          savedAt: DateTime(2026, 11, 12, 9),
+        ),
+        // Pre-stamp save: a newer started day must not beat stamped runs.
+        seedSaveKey(imageB, small): saveFor(small, startedDay: '2026-11-11'),
+      },
+    );
+
+    expect(
+      [for (final run in summary.inProgress) run.image.id],
+      ['c', 'a', 'b'],
+    );
+    expect(summary.inProgress.first.savedAt, DateTime(2026, 11, 12, 21));
+  });
+
+  test('two stamped runs of one photo keep the newest stamp', () {
+    final summary = build(
+      saves: {
+        seedSaveKey(imageA, small): saveFor(
+          small,
+          savedAt: DateTime(2026, 11, 12, 9),
+        ),
+        seedSaveKey(imageA, large): saveFor(
+          large,
+          savedAt: DateTime(2026, 11, 12, 21),
+        ),
+      },
+    );
+
+    // The newest run stands for the photo on the page AND for the home
+    // continue card — it must be the 21:00 one.
+    expect(summary.inProgress.single.size, large);
+  });
+
   test('finished photos group their sizes and take the newest date', () {
     final summary = build(
       completions: {
         // Deliberately largest-grid first: the photo's size list must come
         // out in the offered-sizes order, not insertion order.
-        doneKeyFor(imageB, large): completionOn(DateTime(2026, 11, 9), count: 2),
+        doneKeyFor(imageB, large): completionOn(
+          DateTime(2026, 11, 9),
+          count: 2,
+        ),
         doneKeyFor(imageB, small): completionOn(DateTime(2026, 11, 1)),
         doneKeyFor(imageA, small): completionOn(DateTime(2026, 11, 5)),
       },
@@ -123,10 +168,10 @@ void main() {
     final summary = build(
       saves: {
         'save.gone.2x1': saveFor(small), // photo left the catalog
-        saveKeyFor(imageA, unknownGrid): saveFor(unknownGrid),
+        seedSaveKey(imageA, unknownGrid): saveFor(unknownGrid),
         'not-a-save-key': saveFor(small),
         // One of two pieces: fails the same consistency check as the badges.
-        saveKeyFor(imageB, small): const PuzzleSaveState(
+        seedSaveKey(imageB, small): const PuzzleSaveState(
           trayPieceIndexes: [0],
           lockedPieceIndexes: [],
           loosePiecePositions: {},
@@ -145,7 +190,7 @@ void main() {
   test('placed count comes from the locked pieces', () {
     final summary = build(
       saves: {
-        saveKeyFor(imageA, large): partiallyPlacedSave(
+        seedSaveKey(imageA, large): partiallyPlacedSave(
           large.pieceCount,
           placed: 3,
           startedDay: '2026-11-10',
@@ -160,7 +205,7 @@ void main() {
     // The game's own scale guard starts it fresh on open; hiding it here
     // would make a visibly started puzzle disappear from the page.
     final summary = build(
-      saves: {saveKeyFor(imageA, small): saveFor(small, boardWidth: 9999)},
+      saves: {seedSaveKey(imageA, small): saveFor(small, boardWidth: 9999)},
     );
 
     expect(summary.inProgress.single.image.id, 'a');
@@ -170,13 +215,15 @@ void main() {
     // An interrupted final snap can leave this pair behind.
     final summary = build(
       saves: {
-        saveKeyFor(imageA, small): partiallyPlacedSave(
+        seedSaveKey(imageA, small): partiallyPlacedSave(
           small.pieceCount,
           placed: small.pieceCount,
           startedDay: '2026-11-10',
         ),
       },
-      completions: {doneKeyFor(imageA, small): completionOn(DateTime(2026, 11, 10))},
+      completions: {
+        doneKeyFor(imageA, small): completionOn(DateTime(2026, 11, 10)),
+      },
     );
 
     expect(summary.inProgress, isEmpty);
@@ -188,7 +235,7 @@ void main() {
     // the puzzle finishes the recording, so it must stay findable.
     final summary = build(
       saves: {
-        saveKeyFor(imageA, small): partiallyPlacedSave(
+        seedSaveKey(imageA, small): partiallyPlacedSave(
           small.pieceCount,
           placed: small.pieceCount,
         ),
@@ -201,9 +248,11 @@ void main() {
   test('a photo finished at one size and mid-way at another shows twice', () {
     final summary = build(
       saves: {
-        saveKeyFor(imageA, large): saveFor(large, startedDay: '2026-11-10'),
+        seedSaveKey(imageA, large): saveFor(large, startedDay: '2026-11-10'),
       },
-      completions: {doneKeyFor(imageA, small): completionOn(DateTime(2026, 11, 9))},
+      completions: {
+        doneKeyFor(imageA, small): completionOn(DateTime(2026, 11, 9)),
+      },
     );
 
     expect(summary.inProgress.single.size, large);
@@ -213,7 +262,7 @@ void main() {
   test('loadMyPuzzlesSummary reads both stores', () async {
     final saveStore = InMemorySaveStore();
     await saveStore.save(
-      saveKeyFor(imageA, small),
+      seedSaveKey(imageA, small),
       saveFor(small, startedDay: '2026-11-10'),
     );
     final completionStore = InMemoryCompletionStore();
@@ -232,4 +281,49 @@ void main() {
     expect(summary.inProgress.single.image.id, 'a');
     expect(summary.finished.single.image.id, 'b');
   });
+
+  test('a pre-loaded saves map replaces the store scan', () async {
+    // The home screen scans the save store once per refresh and hands the
+    // snapshot in; the summary must then not touch the store at all.
+    final summary = await loadMyPuzzlesSummary(
+      saveStore: _ThrowingSaveStore(),
+      completionStore: InMemoryCompletionStore(),
+      saves: {seedSaveKey(imageA, small): saveFor(small)},
+      catalog: catalog,
+      sizes: sizes,
+    );
+
+    expect(summary.inProgress.single.image.id, 'a');
+  });
+
+  test('InProgressRun equality covers every field', () {
+    InProgressRun run({int placed = 0, DateTime? savedAt}) => InProgressRun(
+      image: imageA,
+      size: small,
+      placedCount: placed,
+      savedAt: savedAt,
+    );
+    final stamp = DateTime(2026, 11, 12, 21);
+    expect(run(savedAt: stamp), run(savedAt: stamp));
+    expect(run(savedAt: stamp).hashCode, run(savedAt: stamp).hashCode);
+    // The home screen's rebuild-skip relies on any rendered change
+    // breaking equality.
+    expect(run(savedAt: stamp), isNot(run(savedAt: DateTime(2026, 11, 13))));
+    expect(run(savedAt: stamp), isNot(run(placed: 1, savedAt: stamp)));
+  });
+}
+
+/// Fails on any access — proves a code path never reached the store.
+class _ThrowingSaveStore implements PuzzleSaveStore {
+  @override
+  Future<PuzzleSaveState?> load(String key) => throw StateError('load');
+  @override
+  Future<void> save(String key, PuzzleSaveState state) =>
+      throw StateError('save');
+  @override
+  Future<void> delete(String key) => throw StateError('delete');
+  @override
+  Future<bool> exists(String key) => throw StateError('exists');
+  @override
+  Future<List<String>> listSavedKeys() => throw StateError('list');
 }

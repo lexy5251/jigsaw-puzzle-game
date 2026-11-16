@@ -1,5 +1,7 @@
-// The shared "tap a painting → pick a size → play" flow, used by the select
-// screen's daily card and by every category screen.
+// The shared "tap a painting → play" flow: normally tap → size sheet →
+// game, used by the select screen's daily card, every category screen, and
+// My Puzzles. The home continue card enters with [startPuzzleFlow]'s
+// `resumeSize` and skips the sheet — the one sheet-less launch path.
 
 import 'package:flutter/material.dart';
 
@@ -16,17 +18,33 @@ const _saveStore = SharedPreferencesSaveStore();
 const _completionStore = SharedPreferencesCompletionStore();
 const _settingsStore = SharedPreferencesAppSettingsStore();
 
+/// The intact save of [image] at [size], or null for a missing or corrupt
+/// one — "intact" is the size sheet's bar for an "In progress" row.
+Future<PuzzleSaveState?> _intactSaveFor(
+  PuzzleImage image,
+  PuzzleSize size,
+) async {
+  final save = await _saveStore.load(
+    puzzleSaveKey(imageId: image.id, columns: size.columns, rows: size.rows),
+  );
+  return (save?.isConsistentFor(size.pieceCount) ?? false) ? save : null;
+}
+
+/// Whether one tap may reopen [image]'s run at [size] WITHOUT the sheet.
+/// Stricter than the sheet's bar: the save must also be stamped against the
+/// current catalog resolution, because the game's scale guard starts any
+/// other width fresh — and a button that said Resume must never do that.
+/// Width-mismatched (or pre-stamp) saves fall back to the sheet instead.
+Future<bool> _canResumeDirectly(PuzzleImage image, PuzzleSize size) async {
+  final save = await _intactSaveFor(image, size);
+  return save != null && save.boardWidth == catalogImageWidth;
+}
+
 /// Sizes of [image] that have a saved game to resume.
 Future<Set<PuzzleSize>> _savedSizesFor(PuzzleImage image) async {
   final savedSizes = <PuzzleSize>{};
   for (final size in puzzleSizes) {
-    final key = puzzleSaveKey(
-      imageId: image.id,
-      columns: size.columns,
-      rows: size.rows,
-    );
-    final save = await _saveStore.load(key);
-    if (save?.isConsistentFor(size.pieceCount) ?? false) {
+    if (await _intactSaveFor(image, size) != null) {
       savedSizes.add(size);
     }
   }
@@ -49,12 +67,16 @@ Future<Set<PuzzleSize>> _completedSizesFor(PuzzleImage image) async {
   return completedSizes;
 }
 
-/// True while a launch is between its first tap and its size sheet being
-/// up. The store reads before the sheet yield to the event loop, so a
-/// double-tap (or a two-finger tap on two cards) would pass that gap twice
-/// and stack a second sheet over the first — one launch at a time; once
-/// the sheet's route is pushed, its barrier takes over the blocking.
-var _sizeSheetOpening = false;
+/// True while a launch is between its first tap and its blocking route
+/// being up — the size sheet, or the game route itself on a direct resume.
+/// The store reads before either yield to the event loop, so a double-tap
+/// (or a two-finger tap on two cards) would otherwise pass that gap twice
+/// and stack a second sheet or game. Each path clears the flag in the same
+/// synchronous step that pushes its route (no await can come between), so
+/// the hand-over from flag to route barrier has no gap; it is NOT held for
+/// the whole flow — a flow abandoned mid-route (tests tear screens down
+/// constantly) must not jam the guard for every later launch.
+var _launchInFlight = false;
 
 /// Resolves both status sets, then opens the size sheet. Returns the chosen
 /// size, or null when the sheet was dismissed or the host screen removed.
@@ -92,7 +114,7 @@ Future<PuzzleSize?> _pickSizeFromSheet(
     ),
   );
   // The sheet's route is pushed; its barrier now owns re-entry blocking.
-  _sizeSheetOpening = false;
+  _launchInFlight = false;
   return choice;
 }
 
@@ -100,6 +122,11 @@ Future<PuzzleSize?> _pickSizeFromSheet(
 /// chaining straight into each "Next puzzle" pick at the same size until the
 /// player exits. Returns once the player is truly back, so callers can
 /// refresh their state.
+///
+/// [resumeSize] (the home continue card) skips the sheet and reopens that
+/// size's run in one tap — but only while its save is intact AND written at
+/// the current photo resolution; anything else falls back to the sheet, so
+/// the tap can never silently restart.
 Future<void> startPuzzleFlow(
   BuildContext context,
   PuzzleImage image, {
@@ -107,65 +134,76 @@ Future<void> startPuzzleFlow(
   // One bundle so fixture-driven flows stay fixtures across every chained
   // hop, not just the first screen.
   PuzzleCatalogs catalogs = const PuzzleCatalogs(),
+  PuzzleSize? resumeSize,
 }) async {
-  if (_sizeSheetOpening) {
+  if (_launchInFlight) {
     return;
   }
-  _sizeSheetOpening = true;
-  // The run belongs to the day the player tapped, even if the size sheet
-  // below stays open across midnight.
-  var startedDay = dayKey((clock ?? DateTime.now)());
-  final PuzzleSize? pickedSize;
-  // `late`: assigned on every path that survives the try below.
-  late AppSettings settings;
+  _launchInFlight = true;
   try {
+    // The run belongs to the day the player tapped, even if the size sheet
+    // below stays open across midnight.
+    var startedDay = dayKey((clock ?? DateTime.now)());
     // Read once here so GameScreen stays synchronous; mid-game settings
     // changes apply from the next puzzle on.
-    settings = await _settingsStore.load();
+    var settings = await _settingsStore.load();
     if (!context.mounted) {
       return;
     }
-    pickedSize = await _pickSizeFromSheet(context, image);
-  } finally {
-    // Normally already cleared when the sheet went up; this covers the
-    // early exits (host unmounted, a store read throwing).
-    _sizeSheetOpening = false;
-  }
-  // Rebound outside the try so the null check below can promote it (flow
-  // analysis never promotes a variable assigned inside a try).
-  final selectedSize = pickedSize;
-  // The sheet can be dismissed, or the host screen removed while it is open.
-  if (selectedSize == null || !context.mounted) {
-    return;
-  }
+    final PuzzleSize? pickedSize;
+    if (resumeSize != null && await _canResumeDirectly(image, resumeSize)) {
+      pickedSize = resumeSize;
+    } else {
+      if (!context.mounted) {
+        return;
+      }
+      pickedSize = await _pickSizeFromSheet(context, image);
+    }
+    // The sheet can be dismissed, or the host screen removed while it is
+    // open.
+    if (pickedSize == null || !context.mounted) {
+      return;
+    }
+    // Rebound: [pickedSize]'s promotion does not carry into the route
+    // builder closure below (it is assigned inside this try), but an
+    // initialized final local's does.
+    final selectedSize = pickedSize;
 
-  var current = image;
-  while (true) {
-    // The game screen pops with the painting the player chose via the
-    // completion card's "Next puzzle" button, or null on a plain exit.
-    final next = await Navigator.push<PuzzleImage>(
-      context,
-      MaterialPageRoute<PuzzleImage>(
-        builder: (_) => GameScreen(
-          image: current,
-          size: selectedSize,
-          clock: clock,
-          startedDay: startedDay,
-          settings: settings,
-          catalogs: catalogs,
+    var current = image;
+    while (true) {
+      // The game screen pops with the painting the player chose via the
+      // completion card's "Next puzzle" button, or null on a plain exit.
+      final pushed = Navigator.push<PuzzleImage>(
+        context,
+        MaterialPageRoute<PuzzleImage>(
+          builder: (_) => GameScreen(
+            image: current,
+            size: selectedSize,
+            clock: clock,
+            startedDay: startedDay,
+            settings: settings,
+            catalogs: catalogs,
+          ),
         ),
-      ),
-    );
-    if (next == null || !context.mounted) {
-      return;
+      );
+      // push inserted the route synchronously; the game screen now owns
+      // re-entry blocking. A no-op after the sheet path (already cleared
+      // when its sheet went up), load-bearing for the direct-resume path.
+      _launchInFlight = false;
+      final next = await pushed;
+      if (next == null || !context.mounted) {
+        return;
+      }
+      current = next;
+      // The player commits to the new run now, not when the chain began.
+      startedDay = dayKey((clock ?? DateTime.now)());
+      settings = await _settingsStore.load();
+      if (!context.mounted) {
+        return;
+      }
     }
-    current = next;
-    // The player commits to the new run now, not when the chain began.
-    startedDay = dayKey((clock ?? DateTime.now)());
-    settings = await _settingsStore.load();
-    if (!context.mounted) {
-      return;
-    }
+  } finally {
+    _launchInFlight = false;
   }
 }
 

@@ -139,6 +139,7 @@ class _GameScreenState extends State<GameScreen> {
       saveStore: _saveStore,
       saveKey: _saveKey,
       startedDay: widget.startedDay ?? dayKey(_now),
+      clock: widget.clock,
       trayColumns: widget.trayColumns,
       trayMaxThumbnailHeight: widget.trayMaxThumbnailHeight,
       onCompleted: () => _onPuzzleCompleted(game),

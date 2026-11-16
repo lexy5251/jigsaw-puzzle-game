@@ -58,6 +58,7 @@ class PuzzleSaveState {
     required this.loosePiecePositions,
     this.startedDay,
     this.boardWidth,
+    this.savedAt,
   });
 
   /// Pieces still in the tray, in display order.
@@ -82,6 +83,13 @@ class PuzzleSaveState {
   /// chunks dissolve). Null for saves written before the field existed
   /// (i.e. before the 3072px photo swap) — those start fresh.
   final int? boardWidth;
+
+  /// When this snapshot was written, refreshed on every re-save — unlike
+  /// [startedDay], which is pinned to the run's first day. "Most recently
+  /// played" ordering (the home screen's continue card, the My Puzzles
+  /// list) reads this. Null for saves written before the field existed —
+  /// those sort behind stamped ones.
+  final DateTime? savedAt;
 
   /// True when every piece appears exactly once. Guards against loading a
   /// snapshot written for a different grid size, or corrupted data.
@@ -110,6 +118,7 @@ class PuzzleSaveState {
     },
     if (startedDay != null) 'started': startedDay,
     if (boardWidth != null) 'board': boardWidth,
+    if (savedAt != null) 'saved': savedAt!.toIso8601String(),
   });
 
   /// Returns null when [raw] is not a valid snapshot.
@@ -125,11 +134,17 @@ class PuzzleSaveState {
         ),
         startedDay: data['started'] as String?,
         boardWidth: data['board'] as int?,
+        savedAt: _parseSavedAt(data['saved']),
       );
     } on Object {
       return null; // Malformed data: treat as "no save".
     }
   }
+
+  /// A garbled stamp only loses the ordering hint, never the progress —
+  /// hence tryParse instead of letting the whole snapshot parse fail.
+  static DateTime? _parseSavedAt(Object? value) =>
+      value is String ? DateTime.tryParse(value) : null;
 
   /// Converts JSON entries like "3": [50, 70] into piece positions.
   static Map<int, Vector2> _parseLoosePiecePositions(
@@ -264,6 +279,7 @@ class InMemorySaveStore implements PuzzleSaveStore {
   Future<bool> exists(String key) async => _entries.containsKey(key);
 
   @override
-  Future<List<String>> listSavedKeys() async =>
-      _entries.keys.where((key) => key.startsWith(puzzleSaveKeyPrefix)).toList();
+  Future<List<String>> listSavedKeys() async => _entries.keys
+      .where((key) => key.startsWith(puzzleSaveKeyPrefix))
+      .toList();
 }

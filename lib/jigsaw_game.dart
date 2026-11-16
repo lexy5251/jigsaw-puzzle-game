@@ -53,6 +53,7 @@ class JigsawGame extends FlameGame
     this.saveStore,
     this.saveKey,
     this.startedDay,
+    this.clock,
     this.sounds,
     this.onCompleted,
     this.onBoardLoaded,
@@ -103,6 +104,10 @@ class JigsawGame extends FlameGame
   /// day its save carries. The daily streak reads [runStartedDay] to decide
   /// which day a finished run credits.
   final String? startedDay;
+
+  /// Returns "now" for the [PuzzleSaveState.savedAt] stamp on each write;
+  /// tests fix it to keep saves deterministic. Defaults to [DateTime.now].
+  final DateTime Function()? clock;
 
   /// The day this run actually began: [startedDay] for a fresh board, the
   /// restored save's stamp (possibly null for pre-stamp saves) for a resume.
@@ -320,14 +325,15 @@ class JigsawGame extends FlameGame
     }
 
     _addTray(trayPieces, pieceSize);
-    if (savedState == null) {
-      // Save right away: opening a puzzle marks it "in progress", and the
-      // shuffled tray order survives an app restart instead of reshuffling.
-      // This also replaces any save the guards above rejected — dead data
-      // no code path can restore, so one open makes every surface truthful
-      // again instead of advertising a run that resumes nowhere.
-      persistProgress();
-    }
+    // Save right away, fresh or resumed. Fresh: opening a puzzle marks it
+    // "in progress", the shuffled tray order survives an app restart, and
+    // any save the guards above rejected is replaced — dead data no code
+    // path can restore, so one open makes every surface truthful again.
+    // Resumed: the identical snapshot is re-written only for its fresh
+    // savedAt stamp — opening a puzzle IS playing it, so the home continue
+    // card's "most recently played" follows the player's attention even
+    // when they study the board and leave without moving a piece.
+    persistProgress();
     _fitCameraToBoard();
     onBoardLoaded?.call(savedState != null);
     // An interrupted final snap can leave a fully placed save. Finish
@@ -684,7 +690,8 @@ class JigsawGame extends FlameGame
     // piece grabbed by its edge can hang over the tray while the finger is
     // still clearly on the board. Non-gesture drops (no known pointer) fall
     // back to the center.
-    final dropPoint = piece.takeDragPointer() ??
+    final dropPoint =
+        piece.takeDragPointer() ??
         camera.localToGlobal(piece.position + piece.size / 2);
     if (allowTrayReturn && _shouldReturnToTray(piece, dropPoint)) {
       _returnPieceToTray(piece, dropPoint);
@@ -980,6 +987,10 @@ class JigsawGame extends FlameGame
       loosePiecePositions: loosePiecePositions,
       startedDay: _runStartedDay,
       boardWidth: _boardSize.x.round(),
+      // UTC, so "most recently played" ordering compares instants — local
+      // stamps have no offset in ISO form and re-anchor to whatever zone
+      // the device is in at read time (DST fall-back alone would misorder).
+      savedAt: (clock ?? DateTime.now)().toUtc(),
     );
   }
 }

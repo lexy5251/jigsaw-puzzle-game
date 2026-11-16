@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jigsaw_puzzle/puzzle_catalog.dart';
@@ -28,8 +29,7 @@ void main() {
       'bonus': bonusPuzzleCatalog,
       'story': storyPuzzleCatalog,
     };
-    for (final MapEntry(key: name, value: special)
-        in specialCatalogs.entries) {
+    for (final MapEntry(key: name, value: special) in specialCatalogs.entries) {
       for (final image in special) {
         // The category id staying off the Gallery's list is what keeps
         // these paintings out of every browsing surface.
@@ -55,6 +55,33 @@ void main() {
     // progress.
     final ids = [for (final image in fullPuzzleCatalog) image.id];
     expect(ids.toSet().length, ids.length, reason: 'duplicate catalog ids');
+  });
+
+  test('every catalog photo is encoded at catalogImageWidth', () async {
+    // The one-tap resume guard trusts [catalogImageWidth] to mean "the
+    // resolution saves restore against"; a regeneration that changes the
+    // assets without updating the constant would quietly break that
+    // promise. Header-only decode, so sweeping the full catalog stays
+    // cheap.
+    final wrong = <String>[];
+    for (final image in fullPuzzleCatalog) {
+      final bytes = File(image.assetPath).readAsBytesSync();
+      final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
+      final descriptor = await ui.ImageDescriptor.encoded(buffer);
+      if (descriptor.width != catalogImageWidth) {
+        wrong.add('${image.assetPath}: ${descriptor.width}px');
+      }
+      descriptor.dispose();
+      buffer.dispose();
+    }
+
+    expect(
+      wrong,
+      isEmpty,
+      reason:
+          'assets not at catalogImageWidth ($catalogImageWidth px) — '
+          'regenerated catalog? Update the constant in puzzle_catalog.dart',
+    );
   });
 
   test('every category has its cover on disk', () {

@@ -17,6 +17,7 @@ void main() {
     InMemorySaveStore store, {
     int columns = 6,
     int rows = 4,
+    DateTime Function()? clock,
     Future<bool> Function()? onCompleted,
     void Function(bool resumed)? onBoardLoaded,
   }) => JigsawGame(
@@ -25,6 +26,7 @@ void main() {
     rows: rows,
     saveStore: store,
     saveKey: key,
+    clock: clock,
     onCompleted: onCompleted,
     onBoardLoaded: onBoardLoaded,
   );
@@ -146,7 +148,8 @@ void main() {
     tester,
   ) async {
     final store = InMemorySaveStore();
-    final game = makeGame(store);
+    final now = DateTime(2026, 11, 16, 10, 30);
+    final game = makeGame(store, clock: () => now);
     await bootGame(tester, game);
 
     final (gesture, piece) = await liftPieceFromTray(tester, game);
@@ -168,6 +171,36 @@ void main() {
     expect(saved.lockedPieceIndexes, isEmpty);
     expect(saved.loosePiecePositions, hasLength(1));
     expect(saved.loosePiecePositions.keys.single, piece.index);
+    // Every write stamps "now", in UTC so ordering compares instants —
+    // the home continue card's "most recently played" key.
+    expect(saved.savedAt, now.toUtc());
+  });
+
+  testWidgets('every open refreshes the savedAt stamp, fresh or resumed', (
+    tester,
+  ) async {
+    final store = InMemorySaveStore();
+    var now = DateTime(2026, 11, 16, 10);
+    final game = makeGame(store, clock: () => now);
+    await bootGame(tester, game);
+    // The fresh board's load-time save carries the first stamp.
+    expect(
+      (await store.load(key))!.savedAt,
+      DateTime(2026, 11, 16, 10).toUtc(),
+    );
+
+    // A later session resumes the same save and leaves without touching a
+    // piece: opening alone must bump the stamp, or "most recently played"
+    // would silently mean "most recently modified" and the continue card
+    // would re-offer the wrong puzzle. The advancing clock also pins that
+    // the stamp is taken per WRITE, not cached from the first snapshot.
+    now = DateTime(2026, 11, 16, 12);
+    final resumed = makeGame(store, clock: () => now);
+    await bootGame(tester, resumed);
+    expect(
+      (await store.load(key))!.savedAt,
+      DateTime(2026, 11, 16, 12).toUtc(),
+    );
   });
 
   testWidgets('completing the puzzle deletes its save and reports completion', (

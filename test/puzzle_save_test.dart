@@ -11,6 +11,9 @@ void main() {
       loosePiecePositions: {4: Vector2(12.5, -7.0), 5: Vector2(0, 300)},
       startedDay: '2026-11-06',
       boardWidth: 3072,
+      // UTC, as the game stamps it — the ISO form keeps its 'Z' so the
+      // instant survives timezone changes.
+      savedAt: DateTime.utc(2026, 11, 6, 21, 30),
     );
 
     final restored = PuzzleSaveState.fromJsonString(state.toJsonString())!;
@@ -21,6 +24,8 @@ void main() {
     expect(restored.loosePiecePositions[5], Vector2(0, 300));
     expect(restored.startedDay, '2026-11-06');
     expect(restored.boardWidth, 3072);
+    expect(restored.savedAt, DateTime.utc(2026, 11, 6, 21, 30));
+    expect(restored.savedAt!.isUtc, isTrue);
   });
 
   test('a save from before the start-day stamp still loads', () {
@@ -32,6 +37,20 @@ void main() {
     expect(restored.trayPieceIndexes, [1, 0]);
     expect(restored.startedDay, isNull);
     expect(restored.boardWidth, isNull);
+    expect(restored.savedAt, isNull);
+  });
+
+  test('a garbled savedAt stamp loses the stamp, never the progress', () {
+    const stamped = [
+      '{"tray":[1,0],"locked":[],"loose":{},"saved":"not a date"}',
+      '{"tray":[1,0],"locked":[],"loose":{},"saved":12345}',
+    ];
+    for (final raw in stamped) {
+      final restored = PuzzleSaveState.fromJsonString(raw);
+      expect(restored, isNotNull, reason: raw);
+      expect(restored!.trayPieceIndexes, [1, 0], reason: raw);
+      expect(restored.savedAt, isNull, reason: raw);
+    }
   });
 
   test('malformed data reads as "no save"', () {

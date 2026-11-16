@@ -20,6 +20,7 @@ class InProgressRun {
     required this.size,
     required this.placedCount,
     this.startedDay,
+    this.savedAt,
   });
 
   final PuzzleImage image;
@@ -31,9 +32,36 @@ class InProgressRun {
   /// art); kept for when progress gets a better visual.
   final int placedCount;
 
-  /// Day key ("2026-11-02") the run began; null for old saves. Only used
-  /// for ordering — a save carries no finer timestamp.
+  /// Day key ("2026-11-02") the run began; null for old saves. Ordering
+  /// fallback for saves written before [savedAt] existed.
   final String? startedDay;
+
+  /// When the run was last saved — the primary "most recently played"
+  /// ordering key; null for saves from before the stamp existed.
+  final DateTime? savedAt;
+
+  // Value equality, so consumers (the home screen's rebuild-skip) can
+  // compare summaries with == and a field added here can never silently
+  // escape a hand-rolled comparison elsewhere.
+  @override
+  bool operator ==(Object other) =>
+      other is InProgressRun &&
+      other.image.id == image.id &&
+      other.size.columns == size.columns &&
+      other.size.rows == size.rows &&
+      other.placedCount == placedCount &&
+      other.startedDay == startedDay &&
+      other.savedAt == savedAt;
+
+  @override
+  int get hashCode => Object.hash(
+    image.id,
+    size.columns,
+    size.rows,
+    placedCount,
+    startedDay,
+    savedAt,
+  );
 }
 
 /// One photo finished at least once, at any size.
@@ -119,10 +147,20 @@ MyPuzzlesSummary buildMyPuzzlesSummary({
         size: size,
         placedCount: entry.value.lockedPieceIndexes.length,
         startedDay: entry.value.startedDay,
+        savedAt: entry.value.savedAt,
       ),
     );
   }
+  // Hoisted: the comparator runs O(n log n) times per summary build.
+  final epoch = DateTime.fromMillisecondsSinceEpoch(0);
   inProgress.sort((a, b) {
+    // Most recently played first. The epoch floor sinks stamp-less (pre-
+    // savedAt) saves behind every stamped one; among themselves they fall
+    // through to the started-day rule below.
+    final bySaved = (b.savedAt ?? epoch).compareTo(a.savedAt ?? epoch);
+    if (bySaved != 0) {
+      return bySaved;
+    }
     // Newest start first; day keys are ISO dates, so string order IS date
     // order, and '' sinks day-less (pre-field) saves to the end.
     final byDay = (b.startedDay ?? '').compareTo(a.startedDay ?? '');
@@ -179,17 +217,11 @@ MyPuzzlesSummary buildMyPuzzlesSummary({
   return MyPuzzlesSummary(inProgress: newestRunPerPhoto, finished: finished);
 }
 
-/// Reads both stores and builds the summary. The screen passes its injected
-/// stores; defaults are the device-local ones. A caller that already loaded
-/// the completion snapshot (the My Puzzles screen shares one read with the
-/// bonus track) passes it as [completions] so the store is scanned once.
-Future<MyPuzzlesSummary> loadMyPuzzlesSummary({
-  PuzzleSaveStore saveStore = const SharedPreferencesSaveStore(),
-  PuzzleCompletionStore completionStore = const SharedPreferencesCompletionStore(),
-  Map<String, CompletionRecord>? completions,
-  List<PuzzleImage> catalog = puzzleCatalog,
-  List<PuzzleSize> sizes = puzzleSizes,
-}) async {
+/// Every stored save by key. The home screen reads this once per refresh
+/// and derives both the daily-credit check and the continue card from it.
+Future<Map<String, PuzzleSaveState>> loadAllSaves(
+  PuzzleSaveStore saveStore,
+) async {
   final saves = <String, PuzzleSaveState>{};
   for (final key in await saveStore.listSavedKeys()) {
     final state = await saveStore.load(key);
@@ -197,9 +229,28 @@ Future<MyPuzzlesSummary> loadMyPuzzlesSummary({
       saves[key] = state;
     }
   }
+  return saves;
+}
+
+/// Reads both stores and builds the summary. The screen passes its injected
+/// stores; defaults are the device-local ones. A caller that already loaded
+/// a store's snapshot passes it ([completions] — the My Puzzles screen
+/// shares one read with the bonus track; [saves] — the home screen shares
+/// one read with the daily card's credit check) so each store is scanned
+/// once per refresh.
+Future<MyPuzzlesSummary> loadMyPuzzlesSummary({
+  PuzzleSaveStore saveStore = const SharedPreferencesSaveStore(),
+  PuzzleCompletionStore completionStore =
+      const SharedPreferencesCompletionStore(),
+  Map<String, CompletionRecord>? completions,
+  Map<String, PuzzleSaveState>? saves,
+  List<PuzzleImage> catalog = puzzleCatalog,
+  List<PuzzleSize> sizes = puzzleSizes,
+}) async {
   return buildMyPuzzlesSummary(
-    saves: saves,
-    completions: completions ?? await completionStore.loadAllCompletionRecords(),
+    saves: saves ?? await loadAllSaves(saveStore),
+    completions:
+        completions ?? await completionStore.loadAllCompletionRecords(),
     catalog: catalog,
     sizes: sizes,
   );

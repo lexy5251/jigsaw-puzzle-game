@@ -1,5 +1,7 @@
 // Puzzle selection overview:
-// 1. A "Today's painting" card on top shows the daily puzzle with the
+// 0. When a puzzle is unfinished, a "Continue puzzle" card sits on top:
+//    the most recently played run, resumed in one tap (no size sheet).
+// 1. A "Today's painting" card shows the daily puzzle with the
 //    streak windowsill — a pot blooms for every day the daily was finished.
 // 2. Below it, one painted card per themed category (owner-made cover art
 //    from assets/covers/, accent tint, painting count); categories with no
@@ -15,9 +17,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'category_screen.dart';
+import 'continue_puzzle_card.dart';
 import 'daily_puzzle.dart';
 import 'daily_puzzle_card.dart';
 import 'daily_streak.dart';
+import 'my_puzzles.dart';
 import 'puzzle_catalog.dart';
 import 'puzzle_launcher.dart';
 import 'puzzle_save.dart';
@@ -54,6 +58,20 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
   /// save would bloom anything.
   String? _dailyRunCredit;
 
+  /// What the continue card reopens: the most recently played unfinished
+  /// run across the FULL catalog (gallery, gifts, story). Today's daily
+  /// painting is excluded only while the daily card already offers
+  /// Continue for it. Null hides the card.
+  InProgressRun? _continueRun;
+
+  /// False until the first status load lands. The body renders nothing
+  /// before that: painting defaults first would let the continue card pop
+  /// in a frame later at the TOP of the list, shifting every control
+  /// downward under an already-aimed tap — onto the one launcher with no
+  /// size-sheet step. The load is a few prefs reads, so holding the first
+  /// frame is imperceptible.
+  bool _statusLoaded = false;
+
   /// Keep the displayed date and its asynchronously loaded status together.
   late DateTime _dailyDate;
   Timer? _midnightTimer;
@@ -70,7 +88,9 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
+    // Only while this tab is showing — a resume on another tab is covered
+    // by onTabActivated when the player comes back here.
+    if (state == AppLifecycleState.resumed && widget.isActive) {
       unawaited(_refreshDailyStatus());
     }
   }
@@ -93,16 +113,19 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
   /// applies, so the card can never promise a bloom a finish won't deliver.
   /// A save that credits nothing (abandoned, or started on a day when this
   /// image was not the daily) does not count: showing "In progress" for it
-  /// would mislead.
-  Future<String?> _dailyRunCreditDay(PuzzleImage daily, DateTime now) async {
+  /// would mislead. Reads the refresh's one shared save-store snapshot.
+  String? _dailyRunCreditDay(
+    PuzzleImage daily,
+    DateTime now,
+    Map<String, PuzzleSaveState> saves,
+  ) {
     for (final size in puzzleSizes) {
-      final save = await _saveStore.load(
-        puzzleSaveKey(
-          imageId: daily.id,
-          columns: size.columns,
-          rows: size.rows,
-        ),
-      );
+      final save =
+          saves[puzzleSaveKey(
+            imageId: daily.id,
+            columns: size.columns,
+            rows: size.rows,
+          )];
       if (save == null || !save.isConsistentFor(size.pieceCount)) {
         continue;
       }
@@ -140,22 +163,57 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
 
     final days = await _dailyStore.completedDays();
     final daily = dailyPuzzleFor(now);
-    final runCredit = await _dailyRunCreditDay(daily, now);
+    // ONE save-store scan feeds both the daily credit check and the
+    // continue card, instead of each re-reading the same keys.
+    final saves = await loadAllSaves(_saveStore);
+    final runCredit = _dailyRunCreditDay(daily, now, saves);
+    // The FULL catalog: a bonus gift or story scene can be the most
+    // recently played run, and this card must agree with My Puzzles
+    // (which reads the full catalog for the same reason) about it.
+    final summary = await loadMyPuzzlesSummary(
+      saves: saves,
+      catalog: fullPuzzleCatalog,
+    );
+    final continueRun = continueRunFrom(
+      summary.inProgress,
+      // The daily painting is left to the daily card ONLY while that card
+      // actually offers Continue for its run (the run credits a pot). A
+      // non-crediting run of the same painting would otherwise lose its
+      // resume surface on the whole home screen for the day.
+      excludedDailyId: runCredit != null ? daily.id : null,
+    );
     // A read started before midnight must not overwrite the next day's data.
     if (!mounted || dayKey(now) != dayKey(_now)) {
       return;
     }
     // This runs on every app resume; skip the rebuild when nothing changed.
-    if (dayKey(_dailyDate) == dayKey(now) &&
+    // Never on the first load — that one must flip [_statusLoaded] even
+    // when everything matches the field defaults.
+    if (_statusLoaded &&
+        dayKey(_dailyDate) == dayKey(now) &&
         setEquals(_completedDailyDays, days) &&
-        _dailyRunCredit == runCredit) {
+        _dailyRunCredit == runCredit &&
+        _continueRun == continueRun) {
       return;
     }
     setState(() {
+      _statusLoaded = true;
       _dailyDate = now;
       _completedDailyDays = days;
       _dailyRunCredit = runCredit;
+      _continueRun = continueRun;
     });
+  }
+
+  Future<void> _resumeRun(InProgressRun run) async {
+    await startPuzzleFlow(
+      context,
+      run.image,
+      clock: widget.clock,
+      resumeSize: run.size,
+    );
+    // The run may have advanced, finished, or chained into another puzzle.
+    await _refreshDailyStatus();
   }
 
   Future<void> _playDaily(PuzzleImage daily) async {
@@ -185,56 +243,91 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
     return Scaffold(
       // Settings moved from a gear here to its own bottom-nav tab.
       appBar: AppBar(title: const Text('Choose a puzzle')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          DailyPuzzleCard(
-            image: daily,
-            doneToday: _completedDailyDays.contains(dayKey(_dailyDate)),
-            inProgress: _dailyRunCredit != null,
-            // A fresh start always credits today; an in-progress run only
-            // when it was begun today (a yesterday-begun run blooms
-            // yesterday's pot, so the card must not promise today's).
-            bloomsToday:
-                _dailyRunCredit == null ||
-                _dailyRunCredit == dayKey(_dailyDate),
-            onPlay: () => _playDaily(daily),
-          ),
-          const SizedBox(height: 10),
-          DailyWindowsill(now: _dailyDate, completedDays: _completedDailyDays),
-          const SizedBox(height: 16),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              const spacing = 16.0;
-              // Keep the responsive columns, but let card heights follow
-              // their content when enlarged text wraps onto extra lines.
-              final columns = max(
-                1,
-                (constraints.maxWidth / (260 + spacing)).ceil(),
-              );
-              final cardWidth =
-                  (constraints.maxWidth - spacing * (columns - 1)) / columns;
-              return Wrap(
-                spacing: spacing,
-                runSpacing: spacing,
-                children: [
-                  for (final (index, category) in categories.indexed)
-                    SizedBox(
-                      width: cardWidth,
-                      child: _CategoryCard(
-                        category: category,
-                        variant: index,
-                        onOpen: () => _openCategory(category),
-                      ),
-                    ),
+      // Nothing until the first status load: see [_statusLoaded].
+      body: !_statusLoaded
+          ? const SizedBox.shrink()
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                if (_continueRun case final run?) ...[
+                  ContinuePuzzleCard(run: run, onResume: () => _resumeRun(run)),
+                  const SizedBox(height: 10),
                 ],
-              );
-            },
-          ),
-        ],
-      ),
+                DailyPuzzleCard(
+                  image: daily,
+                  doneToday: _completedDailyDays.contains(dayKey(_dailyDate)),
+                  inProgress: _dailyRunCredit != null,
+                  // A fresh start always credits today; an in-progress run only
+                  // when it was begun today (a yesterday-begun run blooms
+                  // yesterday's pot, so the card must not promise today's).
+                  bloomsToday:
+                      _dailyRunCredit == null ||
+                      _dailyRunCredit == dayKey(_dailyDate),
+                  onPlay: () => _playDaily(daily),
+                ),
+                const SizedBox(height: 10),
+                DailyWindowsill(
+                  now: _dailyDate,
+                  completedDays: _completedDailyDays,
+                ),
+                const SizedBox(height: 16),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    const spacing = 16.0;
+                    // Keep the responsive columns, but let card heights follow
+                    // their content when enlarged text wraps onto extra lines.
+                    final columns = max(
+                      1,
+                      (constraints.maxWidth / (260 + spacing)).ceil(),
+                    );
+                    final cardWidth =
+                        (constraints.maxWidth - spacing * (columns - 1)) /
+                        columns;
+                    return Wrap(
+                      spacing: spacing,
+                      runSpacing: spacing,
+                      children: [
+                        for (final (index, category) in categories.indexed)
+                          SizedBox(
+                            width: cardWidth,
+                            child: _CategoryCard(
+                              category: category,
+                              variant: index,
+                              onOpen: () => _openCategory(category),
+                            ),
+                          ),
+                      ],
+                    );
+                  },
+                ),
+              ],
+            ),
     );
   }
+}
+
+/// The run the home continue card shows: the newest unfinished run, under
+/// two page rules. [excludedDailyId] — today's painting, passed ONLY while
+/// the daily card above already offers Continue for it — is skipped so one
+/// painting never wears two action cards. Fully placed runs (a finish
+/// whose completion record never landed; opening one just replays the
+/// recording) are skipped so the card never advertises "N of N pieces" as
+/// something to continue.
+@visibleForTesting
+InProgressRun? continueRunFrom(
+  List<InProgressRun> runs, {
+  String? excludedDailyId,
+}) {
+  for (final run in runs) {
+    if (run.image.id == excludedDailyId) {
+      continue;
+    }
+    if (run.placedCount >= run.size.pieceCount) {
+      continue;
+    }
+    return run;
+  }
+  return null;
 }
 
 /// One tappable collection on the home screen: cover painting, title,

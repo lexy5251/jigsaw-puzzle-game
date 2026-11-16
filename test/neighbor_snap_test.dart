@@ -145,6 +145,9 @@ void main() {
         'locked',
         'loose',
         'board',
+        // Every write carries a savedAt stamp — the "most recently
+        // played" ordering key.
+        'saved',
       });
       expect(
         saved.loosePiecePositions[1]!.distanceTo(p[1]!.position),

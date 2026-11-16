@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
 import 'daily_puzzle.dart';
+import 'home_hero_card.dart';
 import 'puzzle_catalog.dart';
 import 'studio_mascots.dart';
-import 'studio_surfaces.dart';
 import 'studio_theme.dart';
 
 /// The daily-puzzle "Begin card": today's image, its status, and the one
@@ -38,51 +38,33 @@ class DailyPuzzleCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    // Enlarged text or a narrow phone: the action moves under the text
-    // instead of crushing the title (same breakpoint idea as the game
-    // screen's separateTools).
-    final stacked =
-        MediaQuery.sizeOf(context).width < 360 ||
-        MediaQuery.textScalerOf(context).scale(16) > 24;
-    // The button is a visual affordance only: the card itself is the one
-    // semantic tap target (merged below), so screen readers hear a single
-    // stop instead of the card and then a redundant 'Begin'.
-    final action = doneToday
-        ? null
-        : ExcludeSemantics(
-            child: FilledButton(
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                visualDensity: VisualDensity.compact,
+    return HomeHeroCard(
+      image: image,
+      eyebrow: "TODAY'S PAINTING",
+      details: [
+        // The done state has no status text: the bloomed pot alone marks
+        // it (owner ruling, UI-2 follow-up).
+        if (!doneToday) ...[
+          Text(_statusText(), style: theme.textTheme.bodySmall),
+          if (bloomsToday)
+            // The rule players otherwise trip over: only this painting
+            // blooms a pot.
+            Text(
+              "Finish it and today's pot blooms.",
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.primary,
               ),
-              onPressed: onPlay,
-              child: Text(inProgress ? 'Continue' : 'Begin'),
             ),
-          );
-
-    return Semantics(
-      button: true,
-      child: MergeSemantics(
-        child: PaintedCard(
-          onTap: onPlay,
-          padding: const EdgeInsets.all(16),
-          child: stacked
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _info(theme, trailing: doneToday ? _doneMarker() : null),
-                    if (action != null) ...[
-                      const SizedBox(height: 10),
-                      Align(alignment: Alignment.centerRight, child: action),
-                    ],
-                  ],
-                )
-              : _info(
-                  theme,
-                  trailing: doneToday ? _doneMarker() : action,
-                ),
-        ),
-      ),
+        ],
+      ],
+      onTap: onPlay,
+      action: doneToday
+          ? null
+          : HeroCardButton(
+              label: inProgress ? 'Continue' : 'Begin',
+              onPressed: onPlay,
+            ),
+      marker: doneToday ? _doneMarker() : null,
     );
   }
 
@@ -95,64 +77,6 @@ class DailyPuzzleCard extends StatelessWidget {
     label: 'Done today',
     child: const MascotArt(StudioMascot.cactus, height: 40),
   );
-
-  Widget _info(ThemeData theme, {required Widget? trailing}) {
-    return Row(
-      children: [
-        FramedArt(
-          child: Image.asset(
-            image.assetPath,
-            width: 72,
-            height: 72,
-            fit: BoxFit.cover,
-            // Same decode width as the catalog tiles, so the daily
-            // image shares their ImageCache entry instead of
-            // decoding the asset a second time.
-            cacheWidth: TiltedPhotoCard.thumbnailCacheWidth,
-          ),
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                "TODAY'S PAINTING",
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.primary,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1.1,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                image.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.titleMedium,
-              ),
-              // The done state has no status text: the bloomed pot alone
-              // marks it (owner ruling, UI-2 follow-up).
-              if (!doneToday) ...[
-                const SizedBox(height: 2),
-                Text(_statusText(), style: theme.textTheme.bodySmall),
-                if (bloomsToday)
-                  // The rule players otherwise trip over: only this painting
-                  // blooms a pot.
-                  Text(
-                    "Finish it and today's pot blooms.",
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.primary,
-                    ),
-                  ),
-              ],
-            ],
-          ),
-        ),
-        if (trailing != null) ...[const SizedBox(width: 8), trailing],
-      ],
-    );
-  }
 
   /// The e2e tests assert on these texts. There is no done text: the
   /// bloomed pot alone marks a finished day.
