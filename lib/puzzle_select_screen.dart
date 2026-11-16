@@ -23,6 +23,7 @@ import 'puzzle_launcher.dart';
 import 'puzzle_save.dart';
 import 'studio_surfaces.dart';
 import 'studio_theme.dart';
+import 'tab_activation.dart';
 
 class PuzzleSelectScreen extends StatefulWidget {
   const PuzzleSelectScreen({super.key, this.clock, this.isActive = true});
@@ -41,7 +42,7 @@ class PuzzleSelectScreen extends StatefulWidget {
 }
 
 class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, TabActivationAware<PuzzleSelectScreen> {
   static const _saveStore = SharedPreferencesSaveStore();
   static const _dailyStore = SharedPreferencesDailyStreakStore();
 
@@ -75,12 +76,10 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
   }
 
   @override
-  void didUpdateWidget(PuzzleSelectScreen oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.isActive && !oldWidget.isActive) {
-      unawaited(_refreshDailyStatus());
-    }
-  }
+  bool isActiveOf(PuzzleSelectScreen widget) => widget.isActive;
+
+  @override
+  void onTabActivated() => unawaited(_refreshDailyStatus());
 
   @override
   void dispose() {

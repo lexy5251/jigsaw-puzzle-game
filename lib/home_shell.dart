@@ -1,7 +1,8 @@
-// The root shell: the approved mockup's bottom nav, built as three tabs —
-// Gallery · My Puzzles · Settings. Category and game screens are pushed on
-// the root navigator, so they cover the bar while playing. The shell also
-// owns the ambient music loop, which therefore outlives every pushed screen.
+// The root shell: the approved mockup's bottom nav, grown to four tabs —
+// Gallery · Story · My Puzzles · Settings. Category and game screens are
+// pushed on the root navigator, so they cover the bar while playing. The
+// shell also owns the ambient music loop, which therefore outlives every
+// pushed screen.
 
 import 'dart:async';
 
@@ -12,6 +13,7 @@ import 'background_music.dart';
 import 'my_puzzles_screen.dart';
 import 'puzzle_select_screen.dart';
 import 'settings_screen.dart';
+import 'story_screen.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({
@@ -88,23 +90,68 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     _music.resume();
   }
 
+  /// One record per tab: the nav entry and the screen come from the same
+  /// list, so the IndexedStack child, the destination, and the isActive
+  /// wire can never fall out of step when a tab is added or moved.
+  List<_Tab> _tabs() => [
+    _Tab(
+      destination: const NavigationDestination(
+        icon: Icon(Icons.collections_outlined),
+        selectedIcon: Icon(Icons.collections),
+        label: 'Gallery',
+        tooltip: 'Gallery tab',
+      ),
+      builder: (isActive) =>
+          PuzzleSelectScreen(clock: widget.clock, isActive: isActive),
+    ),
+    _Tab(
+      destination: const NavigationDestination(
+        icon: Icon(Icons.auto_stories_outlined),
+        selectedIcon: Icon(Icons.auto_stories),
+        label: 'Story',
+        tooltip: 'Story tab',
+      ),
+      builder: (isActive) =>
+          StoryScreen(clock: widget.clock, isActive: isActive),
+    ),
+    _Tab(
+      destination: const NavigationDestination(
+        icon: Icon(Icons.extension_outlined),
+        selectedIcon: Icon(Icons.extension),
+        label: 'My Puzzles',
+        tooltip: 'My Puzzles tab',
+      ),
+      builder: (isActive) =>
+          MyPuzzlesScreen(clock: widget.clock, isActive: isActive),
+    ),
+    _Tab(
+      destination: const NavigationDestination(
+        icon: Icon(Icons.settings_outlined),
+        selectedIcon: Icon(Icons.settings),
+        label: 'Settings',
+        tooltip: 'Settings tab',
+      ),
+      builder: (_) =>
+          SettingsScreen(store: widget.settingsStore, music: _music),
+    ),
+  ];
+
   @override
   Widget build(BuildContext context) {
+    final tabs = _tabs();
     return Listener(
       behavior: HitTestBehavior.translucent,
       onPointerDown: _nudgeMusic,
       child: Scaffold(
-        // IndexedStack keeps all three tabs alive, so scroll positions, the
+        // IndexedStack keeps all four tabs alive, so scroll positions, the
         // My Puzzles tab selection, and mid-gesture state survive switches.
         // Freshness comes from the isActive flags: a tab reloads its stores
-        // when it becomes the visible one (didUpdateWidget), not by being
-        // torn down and rebuilt.
+        // when it becomes the visible one (TabActivationAware), not by
+        // being torn down and rebuilt.
         body: IndexedStack(
           index: _index,
           children: [
-            PuzzleSelectScreen(clock: widget.clock, isActive: _index == 0),
-            MyPuzzlesScreen(clock: widget.clock, isActive: _index == 1),
-            SettingsScreen(store: widget.settingsStore, music: _music),
+            for (final (i, tab) in tabs.indexed) tab.builder(_index == i),
           ],
         ),
         bottomNavigationBar: NavigationBar(
@@ -112,28 +159,18 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           onDestinationSelected: (index) => setState(() => _index = index),
           // Constant tooltips double as unique e2e hooks: the labels alone
           // repeat the open tab's AppBar title ('Settings' twice on screen).
-          destinations: const [
-            NavigationDestination(
-              icon: Icon(Icons.collections_outlined),
-              selectedIcon: Icon(Icons.collections),
-              label: 'Gallery',
-              tooltip: 'Gallery tab',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.extension_outlined),
-              selectedIcon: Icon(Icons.extension),
-              label: 'My Puzzles',
-              tooltip: 'My Puzzles tab',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.settings_outlined),
-              selectedIcon: Icon(Icons.settings),
-              label: 'Settings',
-              tooltip: 'Settings tab',
-            ),
-          ],
+          destinations: [for (final tab in tabs) tab.destination],
         ),
       ),
     );
   }
+}
+
+/// A bottom-nav tab: its destination chip and the screen it shows. The
+/// builder receives whether this tab is the visible one.
+class _Tab {
+  const _Tab({required this.destination, required this.builder});
+
+  final NavigationDestination destination;
+  final Widget Function(bool isActive) builder;
 }

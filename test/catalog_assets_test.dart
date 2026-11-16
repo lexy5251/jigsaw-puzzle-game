@@ -18,22 +18,43 @@ void main() {
     expect(missing, isEmpty, reason: 'catalog entries without a bundled file');
   });
 
-  test('bonus paintings never share an id or category with the gallery', () {
-    final galleryIds = {for (final image in puzzleCatalog) image.id};
+  test('gift and story paintings stay off every browsing surface', () {
     final galleryCategories = {
       for (final category in puzzleCategories) category.id,
     };
-    for (final bonus in bonusPuzzleCatalog) {
-      expect(galleryIds, isNot(contains(bonus.id)));
-      // The category id staying off the Gallery's list is what keeps gift
-      // paintings out of every browsing surface.
-      expect(galleryCategories, isNot(contains(bonus.categoryId)));
-      // The data-level marker must agree with the list the image sits in.
-      expect(bonus.isBonus, isTrue);
+    // One loop per special catalog: a future track (a holiday story, say)
+    // joins by adding its list here, not by copying the whole test.
+    const specialCatalogs = {
+      'bonus': bonusPuzzleCatalog,
+      'story': storyPuzzleCatalog,
+    };
+    for (final MapEntry(key: name, value: special)
+        in specialCatalogs.entries) {
+      for (final image in special) {
+        // The category id staying off the Gallery's list is what keeps
+        // these paintings out of every browsing surface.
+        expect(
+          galleryCategories,
+          isNot(contains(image.categoryId)),
+          reason: '$name image ${image.id} leaks into a gallery category',
+        );
+      }
     }
-    for (final image in puzzleCatalog) {
-      expect(image.isBonus, isFalse);
+    // The data-level markers must agree with the list each image sits in —
+    // checked across the FULL catalog, so gallery images are pinned as
+    // neither gift nor scene in the same sweep.
+    for (final image in fullPuzzleCatalog) {
+      expect(image.isBonus, bonusPuzzleCatalog.contains(image));
+      expect(image.isStory, storyPuzzleCatalog.contains(image));
     }
+  });
+
+  test('ids are unique across the full catalog', () {
+    // Completion records are keyed by id, so a collision anywhere — not
+    // just between a known pair of lists — would merge two paintings'
+    // progress.
+    final ids = [for (final image in fullPuzzleCatalog) image.id];
+    expect(ids.toSet().length, ids.length, reason: 'duplicate catalog ids');
   });
 
   test('every category has its cover on disk', () {

@@ -49,6 +49,13 @@ Future<Set<PuzzleSize>> _completedSizesFor(PuzzleImage image) async {
   return completedSizes;
 }
 
+/// True while a launch is between its first tap and its size sheet being
+/// up. The store reads before the sheet yield to the event loop, so a
+/// double-tap (or a two-finger tap on two cards) would pass that gap twice
+/// and stack a second sheet over the first — one launch at a time; once
+/// the sheet's route is pushed, its barrier takes over the blocking.
+var _sizeSheetOpening = false;
+
 /// Resolves both status sets, then opens the size sheet. Returns the chosen
 /// size, or null when the sheet was dismissed or the host screen removed.
 Future<PuzzleSize?> _pickSizeFromSheet(
@@ -64,7 +71,7 @@ Future<PuzzleSize?> _pickSizeFromSheet(
     return null;
   }
 
-  return showModalBottomSheet<PuzzleSize>(
+  final choice = showModalBottomSheet<PuzzleSize>(
     context: context,
     // Canvas ground behind the linen size rows — the themed sheet default
     // is the same linen, which would make them invisible.
@@ -84,6 +91,9 @@ Future<PuzzleSize?> _pickSizeFromSheet(
       completedSizes: completedSizes,
     ),
   );
+  // The sheet's route is pushed; its barrier now owns re-entry blocking.
+  _sizeSheetOpening = false;
+  return choice;
 }
 
 /// Opens the size sheet for [image] and, if a size is chosen, runs the game —
@@ -94,22 +104,36 @@ Future<void> startPuzzleFlow(
   BuildContext context,
   PuzzleImage image, {
   DateTime Function()? clock,
-  List<PuzzleImage> catalog = puzzleCatalog,
-  // Forwarded like [catalog] so fixture-driven flows stay fixtures across
-  // every chained hop, not just the first screen.
-  List<PuzzleImage> bonusCatalog = bonusPuzzleCatalog,
+  // One bundle so fixture-driven flows stay fixtures across every chained
+  // hop, not just the first screen.
+  PuzzleCatalogs catalogs = const PuzzleCatalogs(),
 }) async {
+  if (_sizeSheetOpening) {
+    return;
+  }
+  _sizeSheetOpening = true;
   // The run belongs to the day the player tapped, even if the size sheet
   // below stays open across midnight.
   var startedDay = dayKey((clock ?? DateTime.now)());
-  // Read once here so GameScreen stays synchronous; mid-game settings
-  // changes apply from the next puzzle on.
-  var settings = await _settingsStore.load();
-  if (!context.mounted) {
-    return;
+  final PuzzleSize? pickedSize;
+  // `late`: assigned on every path that survives the try below.
+  late AppSettings settings;
+  try {
+    // Read once here so GameScreen stays synchronous; mid-game settings
+    // changes apply from the next puzzle on.
+    settings = await _settingsStore.load();
+    if (!context.mounted) {
+      return;
+    }
+    pickedSize = await _pickSizeFromSheet(context, image);
+  } finally {
+    // Normally already cleared when the sheet went up; this covers the
+    // early exits (host unmounted, a store read throwing).
+    _sizeSheetOpening = false;
   }
-
-  final selectedSize = await _pickSizeFromSheet(context, image);
+  // Rebound outside the try so the null check below can promote it (flow
+  // analysis never promotes a variable assigned inside a try).
+  final selectedSize = pickedSize;
   // The sheet can be dismissed, or the host screen removed while it is open.
   if (selectedSize == null || !context.mounted) {
     return;
@@ -128,8 +152,7 @@ Future<void> startPuzzleFlow(
           clock: clock,
           startedDay: startedDay,
           settings: settings,
-          catalog: catalog,
-          bonusCatalog: bonusCatalog,
+          catalogs: catalogs,
         ),
       ),
     );

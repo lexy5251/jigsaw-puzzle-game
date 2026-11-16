@@ -23,6 +23,7 @@ class CompletionCard extends StatelessWidget {
     required this.pieceCount,
     required this.onBackToGallery,
     required this.onNextPuzzle,
+    this.exitLabel = 'Back to gallery',
     this.bonusUnlock,
     this.onPlayBonus,
     this.onSaveBonusForLater,
@@ -32,6 +33,11 @@ class CompletionCard extends StatelessWidget {
   final int pieceCount;
 
   final VoidCallback onBackToGallery;
+
+  /// The quiet exit's wording. Popping returns to wherever the run was
+  /// launched, so a story scene says "Back to the story" instead of
+  /// promising a gallery it won't show.
+  final String exitLabel;
 
   /// Starts the category's next unfinished painting; null promotes
   /// "Back to gallery" to the hero button (the category is done).
@@ -247,25 +253,10 @@ class CompletionCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                SizedBox.square(
+                FramedThumbnail(
                   dimension: 56,
-                  child: FramedArt(
-                    child: Image.asset(
-                      bonus.assetPath,
-                      fit: BoxFit.cover,
-                      cacheWidth: TiltedPhotoCard.thumbnailCacheWidth,
-                      errorBuilder: (context, _, _) => ColoredBox(
-                        color: StudioColors.card,
-                        child: Center(
-                          child: Text(
-                            bonus.title,
-                            textAlign: TextAlign.center,
-                            style: theme.textTheme.labelSmall,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
+                  assetPath: bonus.assetPath,
+                  title: bonus.title,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -358,14 +349,14 @@ class CompletionCard extends StatelessWidget {
             fontWeight: FontWeight.w700,
           ),
         ),
-        child: const Text('Back to gallery'),
+        child: Text(exitLabel),
       ),
     ] else
       SizedBox(
         width: double.infinity,
         child: FilledButton(
           onPressed: onBackToGallery,
-          child: const Text('Back to gallery'),
+          child: Text(exitLabel),
         ),
       ),
   ];

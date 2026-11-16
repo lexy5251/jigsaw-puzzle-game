@@ -6,8 +6,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jigsaw_puzzle/bonus_track.dart';
+import 'package:jigsaw_puzzle/puzzle_catalog.dart';
 import 'package:jigsaw_puzzle/puzzle_completion.dart';
-import 'package:jigsaw_puzzle/puzzle_save.dart';
 
 import 'test_helpers.dart';
 
@@ -39,7 +39,7 @@ void main() {
       tester,
       image: singlePieceImage,
       size: singlePieceSize,
-      bonusCatalog: giftFixtures,
+      catalogs: const PuzzleCatalogs(gifts: giftFixtures),
     );
     await completePuzzle(tester, game);
 
@@ -59,7 +59,7 @@ void main() {
       tester,
       image: singlePieceImage,
       size: singlePieceSize,
-      bonusCatalog: giftFixtures,
+      catalogs: const PuzzleCatalogs(gifts: giftFixtures),
     );
     await completePuzzle(tester, game);
 
@@ -82,7 +82,7 @@ void main() {
       tester,
       image: singlePieceImage,
       size: singlePieceSize,
-      bonusCatalog: giftFixtures,
+      catalogs: const PuzzleCatalogs(gifts: giftFixtures),
     );
     await completePuzzle(tester, currentGame(tester));
 
@@ -113,7 +113,7 @@ void main() {
       tester,
       image: singlePieceImage,
       size: singlePieceSize,
-      bonusCatalog: giftFixtures,
+      catalogs: const PuzzleCatalogs(gifts: giftFixtures),
     );
     await completePuzzle(tester, game);
 
@@ -139,7 +139,7 @@ void main() {
       tester,
       image: singlePieceImage,
       size: singlePieceSize,
-      bonusCatalog: giftFixtures,
+      catalogs: const PuzzleCatalogs(gifts: giftFixtures),
     );
     await completePuzzle(tester, game);
 
@@ -153,18 +153,41 @@ void main() {
     // One piece short, and the finished painting IS a gift: the filter
     // must keep the board at 24 — gifts are rewards, not currency.
     seedDistinctCompletions(bonusBoardPieces - 1);
-    prefs.storage['flutter.${puzzleSaveKey(imageId: giftImageOne.id, columns: 1, rows: 1)}'] =
-        singleLoosePieceSave().toJsonString();
+    prefs.storage[saveKeyFor(giftImageOne)] = singleLoosePieceSave()
+        .toJsonString();
     final game = await bootGameScreen(
       tester,
       image: giftImageOne,
       size: singlePieceSize,
-      bonusCatalog: giftFixtures,
+      catalogs: const PuzzleCatalogs(gifts: giftFixtures),
     );
     await completePuzzle(tester, game);
 
     expect(find.textContaining('no timer, no score'), findsOneWidget);
     expect(bonusSection(), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('a story scene finish funds the board like any painting', (
+    tester,
+  ) async {
+    // Scenes are NOT gifts: their first finish is currency (owner ruling,
+    // 2026-11-14), so the 25th piece landing from a scene unlocks the gift.
+    // (A scene REPLAY adds no distinct id — the replay test above covers
+    // that path for every image kind.)
+    seedDistinctCompletions(bonusBoardPieces - 1);
+    prefs.storage[saveKeyFor(sceneImageOne)] = singleLoosePieceSave()
+        .toJsonString();
+    final game = await bootGameScreen(
+      tester,
+      image: sceneImageOne,
+      size: singlePieceSize,
+      catalogs: const PuzzleCatalogs(gifts: giftFixtures, story: sceneFixtures),
+    );
+    await completePuzzle(tester, game);
+
+    expect(bonusSection(), findsOneWidget);
+    expect(find.text('Gift One'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -174,7 +197,7 @@ void main() {
       tester,
       image: singlePieceImage,
       size: singlePieceSize,
-      bonusCatalog: giftFixtures,
+      catalogs: const PuzzleCatalogs(gifts: giftFixtures),
     );
     await completePuzzle(tester, game);
 
@@ -192,7 +215,7 @@ void main() {
       tester,
       image: singlePieceImage,
       size: singlePieceSize,
-      bonusCatalog: giftFixtures,
+      catalogs: const PuzzleCatalogs(gifts: giftFixtures),
     );
     await completePuzzle(tester, game);
 

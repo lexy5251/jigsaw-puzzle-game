@@ -27,6 +27,7 @@ import 'puzzle_catalog.dart';
 import 'puzzle_completion.dart';
 import 'puzzle_logic.dart';
 import 'puzzle_save.dart';
+import 'story_track.dart';
 import 'studio_surfaces.dart';
 import 'studio_theme.dart';
 
@@ -40,8 +41,7 @@ class GameScreen extends StatefulWidget {
     this.clock,
     this.startedDay,
     this.settings = const AppSettings(),
-    this.catalog = puzzleCatalog,
-    this.bonusCatalog = bonusPuzzleCatalog,
+    this.catalogs = const PuzzleCatalogs(),
     this.trayColumns = trayVisibleColumns,
     this.trayMaxThumbnailHeight = trayThumbnailHeightCap,
   });
@@ -49,13 +49,11 @@ class GameScreen extends StatefulWidget {
   final PuzzleImage image;
   final PuzzleSize size;
 
-  /// Where "Next puzzle" looks for the category's other paintings; tests
-  /// supply a small fixture catalog.
-  final List<PuzzleImage> catalog;
-
-  /// The gift paintings of the bonus track, in unlock order; tests supply
-  /// a small fixture list.
-  final List<PuzzleImage> bonusCatalog;
+  /// Where "Next puzzle" looks for what to offer — the gallery track for
+  /// the category walk, the story track for scene order — and where the
+  /// bonus compare finds its gift list. Tests supply fixture tracks; see
+  /// [PuzzleCatalogs] for why the tracks must stay separate.
+  final PuzzleCatalogs catalogs;
 
   /// Player preferences, read by the caller before this screen opens.
   final AppSettings settings;
@@ -266,7 +264,16 @@ class _GameScreenState extends State<GameScreen> {
       }
     });
 
-    final next = await _findNextPuzzle();
+    // The persisted ids BEFORE this completion's writes, read ONCE per
+    // finish: the story offer derives from them, and the bonus unlock is
+    // "did these writes cross a board boundary", so both sides of that
+    // compare must come from storage, not memory. Reading ahead of the
+    // writes below keeps it from interleaving with them in the preferences
+    // cache; the parse hides inside the glow delay armed above.
+    const completionStore = SharedPreferencesCompletionStore();
+    final idsBefore = await completedImageIds(completionStore);
+
+    final next = await _findNextPuzzle(idsBefore);
     // The reveal depends only on the next-puzzle offer — it must not wait
     // on the record writes below, or a wedged write would hold the card
     // (and reassign _nextImage late, resurrecting the button-swap race on
@@ -280,12 +287,6 @@ class _GameScreenState extends State<GameScreen> {
       _revealCompletionCard(game);
     }
 
-    // The persisted state BEFORE this completion's writes: the bonus unlock
-    // is "did these writes cross a board boundary", so both sides of the
-    // compare must come from storage, not memory. Read ahead of the writes
-    // below so it cannot interleave with them in the preferences cache.
-    const completionStore = SharedPreferencesCompletionStore();
-    final idsBefore = await completedImageIds(completionStore);
     final daysBefore = await const SharedPreferencesDailyStreakStore()
         .completedDays();
 
@@ -329,7 +330,7 @@ class _GameScreenState extends State<GameScreen> {
     required Set<String> daysBefore,
   }) async {
     final piecesBefore =
-        galleryFirstFinishCount(idsBefore, bonusCatalog: widget.bonusCatalog) +
+        galleryFirstFinishCount(idsBefore, bonusCatalog: widget.catalogs.gifts) +
         streakPieces(daysBefore);
     // The streak write sequenced just before the completion write may have
     // added a day, so the after-side day set is re-read from storage.
@@ -338,13 +339,13 @@ class _GameScreenState extends State<GameScreen> {
     final piecesAfter =
         galleryFirstFinishCount(
           {...idsBefore, widget.image.id},
-          bonusCatalog: widget.bonusCatalog,
+          bonusCatalog: widget.catalogs.gifts,
         ) +
         streakPieces(daysAfter);
     final unlocked = newlyUnlockedBonus(
       piecesBefore: piecesBefore,
       piecesAfter: piecesAfter,
-      bonusCatalog: widget.bonusCatalog,
+      bonusCatalog: widget.catalogs.gifts,
     );
     // The !_showCompletionCard guard: on wedged storage the card can reveal
     // (via its fallback timer) before the writes land — inserting the gift
@@ -383,7 +384,7 @@ class _GameScreenState extends State<GameScreen> {
       widget.image.id,
       _now,
       startedDay: startedDay,
-      catalog: widget.catalog,
+      catalog: widget.catalogs.gallery,
     );
     if (day == null) {
       return true;
@@ -401,17 +402,31 @@ class _GameScreenState extends State<GameScreen> {
   /// also keeps the candidate-ordering rule in a single place.
   ///
   /// After a GIFT puzzle this is null by design: the bonus category is not
-  /// in the gallery catalog, so the run ends on "Back to gallery" — never
+  /// in the gallery catalog, so the run ends on the exit button — never
   /// chain here with [fullPuzzleCatalog], or a finished gift would offer
   /// still-locked gifts as the next puzzle.
-  Future<PuzzleImage?> _findNextPuzzle() async {
+  ///
+  /// After a STORY scene the offer IS the Story page's gate:
+  /// [nextSceneToRead]'s longest-finished-prefix walk, with the just-solved
+  /// scene counted as read ([completedBefore] predates this finish's
+  /// write). One shared rule means the chain can never offer a scene the
+  /// page still shows wrapped — a skip-completed walk would leap past the
+  /// open scene on gapped records (a failed write mid-chain). A fully read
+  /// story returns null and the run ends on the exit button.
+  Future<PuzzleImage?> _findNextPuzzle(Set<String> completedBefore) async {
+    if (widget.image.isStory) {
+      return nextSceneToRead(
+        {...completedBefore, widget.image.id},
+        widget.catalogs.story,
+      );
+    }
     const store = SharedPreferencesCompletionStore();
     final completed = <String>{};
     while (true) {
       final candidate = nextPuzzleAfter(
         widget.image,
         completed,
-        catalog: widget.catalog,
+        catalog: widget.catalogs.gallery,
       );
       if (candidate == null) {
         return null;
@@ -525,6 +540,11 @@ class _GameScreenState extends State<GameScreen> {
           CompletionCard(
             image: widget.image,
             pieceCount: widget.size.pieceCount,
+            // A scene pops back to the Story tab, so the exit says so
+            // instead of promising a gallery it won't show.
+            exitLabel: widget.image.isStory
+                ? 'Back to the story'
+                : 'Back to gallery',
             onBackToGallery: () => Navigator.pop(context),
             // Popping with the painting hands the chain to the launcher's
             // flow loop, which pushes the next game at the same size.

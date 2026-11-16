@@ -26,6 +26,7 @@ import 'puzzle_launcher.dart';
 import 'studio_mascots.dart';
 import 'studio_surfaces.dart';
 import 'studio_theme.dart';
+import 'tab_activation.dart';
 
 class MyPuzzlesScreen extends StatefulWidget {
   const MyPuzzlesScreen({super.key, this.clock, this.isActive = true});
@@ -43,7 +44,8 @@ class MyPuzzlesScreen extends StatefulWidget {
   State<MyPuzzlesScreen> createState() => _MyPuzzlesScreenState();
 }
 
-class _MyPuzzlesScreenState extends State<MyPuzzlesScreen> {
+class _MyPuzzlesScreenState extends State<MyPuzzlesScreen>
+    with TabActivationAware<MyPuzzlesScreen> {
   /// Null until the stores answer; the page renders nothing before that so
   /// it never flashes an empty state it is about to replace.
   MyPuzzlesSummary? _summary;
@@ -64,13 +66,11 @@ class _MyPuzzlesScreenState extends State<MyPuzzlesScreen> {
   }
 
   @override
-  void didUpdateWidget(MyPuzzlesScreen oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // A run may have started or finished from another tab's flows.
-    if (widget.isActive && !oldWidget.isActive) {
-      _load();
-    }
-  }
+  bool isActiveOf(MyPuzzlesScreen widget) => widget.isActive;
+
+  // A run may have started or finished from another tab's flows.
+  @override
+  void onTabActivated() => _load();
 
   Future<void> _load() async {
     // ONE completion snapshot feeds both the summary tabs and the bonus

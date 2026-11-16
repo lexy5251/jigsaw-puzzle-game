@@ -101,7 +101,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
       context,
       image,
       clock: widget.clock,
-      catalog: widget.catalog,
+      catalogs: PuzzleCatalogs(gallery: widget.catalog),
     );
     // The puzzle may have been started or finished while the game was open.
     await _refreshPuzzleStates();

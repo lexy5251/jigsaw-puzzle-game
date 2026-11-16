@@ -41,12 +41,20 @@ class PuzzleImage {
   /// the data so a surface holding any image can tell, instead of having
   /// to know which const list it came from.
   bool get isBonus => categoryId == bonusCategoryId;
+
+  /// True for story-only paintings (the Story tab's scenes).
+  bool get isStory => categoryId == storyCategoryId;
 }
 
 /// Category id of the gift-only paintings. Deliberately absent from
 /// [puzzleCategories], which is what keeps gifts off every browsing
 /// surface (Gallery, daily rotation).
 const bonusCategoryId = 'bonus';
+
+/// Category id of the story scenes, absent from [puzzleCategories] for the
+/// same reason as [bonusCategoryId]: scenes are reached through the Story
+/// tab in order, never browsed.
+const storyCategoryId = 'story';
 
 class PuzzleSize {
   const PuzzleSize({required this.columns, required this.rows});
@@ -540,10 +548,100 @@ const bonusPuzzleCatalog = [
   ),
 ];
 
-/// Every playable painting — gallery and gift alike. Surfaces that track
-/// play (My Puzzles, save/completion lookups) read this; browsing surfaces
-/// (Gallery, daily) stay on [puzzleCatalog].
-final fullPuzzleCatalog = [...puzzleCatalog, ...bonusPuzzleCatalog];
+/// The Story tab's scenes, in reading order. Like the gifts, deliberately
+/// NOT in [puzzleCatalog] — the 'story' category id is not in
+/// [puzzleCategories], so no Gallery surface or daily rotation can ever
+/// list them. Current files are placeholders until the owner generates the
+/// real scene set (prompts in docs/prompts-story.md).
+///
+/// ORDER-FROZEN once players exist: a scene unlocks when every scene
+/// before it is finished, and the order IS the narrative — inserting or
+/// reordering entries would re-lock scenes players have already read.
+/// Titles are the scene titles the story page and size sheet show (the
+/// scene texts live beside them in story_track.dart's [jigsawStory]).
+const storyPuzzleCatalog = [
+  PuzzleImage(
+    id: 'story-mapmakers-shop',
+    title: "The Mapmaker's Shop",
+    categoryId: storyCategoryId,
+    fileName: 'story/mapmakers_shop.webp',
+  ),
+  PuzzleImage(
+    id: 'story-first-cut',
+    title: 'The First Cut',
+    categoryId: storyCategoryId,
+    fileName: 'story/first_cut.webp',
+  ),
+  PuzzleImage(
+    id: 'story-learning-the-world',
+    title: 'Learning the World',
+    categoryId: storyCategoryId,
+    fileName: 'story/learning_the_world.webp',
+  ),
+  PuzzleImage(
+    id: 'story-pictures-join-in',
+    title: 'Pictures Join In',
+    categoryId: storyCategoryId,
+    fileName: 'story/pictures_join_in.webp',
+  ),
+  PuzzleImage(
+    id: 'story-swooping-saw',
+    title: 'The Saw That Named It',
+    categoryId: storyCategoryId,
+    fileName: 'story/swooping_saw.webp',
+  ),
+  PuzzleImage(
+    id: 'story-cardboard-boom',
+    title: 'The Cardboard Boom',
+    categoryId: storyCategoryId,
+    fileName: 'story/cardboard_boom.webp',
+  ),
+  PuzzleImage(
+    id: 'story-boxes-on-every-shelf',
+    title: 'Boxes on Every Shelf',
+    categoryId: storyCategoryId,
+    fileName: 'story/boxes_on_every_shelf.webp',
+  ),
+  PuzzleImage(
+    id: 'story-your-table-today',
+    title: 'Your Table Today',
+    categoryId: storyCategoryId,
+    fileName: 'story/your_table_today.webp',
+  ),
+];
+
+/// Every playable painting — gallery, gift and story alike. Surfaces that
+/// track play (My Puzzles, save/completion lookups) read this; browsing
+/// surfaces (Gallery, daily) stay on [puzzleCatalog].
+final fullPuzzleCatalog = [
+  ...puzzleCatalog,
+  ...bonusPuzzleCatalog,
+  ...storyPuzzleCatalog,
+];
+
+/// The three catalog tracks a game run draws on, bundled so the launch and
+/// chain plumbing forwards them as one value — a fixture flow can never
+/// silently mix a production track back into chained runs by missing one
+/// of three parameters. The tracks stay separate lists on purpose: only
+/// [gallery] feeds daily credit, and folding gifts or scenes into it would
+/// also hand them to that check.
+class PuzzleCatalogs {
+  const PuzzleCatalogs({
+    this.gallery = puzzleCatalog,
+    this.gifts = bonusPuzzleCatalog,
+    this.story = storyPuzzleCatalog,
+  });
+
+  /// The browsable gallery paintings — "Next puzzle" walks the finished
+  /// painting's category here, and daily credit reads only this track.
+  final List<PuzzleImage> gallery;
+
+  /// The gift paintings of the bonus track, in unlock order.
+  final List<PuzzleImage> gifts;
+
+  /// The story scenes, in reading order.
+  final List<PuzzleImage> story;
+}
 
 /// The images of one category, in catalog order. Tests pass a fixture
 /// [catalog].

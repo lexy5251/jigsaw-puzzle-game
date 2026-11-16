@@ -5,6 +5,7 @@ import 'package:jigsaw_puzzle/main.dart';
 import 'package:jigsaw_puzzle/my_puzzles_screen.dart';
 import 'package:jigsaw_puzzle/puzzle_select_screen.dart';
 import 'package:jigsaw_puzzle/settings_screen.dart';
+import 'package:jigsaw_puzzle/story_screen.dart';
 import 'package:jigsaw_puzzle/studio_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -34,17 +35,28 @@ void main() {
     expect(app.theme?.colorScheme.primary, studioTheme().colorScheme.primary);
   });
 
-  testWidgets('the tabs switch between the three screens', (tester) async {
+  testWidgets('the tabs switch between the four screens', (tester) async {
     await bootApp(tester);
 
     // Constant unique tooltips are the e2e hooks: the labels alone repeat
     // the open tab's AppBar title.
-    for (final tooltip in ['Gallery tab', 'My Puzzles tab', 'Settings tab']) {
+    for (final tooltip in [
+      'Gallery tab',
+      'Story tab',
+      'My Puzzles tab',
+      'Settings tab',
+    ]) {
       expect(find.byTooltip(tooltip), findsOneWidget);
     }
 
-    // All three tabs stay alive in the shell (IndexedStack), so presence
+    // All four tabs stay alive in the shell (IndexedStack), so presence
     // alone proves nothing — hit-testability marks the visible one.
+    await tester.tap(navDestination('Story'));
+    await tester.pumpAndSettle();
+    expect(find.byType(StoryScreen), findsOneWidget);
+    expect(find.text('Story').hitTestable(), findsWidgets);
+    expect(find.byType(BackButton), findsNothing);
+
     await tester.tap(navDestination('My Puzzles'));
     await tester.pumpAndSettle();
     expect(find.byType(MyPuzzlesScreen), findsOneWidget);

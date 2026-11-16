@@ -18,6 +18,7 @@ import 'package:jigsaw_puzzle/puzzle_completion.dart';
 import 'package:jigsaw_puzzle/puzzle_piece.dart';
 import 'package:jigsaw_puzzle/puzzle_save.dart';
 import 'package:jigsaw_puzzle/puzzle_select_screen.dart';
+import 'package:jigsaw_puzzle/story_track.dart';
 import 'package:jigsaw_puzzle/studio_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -30,11 +31,20 @@ const singlePieceImage = PuzzleImage(
 );
 const singlePieceSize = PuzzleSize(columns: 1, rows: 1);
 
-// The channel-backed mock uses the plugin's prefixed storage keys.
-final singlePieceProgressKey =
-    'flutter.${puzzleSaveKey(imageId: singlePieceImage.id, columns: singlePieceSize.columns, rows: singlePieceSize.rows)}';
-final singlePieceCompletionKey =
-    'flutter.${puzzleCompletionKey(imageId: singlePieceImage.id, columns: singlePieceSize.columns, rows: singlePieceSize.rows)}';
+/// [MockSharedPreferences.storage] key for [image]'s save at a grid — the
+/// channel-backed mock needs the plugin's `flutter.` prefix, which is easy
+/// to forget inline: a save seeded without it is silently ignored and the
+/// test stays green against a fresh board.
+String saveKeyFor(PuzzleImage image, {int columns = 1, int rows = 1}) =>
+    'flutter.${puzzleSaveKey(imageId: image.id, columns: columns, rows: rows)}';
+
+/// [saveKeyFor]'s twin for completion records.
+String completionKeyFor(PuzzleImage image, {int columns = 1, int rows = 1}) =>
+    'flutter.${puzzleCompletionKey(imageId: image.id, columns: columns, rows: rows)}';
+
+// The shared single-piece fixture's keys, through the same recipe.
+final singlePieceProgressKey = saveKeyFor(singlePieceImage);
+final singlePieceCompletionKey = completionKeyFor(singlePieceImage);
 
 /// Width of assets/images/test_photo.jpg. Injected saves must stamp it as
 /// [PuzzleSaveState.boardWidth] or the game discards them as written against
@@ -134,6 +144,41 @@ const giftImageTwo = PuzzleImage(
 );
 const giftFixtures = [giftImageOne, giftImageTwo];
 
+/// Story-scene fixtures for the chain tests: three scenes, so a replay can
+/// skip an already-finished middle scene.
+const sceneImageOne = PuzzleImage(
+  id: 'scene-1',
+  title: 'Scene One',
+  categoryId: storyCategoryId,
+  fileName: 'test_photo.jpg',
+);
+const sceneImageTwo = PuzzleImage(
+  id: 'scene-2',
+  title: 'Scene Two',
+  categoryId: storyCategoryId,
+  fileName: 'test_photo.jpg',
+);
+const sceneImageThree = PuzzleImage(
+  id: 'scene-3',
+  title: 'Scene Three',
+  categoryId: storyCategoryId,
+  fileName: 'test_photo.jpg',
+);
+const sceneFixtures = [sceneImageOne, sceneImageTwo, sceneImageThree];
+
+/// Completion entries marking the first [count] scenes of the real story
+/// read (one 5x5 finish each), in the unprefixed form
+/// [SharedPreferences.setMockInitialValues] expects. The story suites all
+/// seed through here so the recipe cannot drift between them.
+Map<String, Object> finishedSceneEntries(int count) => {
+  for (var i = 0; i < count; i++)
+    puzzleCompletionKey(
+      imageId: jigsawStory.stops[i].image.id,
+      columns: 5,
+      rows: 5,
+    ): completionJson(DateTime(2026, 11, 1 + i)),
+};
+
 /// The pop result of a [GameScreen] opened through a real pushed route —
 /// the completion card's chain buttons ("Next puzzle", "Play now") pop
 /// with a painting, and these fields capture it.
@@ -149,8 +194,7 @@ Future<PushedGameRoute> pushGameScreen(
   WidgetTester tester, {
   required PuzzleImage image,
   required PuzzleSize size,
-  List<PuzzleImage> catalog = puzzleCatalog,
-  List<PuzzleImage> bonusCatalog = bonusPuzzleCatalog,
+  PuzzleCatalogs catalogs = const PuzzleCatalogs(),
 }) async {
   final route = PushedGameRoute();
   await tester.pumpWidget(
@@ -165,8 +209,7 @@ Future<PushedGameRoute> pushGameScreen(
                   builder: (_) => GameScreen(
                     image: image,
                     size: size,
-                    catalog: catalog,
-                    bonusCatalog: bonusCatalog,
+                    catalogs: catalogs,
                   ),
                 ),
               );
@@ -450,8 +493,7 @@ Future<JigsawGame> bootGameScreen(
   DateTime Function()? clock,
   AppSettings settings = const AppSettings(),
   GameSounds Function()? soundsFactory,
-  List<PuzzleImage> catalog = puzzleCatalog,
-  List<PuzzleImage> bonusCatalog = bonusPuzzleCatalog,
+  PuzzleCatalogs catalogs = const PuzzleCatalogs(),
 }) async {
   late JigsawGame game;
   await tester.runAsync(() async {
@@ -463,8 +505,7 @@ Future<JigsawGame> bootGameScreen(
           clock: clock,
           settings: settings,
           soundsFactory: soundsFactory,
-          catalog: catalog,
-          bonusCatalog: bonusCatalog,
+          catalogs: catalogs,
         ),
       ),
     );

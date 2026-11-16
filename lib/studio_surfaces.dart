@@ -271,6 +271,55 @@ class FramedArt extends StatelessWidget {
   }
 }
 
+/// Artwork at thumbnail size in its torn frame: the shared decode width
+/// and a visible-title fallback when the photo cannot decode. The
+/// completion card's gift reveal and the Story page's scene cards read
+/// this one recipe so the two cannot drift apart.
+class FramedThumbnail extends StatelessWidget {
+  const FramedThumbnail({
+    super.key,
+    required this.dimension,
+    required this.assetPath,
+    required this.title,
+    this.seed = 1,
+  });
+
+  final double dimension;
+  final String assetPath;
+
+  /// Shown only if the photo fails to decode — a blank anonymous frame
+  /// would otherwise hide which artwork went missing.
+  final String title;
+
+  /// Varies the frame's tear; lists pass their item number.
+  final int seed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox.square(
+      dimension: dimension,
+      child: FramedArt(
+        seed: seed,
+        child: Image.asset(
+          assetPath,
+          fit: BoxFit.cover,
+          cacheWidth: TiltedPhotoCard.thumbnailCacheWidth,
+          errorBuilder: (context, _, _) => ColoredBox(
+            color: StudioColors.card,
+            child: Center(
+              child: Text(
+                title,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// The photo grids' shared geometry (2 across on phones — UI-6 ruling):
 /// category pages and My Puzzles must render identically, so both read
 /// this one spec.
