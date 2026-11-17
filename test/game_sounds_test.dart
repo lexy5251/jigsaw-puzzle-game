@@ -1,9 +1,12 @@
 import 'package:flame/game.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:jigsaw_puzzle/game_haptics.dart';
 import 'package:jigsaw_puzzle/game_sounds.dart';
 import 'package:jigsaw_puzzle/jigsaw_game.dart';
 import 'package:jigsaw_puzzle/puzzle_piece.dart';
+
+import 'test_helpers.dart';
 
 /// Counts cue calls instead of playing audio.
 class _FakeSounds implements GameSounds {
@@ -32,13 +35,18 @@ void main() {
   const trayThumbTouch = Offset(50, 460);
   const liftedTouch = Offset(50, 400);
 
-  Future<JigsawGame> bootGame(WidgetTester tester, GameSounds sounds) async {
+  Future<JigsawGame> bootGame(
+    WidgetTester tester,
+    GameSounds sounds,
+    GameHaptics haptics,
+  ) async {
     // Two pieces: finishing the puzzle stays cheap in a gesture-driven test.
     final game = JigsawGame(
       imageAsset: 'test_photo.jpg',
       columns: 2,
       rows: 1,
       sounds: sounds,
+      haptics: haptics,
     );
     await tester.runAsync(() async {
       await tester.pumpWidget(GameWidget(game: game));
@@ -96,7 +104,8 @@ void main() {
 
   testWidgets('drop, snap and completion each play their cue', (tester) async {
     final sounds = _FakeSounds();
-    final game = await bootGame(tester, sounds);
+    final haptics = RecordingGameHaptics();
+    final game = await bootGame(tester, sounds, haptics);
 
     // 1. Drop the first piece half a piece-width from home: a loose drop.
     // (Sideways, not below — a piece released over the tray returns to it.)
@@ -109,6 +118,7 @@ void main() {
     expect(first.isLocked, isFalse);
     expect(sounds.drops, 1);
     expect(sounds.snaps, 0);
+    expect(haptics.snaps, 0);
 
     // 2. Drag it from the board onto its spot: a snap, no completion yet.
     final pieceCenter = canvasPointFor(game, first.position + first.size / 2);
@@ -127,6 +137,8 @@ void main() {
     expect(first.isLocked, isTrue);
     expect(sounds.snaps, 1);
     expect(sounds.completes, 0);
+    expect(haptics.snaps, 1);
+    expect(haptics.completes, 0);
 
     // 3. The second piece straight onto its spot: snap + completion chime.
     final second = await liftAndDropAt(
@@ -138,6 +150,10 @@ void main() {
     expect(sounds.snaps, 2);
     expect(sounds.completes, 1);
     expect(sounds.drops, 1); // unchanged: snapping is not a loose drop
+    // Sounds overlap on the final lock, but the haptic snap tap yields to
+    // the completion buzz so the pulses never land in the same frame.
+    expect(haptics.snaps, 1);
+    expect(haptics.completes, 1);
 
     await tester.pumpWidget(const SizedBox.shrink());
     expect(sounds.disposals, 1);

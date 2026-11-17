@@ -17,6 +17,7 @@ class AppSettings {
   const AppSettings({
     this.effectsVolume = 1,
     this.musicVolume = 1,
+    this.hapticsEnabled = true,
     this.ghostPreviewDefault = false,
     this.boardColorId = 'tan',
   });
@@ -27,6 +28,11 @@ class AppSettings {
 
   /// Scales the ambient music loop: 0 is silent, 1 is full presence.
   final double musicVolume;
+
+  /// Whether the device vibrates on a snap and on completion. Defaults to
+  /// on: haptics predate this setting, so stored blobs without it must keep
+  /// buzzing like before.
+  final bool hapticsEnabled;
 
   /// Whether a puzzle opens with the ghost image hint already visible.
   final bool ghostPreviewDefault;
@@ -39,12 +45,14 @@ class AppSettings {
   AppSettings copyWith({
     double? effectsVolume,
     double? musicVolume,
+    bool? hapticsEnabled,
     bool? ghostPreviewDefault,
     String? boardColorId,
   }) {
     return AppSettings(
       effectsVolume: effectsVolume ?? this.effectsVolume,
       musicVolume: musicVolume ?? this.musicVolume,
+      hapticsEnabled: hapticsEnabled ?? this.hapticsEnabled,
       ghostPreviewDefault: ghostPreviewDefault ?? this.ghostPreviewDefault,
       boardColorId: boardColorId ?? this.boardColorId,
     );
@@ -53,6 +61,7 @@ class AppSettings {
   String toJsonString() => jsonEncode({
     'effectsVolume': effectsVolume,
     'musicVolume': musicVolume,
+    'hapticsEnabled': hapticsEnabled,
     'ghostPreviewDefault': ghostPreviewDefault,
     'boardColorId': boardColorId,
   });
@@ -72,6 +81,7 @@ class AppSettings {
     }
     final volume = decoded['effectsVolume'];
     final music = decoded['musicVolume'];
+    final haptics = decoded['hapticsEnabled'];
     final ghost = decoded['ghostPreviewDefault'];
     final boardColor = decoded['boardColorId'];
     return AppSettings(
@@ -81,6 +91,7 @@ class AppSettings {
       musicVolume: music is num
           ? music.toDouble().clamp(0, 1)
           : defaults.musicVolume,
+      hapticsEnabled: haptics is bool ? haptics : defaults.hapticsEnabled,
       ghostPreviewDefault: ghost is bool ? ghost : defaults.ghostPreviewDefault,
       boardColorId: boardColor is String ? boardColor : defaults.boardColorId,
     );
@@ -91,12 +102,18 @@ class AppSettings {
       other is AppSettings &&
       other.effectsVolume == effectsVolume &&
       other.musicVolume == musicVolume &&
+      other.hapticsEnabled == hapticsEnabled &&
       other.ghostPreviewDefault == ghostPreviewDefault &&
       other.boardColorId == boardColorId;
 
   @override
-  int get hashCode =>
-      Object.hash(effectsVolume, musicVolume, ghostPreviewDefault, boardColorId);
+  int get hashCode => Object.hash(
+    effectsVolume,
+    musicVolume,
+    hapticsEnabled,
+    ghostPreviewDefault,
+    boardColorId,
+  );
 }
 
 /// Reads and writes the app settings.

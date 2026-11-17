@@ -9,16 +9,19 @@ void main() {
       const settings = AppSettings(
         effectsVolume: 0.3,
         musicVolume: 0.7,
+        hapticsEnabled: false,
         ghostPreviewDefault: true,
         boardColorId: 'charcoal',
       );
       expect(AppSettings.fromJsonString(settings.toJsonString()), settings);
     });
 
-    test('an old blob without musicVolume gets the default', () {
+    test('an old blob without the newer fields gets their defaults', () {
       final settings = AppSettings.fromJsonString('{"effectsVolume": 0.5}');
       expect(settings.effectsVolume, 0.5);
       expect(settings.musicVolume, 1);
+      // Haptics predate their setting: old installs must keep buzzing.
+      expect(settings.hapticsEnabled, isTrue);
     });
 
     test('malformed text falls back to defaults', () {
@@ -28,11 +31,12 @@ void main() {
 
     test('a bad field falls back alone, keeping the good ones', () {
       final settings = AppSettings.fromJsonString(
-        '{"effectsVolume": "loud", "musicVolume": [], '
+        '{"effectsVolume": "loud", "musicVolume": [], "hapticsEnabled": "no", '
         '"ghostPreviewDefault": true, "boardColorId": 7}',
       );
       expect(settings.effectsVolume, 1);
       expect(settings.musicVolume, 1);
+      expect(settings.hapticsEnabled, isTrue);
       expect(settings.ghostPreviewDefault, isTrue);
       expect(settings.boardColorId, 'tan');
     });

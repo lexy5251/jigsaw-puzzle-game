@@ -42,6 +42,47 @@ void main() {
     expect(game.ghostPreviewOpacity, 0);
   });
 
+  testWidgets('finishing the puzzle buzzes while haptics are on', (
+    tester,
+  ) async {
+    // A loose piece on the board: settling it is the snap under test.
+    prefs.storage[singlePieceProgressKey] = singleLoosePieceSave()
+        .toJsonString();
+    final haptics = RecordingGameHaptics();
+    final game = await bootGameScreen(
+      tester,
+      image: singlePieceImage,
+      size: singlePieceSize,
+      haptics: haptics,
+    );
+
+    await completeBoard(tester, game);
+
+    // The completing placement buzzes completion only — the snap tap is
+    // skipped so the two pulses never overlap. (The non-final snap tap is
+    // covered in game_sounds_test.)
+    expect(haptics.snaps, 0);
+    expect(haptics.completes, 1);
+  });
+
+  testWidgets('turning haptics off keeps the device still', (tester) async {
+    prefs.storage[singlePieceProgressKey] = singleLoosePieceSave()
+        .toJsonString();
+    final haptics = RecordingGameHaptics();
+    final game = await bootGameScreen(
+      tester,
+      image: singlePieceImage,
+      size: singlePieceSize,
+      settings: const AppSettings(hapticsEnabled: false),
+      haptics: haptics,
+    );
+
+    await completeBoard(tester, game);
+
+    expect(haptics.snaps, 0);
+    expect(haptics.completes, 0);
+  });
+
   testWidgets('restart clears the save and boots a fresh board', (
     tester,
   ) async {

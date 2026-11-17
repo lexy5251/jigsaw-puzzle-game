@@ -53,6 +53,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
     widget.store.save(next);
   }
 
+  /// One chrome for every toggle card, so they can't drift apart.
+  Widget _switchCard({
+    required int variant,
+    required String identifier,
+    required String title,
+    required String subtitle,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return PaintedCard(
+      variant: variant,
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      child: Semantics(
+        identifier: identifier,
+        child: SwitchListTile(
+          title: Text(title),
+          subtitle: Text(subtitle),
+          value: value,
+          onChanged: onChanged,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final settings = _settings;
@@ -145,24 +169,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                PaintedCard(
+                _switchCard(
+                  variant: 2,
+                  identifier: 'settings-haptics',
+                  title: 'Vibrate on snap',
+                  subtitle:
+                      'A light tap when a piece fits, and the buzz when '
+                      'you finish.',
+                  value: settings.hapticsEnabled,
+                  onChanged: (value) =>
+                      _apply(settings.copyWith(hapticsEnabled: value)),
+                ),
+                const SizedBox(height: 16),
+                _switchCard(
                   variant: 1,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 4,
-                  ),
-                  child: Semantics(
-                    identifier: 'settings-ghost-default',
-                    child: SwitchListTile(
-                      title: const Text('Start with the image preview'),
-                      subtitle: const Text(
-                        'New puzzles open with the faint picture hint on.',
-                      ),
-                      value: settings.ghostPreviewDefault,
-                      onChanged: (value) =>
-                          _apply(settings.copyWith(ghostPreviewDefault: value)),
-                    ),
-                  ),
+                  identifier: 'settings-ghost-default',
+                  title: 'Start with the image preview',
+                  subtitle: 'New puzzles open with the faint picture hint on.',
+                  value: settings.ghostPreviewDefault,
+                  onChanged: (value) =>
+                      _apply(settings.copyWith(ghostPreviewDefault: value)),
                 ),
               ],
             ),

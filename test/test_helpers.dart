@@ -11,6 +11,7 @@ import 'package:jigsaw_puzzle/app_settings.dart';
 import 'package:jigsaw_puzzle/background_music.dart';
 import 'package:jigsaw_puzzle/completion_card.dart';
 import 'package:jigsaw_puzzle/daily_puzzle.dart';
+import 'package:jigsaw_puzzle/game_haptics.dart';
 import 'package:jigsaw_puzzle/game_screen.dart';
 import 'package:jigsaw_puzzle/game_sounds.dart';
 import 'package:jigsaw_puzzle/jigsaw_game.dart';
@@ -354,6 +355,19 @@ class SilentGameSounds implements GameSounds {
   Future<void> dispose() async {}
 }
 
+/// Counts haptic cues so gameplay tests can assert the vibration setting
+/// actually gates them.
+class RecordingGameHaptics implements GameHaptics {
+  int snaps = 0;
+  int completes = 0;
+
+  @override
+  void snap() => snaps++;
+
+  @override
+  void complete() => completes++;
+}
+
 /// Records every call so shell and settings tests can assert how the app
 /// drives the ambient loop.
 class RecordingBackgroundMusic implements BackgroundMusic {
@@ -523,6 +537,7 @@ Future<JigsawGame> bootGameScreen(
   DateTime Function()? clock,
   AppSettings settings = const AppSettings(),
   GameSounds Function()? soundsFactory,
+  GameHaptics? haptics,
   PuzzleCatalogs catalogs = const PuzzleCatalogs(),
 }) async {
   late JigsawGame game;
@@ -535,6 +550,7 @@ Future<JigsawGame> bootGameScreen(
           clock: clock,
           settings: settings,
           soundsFactory: soundsFactory,
+          haptics: haptics,
           catalogs: catalogs,
         ),
       ),

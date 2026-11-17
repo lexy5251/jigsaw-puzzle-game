@@ -25,10 +25,11 @@ Future<InMemorySettingsStore> pumpSettings(
   return store;
 }
 
-/// The card holds two sliders; the semantics identifiers tell them apart.
-Finder sliderOf(String identifier) => find.descendant(
+/// Finds the control of type [T] on the semantics-identified card — the
+/// identifiers tell the look-alike sliders and switches apart.
+Finder controlOf<T extends Widget>(String identifier) => find.descendant(
   of: find.bySemanticsIdentifier(identifier),
-  matching: find.byType(Slider),
+  matching: find.byType(T),
 );
 
 void main() {
@@ -38,14 +39,19 @@ void main() {
       initial: const AppSettings(
         effectsVolume: 0.4,
         musicVolume: 0.7,
+        hapticsEnabled: false,
         ghostPreviewDefault: true,
       ),
     );
 
-    expect(tester.widget<Slider>(sliderOf('settings-effects-volume')).value, 0.4);
-    expect(tester.widget<Slider>(sliderOf('settings-music-volume')).value, 0.7);
+    expect(tester.widget<Slider>(controlOf<Slider>('settings-effects-volume')).value, 0.4);
+    expect(tester.widget<Slider>(controlOf<Slider>('settings-music-volume')).value, 0.7);
     expect(
-      tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value,
+      tester.widget<SwitchListTile>(controlOf<SwitchListTile>('settings-haptics')).value,
+      isFalse,
+    );
+    expect(
+      tester.widget<SwitchListTile>(controlOf<SwitchListTile>('settings-ghost-default')).value,
       isTrue,
     );
   });
@@ -53,7 +59,7 @@ void main() {
   testWidgets('dragging the volume slider persists once', (tester) async {
     final store = await pumpSettings(tester);
 
-    await tester.drag(sliderOf('settings-effects-volume'), const Offset(-300, 0));
+    await tester.drag(controlOf<Slider>('settings-effects-volume'), const Offset(-300, 0));
     await tester.pumpAndSettle();
 
     expect(store.settings.effectsVolume, lessThan(1));
@@ -64,7 +70,7 @@ void main() {
     final music = RecordingBackgroundMusic();
     final store = await pumpSettings(tester, music: music);
 
-    await tester.drag(sliderOf('settings-music-volume'), const Offset(-300, 0));
+    await tester.drag(controlOf<Slider>('settings-music-volume'), const Offset(-300, 0));
     await tester.pumpAndSettle();
 
     expect(store.settings.musicVolume, lessThan(1));
@@ -88,15 +94,31 @@ void main() {
   testWidgets('toggling the preview default persists', (tester) async {
     final store = await pumpSettings(tester);
 
-    await tester.tap(find.byType(SwitchListTile));
+    await tester.tap(controlOf<SwitchListTile>('settings-ghost-default'));
     await tester.pumpAndSettle();
 
     expect(store.settings.ghostPreviewDefault, isTrue);
 
-    await tester.tap(find.byType(SwitchListTile));
+    await tester.tap(controlOf<SwitchListTile>('settings-ghost-default'));
     await tester.pumpAndSettle();
 
     expect(store.settings.ghostPreviewDefault, isFalse);
+    expect(store.saves, 2);
+  });
+
+  testWidgets('toggling vibrate on snap persists', (tester) async {
+    final store = await pumpSettings(tester);
+
+    // Haptics default to on, so the first tap turns them off.
+    await tester.tap(controlOf<SwitchListTile>('settings-haptics'));
+    await tester.pumpAndSettle();
+
+    expect(store.settings.hapticsEnabled, isFalse);
+
+    await tester.tap(controlOf<SwitchListTile>('settings-haptics'));
+    await tester.pumpAndSettle();
+
+    expect(store.settings.hapticsEnabled, isTrue);
     expect(store.saves, 2);
   });
 

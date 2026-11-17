@@ -29,8 +29,8 @@ import 'package:flame/events.dart';
 import 'package:flame/game.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
+import 'game_haptics.dart';
 import 'game_sounds.dart';
 import 'piece_groups.dart';
 import 'piece_renderer.dart';
@@ -55,6 +55,7 @@ class JigsawGame extends FlameGame
     this.startedDay,
     this.clock,
     this.sounds,
+    this.haptics,
     this.onCompleted,
     this.onBoardLoaded,
     this.trayColumns = trayVisibleColumns,
@@ -67,6 +68,9 @@ class JigsawGame extends FlameGame
 
   /// Owned by this game and disposed with it; null keeps the game silent.
   final GameSounds? sounds;
+
+  /// Null keeps the device still (vibration setting off, or a test).
+  final GameHaptics? haptics;
 
   /// Reports whether this game resumed from a save (true) or started fresh,
   /// once loading finishes. The host screen exposes it via Semantics so
@@ -743,15 +747,20 @@ class JigsawGame extends FlameGame
     }
     placedCount.value = progress.lockedCount;
     sounds?.playSnap();
-    HapticFeedback.lightImpact().ignore();
-    if (completed) _celebrateCompletion();
+    if (completed) {
+      // The completion buzz replaces the snap tap: same-frame light + heavy
+      // pulses would blur the reward moment. (Sounds overlap by design.)
+      _celebrateCompletion();
+    } else {
+      haptics?.snap();
+    }
     persistProgress();
   }
 
   void _celebrateCompletion() {
     unawaited(_pendingCompletion = _recordCompletion());
     sounds?.playComplete();
-    HapticFeedback.heavyImpact().ignore();
+    haptics?.complete();
     _playCompletionGlow();
   }
 

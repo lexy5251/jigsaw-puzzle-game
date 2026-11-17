@@ -21,6 +21,7 @@ import 'bonus_track.dart';
 import 'completion_card.dart';
 import 'daily_puzzle.dart';
 import 'daily_streak.dart';
+import 'game_haptics.dart';
 import 'game_sounds.dart';
 import 'jigsaw_game.dart';
 import 'puzzle_catalog.dart';
@@ -38,6 +39,7 @@ class GameScreen extends StatefulWidget {
     required this.image,
     required this.size,
     this.soundsFactory,
+    this.haptics,
     this.clock,
     this.startedDay,
     this.settings = const AppSettings(),
@@ -61,6 +63,10 @@ class GameScreen extends StatefulWidget {
   /// Each game owns its audio, so restarts need a fresh instance.
   /// When omitted the screen uses the real app sounds; tests supply fakes.
   final GameSounds Function()? soundsFactory;
+
+  /// When omitted the screen uses the real device haptics; tests supply a
+  /// recording fake. The vibration setting gates its use.
+  final GameHaptics? haptics;
 
   /// Returns "now"; tests fix the date to make the daily puzzle
   /// deterministic. Defaults to [DateTime.now].
@@ -136,6 +142,9 @@ class _GameScreenState extends State<GameScreen> {
       sounds:
           widget.soundsFactory?.call() ??
           FlameAudioSounds(volumeScale: widget.settings.effectsVolume),
+      haptics: widget.settings.hapticsEnabled
+          ? (widget.haptics ?? const SystemGameHaptics())
+          : null,
       saveStore: _saveStore,
       saveKey: _saveKey,
       startedDay: widget.startedDay ?? dayKey(_now),
