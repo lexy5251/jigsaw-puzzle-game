@@ -98,24 +98,19 @@ void main() {
 
     // The live Flame game keeps requesting frames, so pumpAndSettle would
     // never settle here — the dialog is driven with fixed pumps instead.
-    Future<void> pumpDialog() async {
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 250));
-    }
+    Future<void> pumpDialog() => pumpRoute(tester);
 
     // Declining keeps the same game and the stored progress.
-    await tester.tap(find.byTooltip('Restart puzzle'));
-    await pumpDialog();
+    await openRestartDialog(tester);
     expect(find.text('Start over?'), findsOneWidget);
     await tester.tap(find.text('Keep going'));
     await pumpDialog();
     expect(identical(currentGame(tester), resumedGame), isTrue);
 
     // Confirming swaps in a new game on a save-free board.
-    await tester.tap(find.byTooltip('Restart puzzle'));
-    await pumpDialog();
+    await openRestartDialog(tester);
     await tester.runAsync(() async {
-      await tester.tap(find.text('Start over'));
+      await tester.tap(startOverDialogButton);
       await pumpDialog();
       // Let the drain + delete futures complete, then await the new board.
       await Future<void>.delayed(const Duration(milliseconds: 50));

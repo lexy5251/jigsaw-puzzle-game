@@ -91,7 +91,7 @@ class PieceTray extends PositionComponent
   /// edges-only is on. [_remainingPieces] always holds every unused piece.
   final List<_TrayThumbnail> _thumbnails = [];
   bool _edgesOnly = false;
-  bool _filterRebuildPending = false;
+  bool _stripRebuildPending = false;
 
   final _thumbnailStrip = PositionComponent();
   double _scrollOffset = 0;
@@ -172,9 +172,30 @@ class PieceTray extends PositionComponent
   /// The model commits immediately either way: saves and piece counts must
   /// never wait on a visual.
   void returnPiece(PieceData data, {required Vector2 canvasPoint, Rect? flightFrom}) {
+    returnPieces([(data, canvasPoint)]);
+    if (flightFrom != null) {
+      _startReturnFlight(data, flightFrom);
+    }
+  }
+
+  /// Takes a batch of pieces back at once — the "Return to tray" sweep,
+  /// and the single-piece [returnPiece] (which adds the landing flight on
+  /// top). The strip is rebuilt once: rebuilding per piece would tear down
+  /// and recreate up to the whole strip N times in one tap.
+  void returnPieces(List<(PieceData, Vector2)> returns) {
     // A second return while one is still flying reveals the first at once;
     // one blank slot and one flyer at a time keeps the bookkeeping simple.
     _activeFlight?.finishNow();
+    for (final (data, canvasPoint) in returns) {
+      _insertReturnedPiece(data, canvasPoint);
+    }
+    _rebuildThumbnailsWhenSafe();
+  }
+
+  /// Inserts a returned piece at the slot under [canvasPoint] — it must
+  /// reappear where the player dropped it, not at the strip's (possibly
+  /// scrolled-off) far end. The caller rebuilds the thumbnails.
+  void _insertReturnedPiece(PieceData data, Vector2 canvasPoint) {
     final slot = _slotIndexAt(canvasPoint);
     final insertAt = slot < 0
         ? 0
@@ -182,10 +203,6 @@ class PieceTray extends PositionComponent
         ? _remainingPieces.length
         : _remainingPieces.indexOf(_thumbnails[slot].data);
     _remainingPieces.insert(insertAt, data);
-    _rebuildThumbnails();
-    if (flightFrom != null) {
-      _startReturnFlight(data, flightFrom);
-    }
   }
 
   void _startReturnFlight(PieceData data, Rect flightFromOnCanvas) {
@@ -235,12 +252,19 @@ class PieceTray extends PositionComponent
     }
     _edgesOnly = enabled;
     if (isLoaded) {
-      // Keep the selected thumbnail alive until this pointer releases it.
-      if (_activePointerId != null) {
-        _filterRebuildPending = true;
-      } else {
-        _rebuildThumbnails();
-      }
+      _rebuildThumbnailsWhenSafe();
+    }
+  }
+
+  /// Rebuilds the strip now, or after the active pointer releases: a rebuild
+  /// mid-gesture would orphan [_selectedThumbnail], leaving a liftable ghost
+  /// of the same piece in the fresh strip (one tap on "Tidy" while a finger
+  /// rests on a thumbnail was enough to duplicate a piece).
+  void _rebuildThumbnailsWhenSafe() {
+    if (_activePointerId != null) {
+      _stripRebuildPending = true;
+    } else {
+      _rebuildThumbnails();
     }
   }
 
@@ -342,8 +366,8 @@ class PieceTray extends PositionComponent
     _carriedPiece = null;
     _selectedThumbnail = null;
     _activePointerId = null;
-    if (_filterRebuildPending) {
-      _filterRebuildPending = false;
+    if (_stripRebuildPending) {
+      _stripRebuildPending = false;
       _rebuildThumbnails();
     }
   }

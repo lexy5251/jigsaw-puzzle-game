@@ -51,8 +51,7 @@ class HomeHeroCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     // Enlarged text or a narrow phone: the action moves under the text
-    // instead of crushing the title (same breakpoint idea as the game
-    // screen's separateTools).
+    // instead of crushing the title.
     final stacked =
         MediaQuery.sizeOf(context).width < 360 ||
         MediaQuery.textScalerOf(context).scale(16) > 24;

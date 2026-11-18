@@ -34,13 +34,8 @@ void main() {
         .toJsonString();
   });
 
-  Future<void> confirmRestart(WidgetTester tester) async {
-    await tester.tap(find.byTooltip('Restart puzzle'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 250));
-    await tester.tap(find.text('Start over'));
-    await tester.pump();
-  }
+  Future<void> confirmRestart(WidgetTester tester) =>
+      confirmRestartViaMenu(tester);
 
   Future<JigsawGame> finishRestart(
     WidgetTester tester,
@@ -140,12 +135,14 @@ void main() {
     expect(writes, 1);
     expect(identical(currentGame(tester), old), isTrue);
     expect(old.paused, isTrue);
+    // While the restart is pending, the menu's restart item is disabled.
+    await openOptionsMenu(tester);
     expect(
-      tester
-          .widget<IconButton>(find.widgetWithIcon(IconButton, Icons.replay))
-          .onPressed,
+      tester.widget<MenuItemButton>(startOverMenuItem).onPressed,
       isNull,
     );
+    await tester.tapAt(const Offset(10, 10));
+    await pumpRoute(tester);
 
     // A finger that was already holding a piece can still deliver a drop.
     piece.position.setValues(25, 30);

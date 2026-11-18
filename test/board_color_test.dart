@@ -46,13 +46,6 @@ void main() {
       prefs = MockSharedPreferences()..install();
     });
 
-    // The live Flame game keeps requesting frames, so pumpAndSettle would
-    // never settle — sheet and dialog routes are driven with fixed pumps.
-    Future<void> pumpRoute(WidgetTester tester) async {
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 250));
-    }
-
     Future<void> letPersistFinish(WidgetTester tester) async {
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 50)),
@@ -70,8 +63,7 @@ void main() {
       );
       expect(game.backgroundColor(), StudioColors.board);
 
-      await tester.tap(find.byTooltip('Board color'));
-      await pumpRoute(tester);
+      await openOptionsMenu(tester);
       for (final option in boardColorOptions) {
         expect(
           find.bySemanticsLabel('Board color: ${option.label}'),
@@ -101,7 +93,7 @@ void main() {
         ),
         findsAtLeastNWidgets(1),
       );
-      // The marker moved and the sheet stayed open for live comparison.
+      // The marker moved and the menu stayed open for live comparison.
       expect(_checkedSwatchColor(tester), slate.background);
       expect(find.text('Board color'), findsOneWidget);
 
@@ -109,7 +101,7 @@ void main() {
       final saved = jsonDecode(prefs.storage[_settingsKey]! as String);
       expect(saved['boardColorId'], 'slate');
 
-      // The scrim dismisses the sheet.
+      // An outside tap dismisses the menu.
       await tester.tapAt(const Offset(10, 10));
       await pumpRoute(tester);
       expect(find.text('Board color'), findsNothing);
@@ -128,8 +120,7 @@ void main() {
         size: singlePieceSize,
       );
 
-      await tester.tap(find.byTooltip('Board color'));
-      await pumpRoute(tester);
+      await openOptionsMenu(tester);
       await tester.tap(find.bySemanticsLabel('Board color: Charcoal'));
       await letPersistFinish(tester);
 
@@ -174,18 +165,16 @@ void main() {
         size: singlePieceSize,
       );
 
-      await tester.tap(find.byTooltip('Board color'));
-      await pumpRoute(tester);
+      await openOptionsMenu(tester);
       await tester.tap(find.bySemanticsLabel('Board color: Slate'));
       await pumpRoute(tester);
-      await tester.tapAt(const Offset(10, 10));
-      await pumpRoute(tester);
 
+      // Straight from the still-open menu into the restart flow.
       final gameBeforeRestart = currentGame(tester);
-      await tester.tap(find.byTooltip('Restart puzzle'));
+      await tester.tap(startOverMenuItem);
       await pumpRoute(tester);
       await tester.runAsync(() async {
-        await tester.tap(find.text('Start over'));
+        await tester.tap(startOverDialogButton);
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 250));
         // Let the drain + delete futures complete, then await the new board.
@@ -215,8 +204,7 @@ void main() {
       game.zoomTo(fit * 2, Vector2(200, 200));
       final view = game.camera.viewfinder.position.clone();
 
-      await tester.tap(find.byTooltip('Board color'));
-      await pumpRoute(tester);
+      await openOptionsMenu(tester);
       await tester.tap(find.bySemanticsLabel('Board color: Slate'));
       await pumpRoute(tester);
 
@@ -227,7 +215,7 @@ void main() {
       await letPersistFinish(tester);
     });
 
-    testWidgets('enlarged text scrolls the sheet instead of overflowing', (
+    testWidgets('enlarged text scrolls the menu instead of overflowing', (
       tester,
     ) async {
       tester.view.physicalSize = const Size(320, 480);
@@ -241,11 +229,10 @@ void main() {
         image: singlePieceImage,
         size: singlePieceSize,
       );
-      await tester.tap(find.byTooltip('Board color'));
-      await pumpRoute(tester);
+      await openOptionsMenu(tester);
       expect(tester.takeException(), isNull); // no RenderFlex overflow
 
-      // Swatches pushed past the sheet's height cap scroll into reach.
+      // Swatches pushed past the menu's height cap scroll into reach.
       final slate = find.bySemanticsLabel('Board color: Slate');
       await tester.ensureVisible(slate);
       await tester.pump();
@@ -255,28 +242,31 @@ void main() {
       await letPersistFinish(tester);
     });
 
-    testWidgets('the sheet opens without a scrim and still dismisses', (
+    testWidgets('the menu opens without a scrim and closes on outside tap', (
       tester,
     ) async {
-      await bootGameScreen(
+      // A real pushed route, so the back button exists: the closing tap
+      // must be consumed by the menu instead of reaching it.
+      final route = await pushGameScreen(
         tester,
         image: singlePieceImage,
         size: singlePieceSize,
       );
-      await tester.tap(find.byTooltip('Board color'));
-      await pumpRoute(tester);
+      await openOptionsMenu(tester);
 
-      // Comparing swatches against the live board only works if the barrier
-      // doesn't darken it.
-      final barrier = tester.widget<ModalBarrier>(
-        find.byType(ModalBarrier).last,
-      );
-      expect(barrier.color, anyOf(isNull, Colors.transparent));
+      // Comparing swatches against the live board only works if nothing
+      // darkens it: any barrier on screen must be colorless.
+      for (final barrier in tester.widgetList<ModalBarrier>(
+        find.byType(ModalBarrier),
+      )) {
+        expect(barrier.color, anyOf(isNull, Colors.transparent));
+      }
 
-      // The invisible barrier still catches an outside tap.
-      await tester.tapAt(const Offset(10, 10));
+      await tester.tap(find.byType(BackButton), warnIfMissed: false);
       await pumpRoute(tester);
-      expect(find.text('Board color'), findsNothing);
+      expect(find.text('Board color'), findsNothing); // Menu closed...
+      expect(route.popped, isFalse); // ...but the puzzle was not left.
+      expect(find.byType(BackButton), findsOneWidget);
     });
   });
 }

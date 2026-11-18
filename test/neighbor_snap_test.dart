@@ -28,9 +28,8 @@ class _Sounds implements GameSounds {
 
 void main() {
   const key = 'neighbor-tests';
-  const width = 1600 / 6;
-  const height = 1067 / 4;
-  Vector2 home(int index) => Vector2(index % 6 * width, index ~/ 6 * height);
+  const height = grid6x4PieceHeight;
+  final Vector2 Function(int) home = grid6x4Home;
   Vector2 offset = Vector2(300, 220);
 
   Future<JigsawGame> boot(
@@ -416,7 +415,10 @@ void main() {
       rows: 10,
       loose: {
         for (var i = 0; i < 120; i++)
-          i: Vector2(i % 12 * (1600 / 12) + 200, i ~/ 12 * (1067 / 10) - 100),
+          i: Vector2(
+            i % 12 * (testPhotoWidth / 12) + 200,
+            i ~/ 12 * (testPhotoHeight / 10) - 100,
+          ),
       },
     );
     final p = pieces(game);

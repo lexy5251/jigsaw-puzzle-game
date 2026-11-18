@@ -147,6 +147,37 @@ double trayHeightCap({
   return max(legacyCap, min(slack, screenHeight * 0.45));
 }
 
+/// Height of the control row (tray filters + "Return to tray") that floats
+/// in Flutter just above the tray. The camera fit and the tray-clearance
+/// nudge both reserve this band so pieces never hide under the buttons.
+const trayControlRowHeight = 48.0;
+
+/// How far the control row honors enlarged text before clamping. The band
+/// height and the row's own text clamp share this cap, so the buttons are
+/// never shrunk to fit a band that stopped growing with them.
+const trayControlRowMaxTextScale = 1.3;
+
+/// Control-row band height for the player's text scale: the band grows
+/// with large text (up to the shared cap) so the buttons keep full-size
+/// tap targets instead of being scaled down into a fixed 48px strip.
+double scaledControlRowHeight(double textScaleFactor) {
+  return trayControlRowHeight *
+      textScaleFactor.clamp(1.0, trayControlRowMaxTextScale);
+}
+
+/// Top breathing room of the fitted board: the share of the available height
+/// the centered fit always left above a height-bound board. Fixing it at the
+/// top means a width-bound board's vertical slack all falls below the board,
+/// where it serves as the player's sorting area.
+double boardTopMargin(double availableHeight) {
+  return availableHeight * (1 - boardFitHeightFraction) / 2;
+}
+
+/// One "Zoom in" menu step: doubles the zoom, held to the 4x ceiling.
+double stepZoomIn(double zoom, double fitZoom) {
+  return clampZoom(zoom * 2, fitZoom);
+}
+
 /// Camera zoom limits, relative to the zoom that fits the whole board:
 /// never below the fitted view (the board always fills the screen), in to 4x.
 double clampZoom(double zoom, double fitZoom) {

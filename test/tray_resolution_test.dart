@@ -187,8 +187,6 @@ void main() {
   /// return flight by dropping it over the tray.
   Future<JigsawGame> bootWithFlightStarted(WidgetTester tester) async {
     const key = 'tray-resolution-flight';
-    const width = 1600 / 6;
-    const height = 1067 / 4;
     final store = InMemorySaveStore();
     await store.save(
       key,
@@ -198,7 +196,7 @@ void main() {
             if (i != 8) i,
         ],
         lockedPieceIndexes: const [],
-        loosePiecePositions: {8: Vector2(8 % 6 * width, 8 ~/ 6 * height)},
+        loosePiecePositions: {8: grid6x4Home(8)},
         boardWidth: testPhotoWidth,
       ),
     );

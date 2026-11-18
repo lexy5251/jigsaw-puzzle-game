@@ -60,6 +60,7 @@ class JigsawGame extends FlameGame
     this.onBoardLoaded,
     this.trayColumns = trayVisibleColumns,
     this.trayMaxThumbnailHeight = trayThumbnailHeightCap,
+    this._controlRowHeight = trayControlRowHeight,
   }) {
     // Claim at construction, not load: a restart creates the new game before
     // the old one disposes, so the handover keeps the cached photo warm.
@@ -96,6 +97,27 @@ class JigsawGame extends FlameGame
   /// pieces up with the column rule. Defaults to the shipped phone-size
   /// ceiling; the preview harness passes candidates (null = no ceiling).
   final double? trayMaxThumbnailHeight;
+
+  /// On-screen height of the Flutter control row above the tray. The host
+  /// screen passes its text-scaled value (see [scaledControlRowHeight]) at
+  /// construction and keeps it current via [setControlRowHeight], so the
+  /// camera reserve and the row's real height can never disagree.
+  double get controlRowHeight => _controlRowHeight;
+  double _controlRowHeight;
+
+  /// Re-reserves the band when the player's text scale changes mid-game.
+  /// Refits like a real resize (zoom and pan reset), which also re-clears
+  /// pieces out of the grown or shrunk band.
+  void setControlRowHeight(double height) {
+    if (height == _controlRowHeight) {
+      return;
+    }
+    _controlRowHeight = height;
+    if (_tray == null) {
+      return; // onLoad's fit applies the final value.
+    }
+    _fitCameraToBoard();
+  }
 
   /// Reads and writes saved progress. Tests can omit storage to play in memory.
   final PuzzleSaveStore? saveStore;
@@ -213,6 +235,36 @@ class JigsawGame extends FlameGame
 
   double? _traySpriteAspect;
 
+  /// Screen band reserved below the board: the tray plus the Flutter
+  /// control row floating just above it.
+  double get _bottomHudHeight => _trayHeight + controlRowHeight;
+
+  /// Height left for the board above the reserved band. The floor keeps
+  /// camera math finite — and clamp bounds ordered — on degenerate
+  /// viewports (a web window shorter than the band itself).
+  double get _availableBoardHeight => max(1.0, size.y - _bottomHudHeight);
+
+  /// How many pieces a finger is currently carrying (0 or 1 gesture's
+  /// group). The host screen fades the control row out while a piece is
+  /// carried, so it can never hide the piece or steal its drop.
+  final ValueNotifier<int> carriedPieces = ValueNotifier(0);
+
+  /// On-screen tray height, published for the host screen's control row
+  /// (a Flutter overlay that must sit exactly on the tray's top edge).
+  /// Stays 0 until the tray exists, which hides the row while loading.
+  final ValueNotifier<double> trayHeightOnScreen = ValueNotifier(0);
+
+  void _publishTrayHeight() {
+    final height = _trayHeight;
+    // onGameResize fires during layout; notifying the host's listenable
+    // builder there would rebuild mid-layout and throw. Land it post-frame.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_disposed) {
+        trayHeightOnScreen.value = height;
+      }
+    });
+  }
+
   /// Board height / width for the tray cap's slack math. Derived from
   /// [_boardSize] so the cap can never disagree with the camera fit; gated
   /// on [_traySpriteAspect], which _loadPuzzle assigns strictly after
@@ -329,6 +381,14 @@ class JigsawGame extends FlameGame
     }
 
     _addTray(trayPieces, pieceSize);
+    // The fit also nudges restored pieces clear of the band: this screen
+    // may reserve a different one than the save was written against, and
+    // the cleaned positions must land in the save below.
+    _fitCameraToBoard();
+    // Stamp the laid-out size: onBoardLoaded's setState rebuilds the
+    // GameWidget, which re-fires onGameResize at this same size — without
+    // the stamp every load would pay the whole layout pass twice.
+    _lastLayoutSize = size.clone();
     // Save right away, fresh or resumed. Fresh: opening a puzzle marks it
     // "in progress", the shuffled tray order survives an app restart, and
     // any save the guards above rejected is replaced — dead data no code
@@ -338,7 +398,6 @@ class JigsawGame extends FlameGame
     // card's "most recently played" follows the player's attention even
     // when they study the board and leave without moving a piece.
     persistProgress();
-    _fitCameraToBoard();
     onBoardLoaded?.call(savedState != null);
     // An interrupted final snap can leave a fully placed save. Finish
     // recording it after the board and its restored counter are ready.
@@ -466,6 +525,7 @@ class JigsawGame extends FlameGame
     // Above the tray, so a carried piece stays visible crossing it.
     _elevatedOverlay = _ElevatedPieceOverlay()..priority = 1;
     camera.viewport.add(_elevatedOverlay!);
+    _publishTrayHeight();
   }
 
   /// Last size this game laid out for. GameWidget rebuilds (e.g. the board
@@ -490,22 +550,33 @@ class JigsawGame extends FlameGame
       position: Vector2(0, size.y - _trayHeight),
       size: Vector2(size.x, _trayHeight),
     );
+    _publishTrayHeight();
     _fitCameraToBoard();
   }
 
   void _fitCameraToBoard() {
-    final availableBoardSize = Vector2(size.x, size.y - _trayHeight);
+    final availableBoardSize = Vector2(size.x, _availableBoardHeight);
     _fitZoom = min(
       availableBoardSize.x * boardFitWidthFraction / _boardSize.x,
       availableBoardSize.y * boardFitHeightFraction / _boardSize.y,
     );
 
-    // Offset the camera so the board is centered in the space above the tray.
-    final trayOffset = Vector2(0, _trayHeight / (2 * _fitZoom));
+    // Anchor the board at the top of the available area (keeping the usual
+    // breathing room) so all the vertical slack falls below the board — the
+    // open space there is the player's sorting area.
+    final cameraY = (size.y / 2 - boardTopMargin(availableBoardSize.y)) / _fitZoom;
     camera.viewfinder
       ..anchor = Anchor.center
       ..zoom = _fitZoom
-      ..position = _boardSize / 2 + trayOffset;
+      ..position = Vector2(_boardSize.x / 2, cameraY);
+    // On extreme tall-narrow viewports the anchored position can land past
+    // the pan bounds; resting there would make the first zoom gesture snap
+    // the camera to the bound instead of zooming around the fingers.
+    _clampCamera();
+    // Every fit re-projects the board, so every fit re-establishes the
+    // "no piece under the tray band" rule — including the pinch-out
+    // snap-home, which per-call-site sweeps used to miss.
+    _keepBoardClearOfTray();
   }
 
   @override
@@ -562,9 +633,24 @@ class JigsawGame extends FlameGame
     _zoomAroundCanvasPoint(newZoom, canvasFocalPoint);
   }
 
-  /// Returns the camera to the centered fitted view. No UI button triggers
-  /// this anymore; pinching out snaps home instead (see [zoomTo]).
-  void resetView() => _fitCameraToBoard();
+  /// One "Zoom in" step from the options menu: doubles toward the 4x
+  /// ceiling, zooming on the board's own on-screen center (the menu button
+  /// has no finger position to aim at). Aiming at the screen center would
+  /// drift the top-anchored board upward on every step; pinning the board
+  /// center keeps the picture in place while it grows. After a manual pan
+  /// the board center can sit off-screen, so it is clamped into view —
+  /// the step then zooms toward the board instead of away from it.
+  void zoomInStep() {
+    if (_tray == null) {
+      return; // The menu exists before load; nothing to zoom at yet.
+    }
+    final boardCenterOnCanvas = camera.localToGlobal(_boardSize / 2);
+    final focal = Vector2(
+      boardCenterOnCanvas.x.clamp(0, size.x).toDouble(),
+      boardCenterOnCanvas.y.clamp(0, _availableBoardHeight).toDouble(),
+    );
+    zoomTo(stepZoomIn(camera.viewfinder.zoom, _fitZoom), focal);
+  }
 
   /// Keeps the world point under [canvasPoint] fixed on screen while zooming.
   void _zoomAroundCanvasPoint(double newZoom, Vector2 canvasPoint) {
@@ -602,6 +688,7 @@ class JigsawGame extends FlameGame
     for (final index in members) {
       _boardPieces[index]!.setDragging(true);
     }
+    carriedPieces.value++;
     return true;
   }
 
@@ -626,15 +713,64 @@ class JigsawGame extends FlameGame
   /// A lone piece dropped over the tray goes back into it (players clear a
   /// messy board this way). Chunks and locked pieces stay: the tray holds
   /// single pieces only. [settlePiece] resolves the drop point.
+  ///
+  /// The boundary is the control-row band's top, not the tray's own edge:
+  /// the clearance nudge keeps pieces out of the whole band, so a release
+  /// inside it must count as "over the tray" — otherwise the band would be
+  /// a dead zone where the piece neither returns nor stays put.
   bool _shouldReturnToTray(PuzzlePiece piece, Vector2 dropPoint) {
-    final tray = _tray;
-    if (tray == null || _groups.membersOf(piece.index).length > 1) {
+    if (_tray == null || _groups.membersOf(piece.index).length > 1) {
       return false;
     }
-    return dropPoint.y >= tray.position.y;
+    return dropPoint.y >= size.y - _bottomHudHeight;
   }
 
   void _returnPieceToTray(PuzzlePiece piece, Vector2 dropPoint) {
+    _sendPieceToTray(piece, dropPoint);
+    sounds?.playDrop();
+    persistProgress();
+  }
+
+  /// Sweeps every loose single piece back into the tray — the control row's
+  /// "Return to tray" button. Chunks and locked pieces stay: the tray holds
+  /// single pieces only, the same rule as dropping one piece onto it. One
+  /// drop sound and one save cover the whole sweep.
+  void returnLoosePiecesToTray() {
+    if (_disposed || _discardingProgress || _tray == null) {
+      return;
+    }
+    // Busy pieces (mid-drag or mid-settle) are skipped: their gesture or
+    // animation still owns them. Copied first — the removals mutate the map.
+    final loose = _boardPieces.values
+        .where(
+          (piece) =>
+              !_groups.isLocked(piece.index) &&
+              _groups.membersOf(piece.index).length == 1 &&
+              !_busyPieces.contains(piece.index),
+        )
+        .toList();
+    if (loose.isEmpty) {
+      return;
+    }
+    // No landing flights for a batch: the tray keeps one flight alive at a
+    // time, so animating N returns would cancel every glide but the last —
+    // popping them all in with one strip re-layout reads cleaner.
+    _tray!.returnPieces([
+      for (final piece in loose)
+        (
+          _removeBoardPiece(piece),
+          // Aim each piece at the tray slot nearest its board spot, so the
+          // sweep reads as pieces going home rather than piling at one end.
+          camera.localToGlobal(piece.position + piece.size / 2),
+        ),
+    ]);
+    sounds?.playDrop();
+    persistProgress();
+  }
+
+  /// Moves one lone piece from the board into the tray, with the landing
+  /// flight. The caller owns the drop sound and the save.
+  void _sendPieceToTray(PuzzlePiece piece, Vector2 canvasPoint) {
     // The piece's on-screen sprite box: where the tray's landing animation
     // starts, so the return visibly continues from under the finger.
     final zoom = camera.viewfinder.zoom;
@@ -647,34 +783,74 @@ class JigsawGame extends FlameGame
       piece.sprite!.srcSize.x * zoom,
       piece.sprite!.srcSize.y * zoom,
     );
+    _tray!.returnPiece(
+      _removeBoardPiece(piece),
+      canvasPoint: canvasPoint,
+      flightFrom: flightFrom,
+    );
+  }
+
+  /// Takes a lone piece off the board and hands back its tray-side data.
+  PieceData _removeBoardPiece(PuzzlePiece piece) {
     _groups.remove(piece.index);
     _boardPieces.remove(piece.index);
     piece.removeFromParent();
-    _tray!.returnPiece(
-      PieceData(
-        index: piece.index,
-        sprite: piece.sprite!,
-        restShadow: _pieceImages[piece.index].restShadow,
-        restShadowPad: _pieceImages[piece.index].shadowPad,
-        renderBleed: piece.renderBleed,
-        artwork: piece.artwork,
-        correctPosition: piece.correctPosition.clone(),
-      ),
-      canvasPoint: dropPoint,
-      flightFrom: flightFrom,
+    return PieceData(
+      index: piece.index,
+      sprite: piece.sprite!,
+      restShadow: _pieceImages[piece.index].restShadow,
+      restShadowPad: _pieceImages[piece.index].shadowPad,
+      renderBleed: piece.renderBleed,
+      artwork: piece.artwork,
+      correctPosition: piece.correctPosition.clone(),
     );
-    sounds?.playDrop();
-    persistProgress();
   }
 
+  /// Nudges every unlocked group clear of the tray/control-row band.
+  /// Drops do this per piece; every camera fit sweeps the whole board, or
+  /// a save replayed at another screen size could park a piece under the
+  /// Flutter buttons where it cannot be grabbed.
+  void _keepBoardClearOfTray() {
+    // A viewport shorter than the reserved band (plus working room) has no
+    // usable board area: there is nothing meaningful to clear, and nudging
+    // against the floored camera fit would hurl pieces thousands of world
+    // units up — which the next save would keep.
+    if (size.y - _bottomHudHeight < 2 * _bandClearanceGap) {
+      return;
+    }
+    final visited = <int>{};
+    for (final index in _boardPieces.keys.toList()) {
+      if (visited.contains(index) || _groups.isLocked(index)) {
+        continue;
+      }
+      final members = _groups.membersOf(index);
+      visited.addAll(members);
+      // A busy group still belongs to its gesture or settle animation —
+      // nudging it would yank the piece out from under the finger, and its
+      // own drop re-runs this clearance when it lands.
+      if (members.any(_busyPieces.contains)) {
+        continue;
+      }
+      _keepGroupClearOfTray(index);
+      _syncGroupPositions(index);
+    }
+  }
+
+  /// Breathing room between a cleared piece and the band's top edge.
+  static const _bandClearanceGap = 8.0;
+
   void _keepGroupClearOfTray(int member) {
-    const gap = 8.0;
+    const gap = _bandClearanceGap;
     final bottom = _groups
         .membersOf(member)
         .map((index) => _groups.positionOf(index).y + _groups.cellHeight)
         .reduce(max);
     final pieceBottomOnScreen = camera.localToGlobal(Vector2(0, bottom)).y;
-    final maxPieceBottomOnScreen = size.y - _trayHeight - gap;
+    // Floored: on a viewport shorter than the band the limit goes negative,
+    // and nudging against it would hurl pieces thousands of world units up
+    // — and persist that into the save. With no usable board area there is
+    // nothing to clear; pieces keep their positions instead.
+    final maxPieceBottomOnScreen = max(gap, size.y - _bottomHudHeight - gap);
     final overlap = pieceBottomOnScreen - maxPieceBottomOnScreen;
 
     if (overlap > 0) {
@@ -688,6 +864,11 @@ class JigsawGame extends FlameGame
   void settlePiece(PuzzlePiece piece, {bool allowTrayReturn = true}) {
     if (_disposed || _discardingProgress) return;
     if (piece.isLocked || piece.isSettling) return;
+    // Elevated here means a gesture carried this group (matched by the
+    // increment in beginPieceDrag); programmatic settles arrive loose.
+    if (piece.isElevated) {
+      carriedPieces.value = max(0, carriedPieces.value - 1);
+    }
     _groups.moveTo(piece.index, Point(piece.x, piece.y));
     _busyPieces.removeAll(_groups.membersOf(piece.index));
     // The finger decides where the drop lands, not the piece's center: a

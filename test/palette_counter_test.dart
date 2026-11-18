@@ -38,8 +38,10 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  // Scale 3 covers the counter's own clamp: past 2x the title stops
+  // growing (the two fixed action buttons leave it no more width).
   for (final width in [320.0, 375.0, 390.0, 800.0]) {
-    for (final scale in [1.0, 2.0]) {
+    for (final scale in [1.0, 2.0, 3.0]) {
       testWidgets('counter fits width $width at text scale $scale', (
         tester,
       ) async {
@@ -102,26 +104,22 @@ void main() {
           find.bySemanticsLabel('200 of 216 pieces placed'),
           findsOneWidget,
         );
-        for (final tooltip in [
-          'Board color',
-          'Restart puzzle',
-          'Edge pieces only',
-          'Image preview',
-        ]) {
+        for (final tooltip in ['Image preview', 'Options']) {
           expect(find.byTooltip(tooltip).hitTestable(), findsOneWidget);
         }
-        await tester.tap(find.byTooltip('Edge pieces only'));
+        // The tray control row fits the same width/scale matrix: the
+        // filter chip and the sweep button are present and tappable (the
+        // sweep button always keeps its 'Tidy' label; its constant tooltip
+        // is the finder handle per the e2e stable-handle rule).
+        expect(find.text('Edges only').hitTestable(), findsOneWidget);
+        expect(
+          find.byTooltip('Return to tray').hitTestable(),
+          findsOneWidget,
+        );
+        await tester.tap(find.text('Edges only'));
         await tester.pump();
         expect(
-          tester
-              .widget<IconButton>(
-                find.byWidgetPredicate(
-                  (widget) =>
-                      widget is IconButton &&
-                      widget.tooltip == 'Edge pieces only',
-                ),
-              )
-              .isSelected,
+          tester.widget<FilterChip>(find.byType(FilterChip)).selected,
           isTrue,
         );
         expect(tester.takeException(), isNull);

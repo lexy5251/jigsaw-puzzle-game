@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 import 'dart:ui' as ui;
 
+import 'package:flame/flame.dart';
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -17,6 +19,7 @@ import 'package:jigsaw_puzzle/game_sounds.dart';
 import 'package:jigsaw_puzzle/jigsaw_game.dart';
 import 'package:jigsaw_puzzle/puzzle_catalog.dart';
 import 'package:jigsaw_puzzle/puzzle_completion.dart';
+import 'package:jigsaw_puzzle/puzzle_logic.dart';
 import 'package:jigsaw_puzzle/puzzle_piece.dart';
 import 'package:jigsaw_puzzle/puzzle_save.dart';
 import 'package:jigsaw_puzzle/puzzle_select_screen.dart';
@@ -70,6 +73,20 @@ final singlePieceCompletionKey = completionKeyFor(singlePieceImage);
 /// [PuzzleSaveState.boardWidth] or the game discards them as written against
 /// a different image resolution.
 const testPhotoWidth = 1600;
+
+/// Height of assets/images/test_photo.jpg.
+const testPhotoHeight = 1067;
+
+/// Cell size of the standard 6x4 grid cut from the test photo — shared so
+/// a future photo swap updates every suite's home positions in one place.
+const grid6x4PieceWidth = testPhotoWidth / 6;
+const grid6x4PieceHeight = testPhotoHeight / 4;
+
+/// World position of piece [index]'s correct cell on the 6x4 test grid.
+Vector2 grid6x4Home(int index) => Vector2(
+  index % 6 * grid6x4PieceWidth,
+  index ~/ 6 * grid6x4PieceHeight,
+);
 
 /// One loose piece at its target; a settle completes the puzzle.
 PuzzleSaveState singleLoosePieceSave({String? startedDay}) => PuzzleSaveState(
@@ -340,6 +357,145 @@ Future<ui.Image> decodeAssetImage(String assetPath) async {
   }
 }
 
+/// Decodes a bundled catalog photo and center-crops it square, matching the
+/// decided 1:1 catalog shape. Preview harnesses only.
+Future<ui.Image> squareCatalogPhoto(String assetPath) async {
+  final source = await decodeAssetImage(assetPath);
+  try {
+    final side = min(source.width, source.height);
+    final recorder = ui.PictureRecorder();
+    Canvas(recorder).drawImageRect(
+      source,
+      Rect.fromLTWH(
+        (source.width - side) / 2,
+        (source.height - side) / 2,
+        side.toDouble(),
+        side.toDouble(),
+      ),
+      Rect.fromLTWH(0, 0, side.toDouble(), side.toDouble()),
+      Paint()..filterQuality = FilterQuality.high,
+    );
+    final picture = recorder.endRecording();
+    try {
+      return await picture.toImage(side, side);
+    } finally {
+      picture.dispose();
+    }
+  } finally {
+    source.dispose();
+  }
+}
+
+/// Boots the real GameScreen on [photo] (ownership transfers: the panel's
+/// game disposes it via the image cache) and returns the captured screen.
+/// [beforeCapture] runs after the board settles — e.g. [openOptionsMenu]
+/// for a menu-open panel. Shared by the preview harnesses so the tuned
+/// boot-and-settle pump recipe cannot drift between them.
+Future<ui.Image> captureGameScreenPanel(
+  WidgetTester tester, {
+  required ui.Image photo,
+  required String panelId,
+  required Size screenSize,
+  PuzzleSize grid = const PuzzleSize(columns: 5, rows: 5),
+  int trayColumns = trayVisibleColumns,
+  double? trayMaxThumbnailHeight = trayThumbnailHeightCap,
+  Future<void> Function(WidgetTester tester)? beforeCapture,
+}) async {
+  final assetName = '$panelId.webp';
+  Flame.images.add(assetName, photo);
+  final boundaryKey = GlobalKey();
+  await pumpPhoneApp(
+    tester,
+    GameScreen(
+      image: PuzzleImage(
+        id: panelId,
+        title: 'Preview panel',
+        categoryId: 'animals',
+        fileName: assetName,
+      ),
+      size: grid,
+      soundsFactory: SilentGameSounds.new,
+      trayColumns: trayColumns,
+      trayMaxThumbnailHeight: trayMaxThumbnailHeight,
+    ),
+    size: screenSize,
+    boundaryKey: boundaryKey,
+  );
+  await currentGame(tester).loaded;
+  // Same settle window as the tray pixel tests: lets the cut pieces mount
+  // and the tray lay out its thumbnails.
+  for (var i = 0; i < 3; i++) {
+    await tester.pump(const Duration(milliseconds: 16));
+  }
+  await beforeCapture?.call(tester);
+  return capturePreviewImage(boundaryKey);
+}
+
+/// Draws captured preview panels side by side with a label band on top and
+/// writes the sheet to [path]. Takes ownership of the panel images.
+Future<void> composePreviewSheet(
+  List<(ui.Image, String)> panels,
+  String path,
+) async {
+  const margin = 48.0;
+  const gap = 48.0;
+  const labelBand = 120.0;
+  try {
+    final sheetWidth =
+        margin * 2 +
+        panels.fold(0.0, (sum, p) => sum + p.$1.width) +
+        (panels.length - 1) * gap;
+    final sheetHeight =
+        margin * 2 +
+        labelBand +
+        panels.map((p) => p.$1.height).reduce(max).toDouble();
+
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder)
+      ..drawRect(
+        Rect.fromLTWH(0, 0, sheetWidth, sheetHeight),
+        Paint()..color = StudioColors.ground,
+      );
+    var left = margin;
+    for (final (panel, label) in panels) {
+      final text = TextPainter(
+        text: TextSpan(
+          text: label,
+          style: const TextStyle(
+            fontFamily: 'Nunito',
+            fontWeight: FontWeight.w800,
+            fontSize: 56,
+            color: StudioColors.ink,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      text.paint(
+        canvas,
+        Offset(
+          left + (panel.width - text.width) / 2,
+          margin + (labelBand - text.height) / 2,
+        ),
+      );
+      text.dispose();
+      canvas.drawImage(panel, Offset(left, margin + labelBand), Paint());
+      left += panel.width + gap;
+    }
+    final picture = recorder.endRecording();
+    final sheet = await picture.toImage(sheetWidth.ceil(), sheetHeight.ceil());
+    picture.dispose();
+    try {
+      await writePreviewPng(sheet, path);
+    } finally {
+      sheet.dispose();
+    }
+  } finally {
+    for (final (panel, _) in panels) {
+      panel.dispose();
+    }
+  }
+}
+
 /// Shared no-op sounds for suites that only need silence; tests that count
 /// cues keep their own recording fakes.
 class SilentGameSounds implements GameSounds {
@@ -562,6 +718,50 @@ Future<JigsawGame> bootGameScreen(
     await tester.pump(const Duration(milliseconds: 16));
   }
   return game;
+}
+
+/// Settles an overlay, menu, or dialog change with fixed pumps — the live
+/// Flame game keeps requesting frames, so pumpAndSettle would never finish.
+Future<void> pumpRoute(WidgetTester tester) async {
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 250));
+}
+
+/// Opens the game screen's Options (…) menu.
+Future<void> openOptionsMenu(WidgetTester tester) async {
+  await tester.tap(find.byTooltip('Options'));
+  await pumpRoute(tester);
+}
+
+/// The menu's restart item, type-qualified: the confirm dialog's button
+/// carries the same 'Start over' text, so plain find.text is ambiguous
+/// while both are on screen.
+final Finder startOverMenuItem = find.widgetWithText(
+  MenuItemButton,
+  'Start over',
+);
+
+/// The restart dialog's confirm button (see [startOverMenuItem] for why
+/// the finder is type-qualified).
+final Finder startOverDialogButton = find.widgetWithText(
+  FilledButton,
+  'Start over',
+);
+
+/// Opens the Options menu and taps "Start over", leaving the confirm
+/// dialog up — the shared prefix of confirming AND declining a restart.
+Future<void> openRestartDialog(WidgetTester tester) async {
+  await openOptionsMenu(tester);
+  await tester.tap(startOverMenuItem);
+  await pumpRoute(tester);
+}
+
+/// Requests a restart through the Options menu and confirms the dialog.
+/// Ends right after the confirm tap; callers drive the reload themselves.
+Future<void> confirmRestartViaMenu(WidgetTester tester) async {
+  await openRestartDialog(tester);
+  await tester.tap(startOverDialogButton);
+  await tester.pump();
 }
 
 /// Settles the last loose piece and waits for the board to report

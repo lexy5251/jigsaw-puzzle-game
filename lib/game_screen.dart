@@ -102,6 +102,12 @@ class _GameScreenState extends State<GameScreen> {
   bool _showCompletionCard = false;
   bool _restarting = false;
 
+  /// Drives the Options menu so the screen can close it on system back
+  /// and when the completion card reveals (the menu is an overlay, not a
+  /// route — nothing else would).
+  final MenuController _optionsController = MenuController();
+  bool _optionsMenuOpen = false;
+
   /// The "Next puzzle" offer; null until completion resolves it (and stays
   /// null when the rest of the category is already done at this size).
   PuzzleImage? _nextImage;
@@ -124,6 +130,10 @@ class _GameScreenState extends State<GameScreen> {
   late JigsawGame _game = _createGame();
 
   DateTime get _now => (widget.clock ?? DateTime.now)();
+
+  /// The player's raw text-scale factor (base label size 14).
+  double get _textScaleFactor =>
+      MediaQuery.textScalerOf(context).scale(14) / 14;
 
   String get _saveKey => puzzleSaveKey(
     imageId: widget.image.id,
@@ -151,6 +161,9 @@ class _GameScreenState extends State<GameScreen> {
       clock: widget.clock,
       trayColumns: widget.trayColumns,
       trayMaxThumbnailHeight: widget.trayMaxThumbnailHeight,
+      // The camera's reserve must match the control row the screen draws
+      // over it, including the text-scale growth.
+      controlRowHeight: scaledControlRowHeight(_textScaleFactor),
       onCompleted: () => _onPuzzleCompleted(game),
       onBoardLoaded: (resumed) {
         if (mounted && !_restarting && identical(_game, game)) {
@@ -167,17 +180,87 @@ class _GameScreenState extends State<GameScreen> {
     return game;
   }
 
-  Future<void> _showBoardColorPicker() => showModalBottomSheet<void>(
-    context: context,
-    backgroundColor: StudioColors.ground,
-    // No scrim: the sheet exists to compare swatches against the live
-    // board, so the board must keep its true colors while it's open.
-    barrierColor: Colors.transparent,
-    builder: (_) => _BoardColorPicker(
-      selectedId: _boardColor.id,
-      onSelected: _selectBoardColor,
-    ),
-  );
+  /// The top bar's Options (…) drop-down: board color swatches, step zoom,
+  /// and restart. Scrim-free, so the board keeps its true colors while the
+  /// player compares swatches against it — the reason color taps and zoom
+  /// taps keep the menu open.
+  Widget _optionsMenu() {
+    final theme = Theme.of(context);
+    return MenuAnchor(
+      controller: _optionsController,
+      onOpen: () => setState(() => _optionsMenuOpen = true),
+      onClose: () => setState(() => _optionsMenuOpen = false),
+      // The closing tap must not also hit what's beneath it — the back
+      // button or a puzzle piece.
+      consumeOutsideTap: true,
+      // Dressed like the app's painted cards: warm soft shadow and round
+      // corners instead of the widget's default hard black-edged shadow.
+      // Elevation stays low — higher values wrap the shadow around the
+      // panel and it reads as a thick border on the flat ground.
+      style: const MenuStyle(
+        backgroundColor: WidgetStatePropertyAll(StudioColors.ground),
+        surfaceTintColor: WidgetStatePropertyAll(Colors.transparent),
+        shadowColor: WidgetStatePropertyAll(StudioColors.cardShadow),
+        elevation: WidgetStatePropertyAll(3),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(16)),
+          ),
+        ),
+      ),
+      menuChildren: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Board color', style: theme.textTheme.labelLarge),
+              const SizedBox(height: 10),
+              // Three swatches per row; an open menu rebuilds on setState,
+              // so the check mark follows the selection live.
+              ConstrainedBox(
+                constraints: const BoxConstraints(
+                  maxWidth: 3 * _swatchCell + 2 * _swatchGap,
+                ),
+                child: Wrap(
+                  spacing: _swatchGap,
+                  runSpacing: _swatchGap,
+                  children: [
+                    for (final option in boardColorOptions)
+                      _BoardColorSwatch(
+                        option: option,
+                        selected: option.id == _boardColor.id,
+                        onTap: () => _selectBoardColor(option),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const Divider(height: 16),
+        MenuItemButton(
+          // Stays open: zoom is one step per tap, and the board visibly
+          // zooming behind the menu is the feedback.
+          closeOnActivate: false,
+          leadingIcon: const Icon(Icons.zoom_in),
+          onPressed: () => _game.zoomInStep(),
+          child: const Text('Zoom in'),
+        ),
+        MenuItemButton(
+          leadingIcon: const Icon(Icons.replay),
+          onPressed: _restarting ? null : _confirmRestart,
+          child: const Text('Start over'),
+        ),
+      ],
+      builder: (context, controller, child) => IconButton(
+        tooltip: 'Options',
+        icon: const Icon(Icons.more_horiz),
+        onPressed: () =>
+            controller.isOpen ? controller.close() : controller.open(),
+      ),
+    );
+  }
 
   void _selectBoardColor(BoardColorOption option) {
     // setState so the GameWidget rebuilds — Flame only re-reads
@@ -375,6 +458,9 @@ class _GameScreenState extends State<GameScreen> {
   /// late-arriving data just rebuilds the card with the data filled in).
   void _revealCompletionCard(JigsawGame game) {
     if (mounted && !_restarting && identical(_game, game)) {
+      // A menu left open would float above the card (it lives in the app
+      // overlay, which paints over this screen's whole stack).
+      _optionsController.close();
       // The board is static by now (the glow self-removed at 0.9s), but a
       // running Flame loop repaints every frame, forcing the card's
       // backdrop blur to re-blur the whole screen each vsync. No resume
@@ -454,6 +540,14 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // The system text size can change mid-game; the band the camera
+    // reserves must follow the row's real height.
+    _game.setControlRowHeight(scaledControlRowHeight(_textScaleFactor));
+  }
+
+  @override
   void dispose() {
     _completionTimer?.cancel();
     _revealFallbackTimer?.cancel();
@@ -462,84 +556,125 @@ class _GameScreenState extends State<GameScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final textScaler = MediaQuery.textScalerOf(context);
-    final separateTools =
-        MediaQuery.sizeOf(context).width < 480 || textScaler.scale(16) > 24;
+    // The counter honors enlarged text up to the shared cap, then clamps:
+    // with the two action buttons beside it the title slot is fixed-width,
+    // and the tested width/scale matrix proves 2x is the widest that fits.
+    final titleScaler = MediaQuery.textScalerOf(
+      context,
+    ).clamp(maxScaleFactor: _titleMaxTextScale);
     final counterHeight =
-        19 + textScaler.scale(16) * 1.1 + textScaler.scale(9) * 1.1;
-    final tools = <Widget>[
-      IconButton(
-        tooltip: 'Board color',
-        icon: const Icon(Icons.format_color_fill),
-        onPressed: _showBoardColorPicker,
-      ),
-      IconButton(
-        tooltip: 'Restart puzzle',
-        icon: const Icon(Icons.replay),
-        onPressed: _restarting ? null : _confirmRestart,
-      ),
-      IconButton(
-        tooltip: 'Edge pieces only',
-        isSelected: _edgesOnly,
-        icon: const Icon(Icons.border_outer),
-        onPressed: () {
-          setState(() => _edgesOnly = !_edgesOnly);
-          _game.setEdgesOnlyFilter(_edgesOnly);
-        },
-      ),
-      IconButton(
-        tooltip: 'Image preview',
-        isSelected: _showGhostPreview,
-        icon: const Icon(Icons.image_outlined),
-        selectedIcon: const Icon(Icons.image),
-        onPressed: () {
-          setState(() => _showGhostPreview = !_showGhostPreview);
-          _game.setGhostPreview(_showGhostPreview);
-        },
-      ),
-    ];
+        19 + titleScaler.scale(16) * 1.1 + titleScaler.scale(9) * 1.1;
     return Stack(
       children: [
-        // The card's ModalBarrier blocks taps and semantics beneath it,
-        // but not keyboard traversal — focus is excluded here so Tab on
-        // web/desktop cannot reach the blurred-out controls either.
-        ExcludeFocus(
-          excluding: _showCompletionCard,
-          child: Scaffold(
-            // Constant tooltips (they double as semantics labels for e2e
-            // tests); the pressed state shows through the buttons'
-            // isSelected styling.
-            appBar: AppBar(
-              toolbarHeight: counterHeight > kToolbarHeight
-                  ? counterHeight
-                  : kToolbarHeight,
-              title: ValueListenableBuilder<int>(
-                valueListenable: _game.placedCount,
-                builder: (context, placed, _) => _PaletteCounter(
-                  placed: placed,
-                  total: widget.size.pieceCount,
+        // System back with the menu open must close the menu, not leave
+        // the puzzle — the menu is an overlay, not a route, so no route
+        // pop would dismiss it.
+        PopScope(
+          canPop: !_optionsMenuOpen,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop) {
+              _optionsController.close();
+            }
+          },
+          // The card's ModalBarrier blocks taps and semantics beneath it,
+          // but not keyboard traversal — focus is excluded here so Tab on
+          // web/desktop cannot reach the blurred-out controls either.
+          child: ExcludeFocus(
+            excluding: _showCompletionCard,
+            child: Scaffold(
+              // Constant tooltips and button texts double as semantics
+              // labels for e2e tests.
+              appBar: AppBar(
+                toolbarHeight: counterHeight > kToolbarHeight
+                    ? counterHeight
+                    : kToolbarHeight,
+                title: MediaQuery.withClampedTextScaling(
+                  maxScaleFactor: _titleMaxTextScale,
+                  child: ValueListenableBuilder<int>(
+                    valueListenable: _game.placedCount,
+                    builder: (context, placed, _) => _PaletteCounter(
+                      placed: placed,
+                      total: widget.size.pieceCount,
+                    ),
+                  ),
                 ),
+                actions: [
+                  IconButton(
+                    tooltip: 'Image preview',
+                    isSelected: _showGhostPreview,
+                    icon: const Icon(Icons.image_outlined),
+                    selectedIcon: const Icon(Icons.image),
+                    onPressed: () {
+                      setState(() => _showGhostPreview = !_showGhostPreview);
+                      _game.setGhostPreview(_showGhostPreview);
+                    },
+                  ),
+                  _optionsMenu(),
+                ],
               ),
-              actions: separateTools ? null : tools,
-              // Preserve direct access to every tool while giving the count room
-              // alongside the back button on phones and with enlarged text.
-              bottom: separateTools
-                  ? PreferredSize(
-                      preferredSize: const Size.fromHeight(48),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: tools,
-                      ),
-                    )
-                  : null,
-            ),
-            // Labeled so e2e tests (and screen readers) can identify the
-            // game screen — Flame's canvas exposes no semantics of its own.
-            body: Semantics(
-              label: _boardSemanticsLabel,
-              child: IgnorePointer(
+              body: IgnorePointer(
                 ignoring: _restarting,
-                child: GameWidget(key: ObjectKey(_game), game: _game),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // Labeled so e2e tests (and screen readers) can
+                    // identify the game screen — Flame's canvas exposes no
+                    // semantics of its own.
+                    Semantics(
+                      label: _boardSemanticsLabel,
+                      child: GameWidget(key: ObjectKey(_game), game: _game),
+                    ),
+                    // Rides exactly on the tray's top edge, in the band
+                    // the camera fit reserves. The game publishes the tray
+                    // height; 0 (still loading) keeps the row hidden.
+                    ValueListenableBuilder<double>(
+                      valueListenable: _game.trayHeightOnScreen,
+                      builder: (context, trayHeight, child) => trayHeight <= 0
+                          ? const SizedBox.shrink()
+                          : Positioned(
+                              left: 0,
+                              right: 0,
+                              bottom: trayHeight,
+                              height: _game.controlRowHeight,
+                              child: child!,
+                            ),
+                      child: ValueListenableBuilder<int>(
+                        valueListenable: _game.carriedPieces,
+                        // Fade out under a carried piece: Flutter paints
+                        // above the game canvas, so the opaque buttons
+                        // would hide the piece and steal its drop. Taps
+                        // stay off until the fade-in completes too — a
+                        // still-invisible row must never swallow a tap
+                        // aimed at the board.
+                        builder: (context, carried, child) =>
+                            TweenAnimationBuilder<double>(
+                              tween: Tween(end: carried > 0 ? 0.0 : 1.0),
+                              duration: const Duration(milliseconds: 120),
+                              builder: (context, opacity, child) =>
+                                  IgnorePointer(
+                                    // Off the instant a carry starts, back
+                                    // only once the fade-in has finished.
+                                    ignoring: carried > 0 || opacity < 1,
+                                    child: Opacity(
+                                      opacity: opacity,
+                                      child: child,
+                                    ),
+                                  ),
+                              child: child,
+                            ),
+                        child: _TrayControlRow(
+                          edgesOnly: _edgesOnly,
+                          onEdgesOnlyChanged: (edgesOnly) {
+                            setState(() => _edgesOnly = edgesOnly);
+                            _game.setEdgesOnlyFilter(edgesOnly);
+                          },
+                          onReturnToTray: () =>
+                              _game.returnLoosePiecesToTray(),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -660,50 +795,72 @@ class _PaletteCounter extends StatelessWidget {
   }
 }
 
-/// Swatch row for picking the board backdrop. The sheet stays open after a
-/// tap so the player can compare colors against the live board above it;
-/// swipe or the scrim dismisses it.
-class _BoardColorPicker extends StatefulWidget {
-  const _BoardColorPicker({required this.selectedId, required this.onSelected});
+/// The tray's control row: the "Edges only" filter chip on the left (one
+/// on/off switch — owner's call over a two-button group) and the "Tidy"
+/// sweep on the right (owner's pick of the genre's short cleanup verbs;
+/// its long-press tooltip still spells out "Return to tray"), floating in
+/// the band the camera reserves above the tray. Visuals are deliberately
+/// slim — small text, compact density — while the padded tap targets stay
+/// full size. The background stays transparent, so taps between the
+/// buttons fall through to the board.
+class _TrayControlRow extends StatelessWidget {
+  const _TrayControlRow({
+    required this.edgesOnly,
+    required this.onEdgesOnlyChanged,
+    required this.onReturnToTray,
+  });
 
-  final String selectedId;
-  final ValueChanged<BoardColorOption> onSelected;
-
-  @override
-  State<_BoardColorPicker> createState() => _BoardColorPickerState();
-}
-
-class _BoardColorPickerState extends State<_BoardColorPicker> {
-  late String _selectedId = widget.selectedId;
+  final bool edgesOnly;
+  final ValueChanged<bool> onEdgesOnlyChanged;
+  final VoidCallback onReturnToTray;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return SafeArea(
-      // Scrollable so enlarged text can't overflow the sheet's height cap;
-      // the min-sized Column keeps the sheet hugging its content otherwise.
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+    // Text scaling is honored up to the same cap the band height grows
+    // with (scaledControlRowHeight), so the buttons keep full-size tap
+    // targets instead of being scaled down into a band that stopped
+    // growing with them.
+    const labelStyle = TextStyle(
+      fontFamily: 'Nunito',
+      fontSize: 12,
+      fontWeight: FontWeight.w700,
+    );
+    return MediaQuery.withClampedTextScaling(
+      maxScaleFactor: trayControlRowMaxTextScale,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('Board color', style: theme.textTheme.titleLarge),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                for (final option in boardColorOptions)
-                  _BoardColorSwatch(
-                    option: option,
-                    selected: option.id == _selectedId,
-                    onTap: () {
-                      setState(() => _selectedId = option.id);
-                      widget.onSelected(option);
-                    },
-                  ),
-              ],
+            Flexible(
+              // Last-resort shrink for extreme cases; the slim labels fit
+              // every supported width, so it normally never engages.
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: FilterChip(
+                  label: const Text('Edges only'),
+                  labelStyle: labelStyle,
+                  visualDensity: VisualDensity.compact,
+                  selected: edgesOnly,
+                  onSelected: onEdgesOnlyChanged,
+                  selectedColor: StudioColors.chip,
+                  checkmarkColor: StudioColors.ink,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Tooltip(
+              message: 'Return to tray',
+              child: TextButton.icon(
+                onPressed: onReturnToTray,
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  textStyle: labelStyle,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                ),
+                icon: const Icon(Icons.move_to_inbox_outlined, size: 16),
+                label: const Text('Tidy'),
+              ),
             ),
           ],
         ),
@@ -711,6 +868,16 @@ class _BoardColorPickerState extends State<_BoardColorPicker> {
     );
   }
 }
+
+/// Swatch cell edge and gap — the menu's "three per row" band width
+/// derives from these, so resizing a swatch cannot break the wrap.
+const _swatchCell = 48.0;
+const _swatchGap = 12.0;
+
+/// The title counter's text-scale cap. The AppBar height math and the
+/// rendered title must clamp at the same point, or the bar's height is
+/// computed for a different scale than its content draws at.
+const _titleMaxTextScale = 2.0;
 
 class _BoardColorSwatch extends StatelessWidget {
   const _BoardColorSwatch({
@@ -737,8 +904,8 @@ class _BoardColorSwatch extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(14),
         child: SizedBox(
-          width: 48,
-          height: 48,
+          width: _swatchCell,
+          height: _swatchCell,
           child: Center(
             child: Stack(
               alignment: Alignment.center,

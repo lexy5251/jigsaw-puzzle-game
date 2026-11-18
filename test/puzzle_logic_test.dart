@@ -152,6 +152,39 @@ void main() {
     });
   });
 
+  group('stepZoomIn', () {
+    test('doubles per step and holds at the 4x ceiling', () {
+      const fit = 2.0;
+      expect(stepZoomIn(fit, fit), 4.0);
+      expect(stepZoomIn(4.0, fit), 8.0);
+      expect(stepZoomIn(8.0, fit), 8.0); // Already at the cap.
+      // From an arbitrary pinch zoom it doubles, then clamps.
+      expect(stepZoomIn(5.0, fit), 8.0);
+    });
+  });
+
+  group('boardTopMargin', () {
+    test('keeps the fit fraction breathing room above the board', () {
+      // Same share the centered fit left above a height-bound board.
+      expect(boardTopMargin(400), closeTo(400 * 0.075, 1e-9));
+      expect(boardTopMargin(0), 0);
+    });
+  });
+
+  group('scaledControlRowHeight', () {
+    test('grows with text up to the shared cap, never shrinks below base', () {
+      expect(scaledControlRowHeight(1.0), trayControlRowHeight);
+      expect(scaledControlRowHeight(0.8), trayControlRowHeight);
+      expect(scaledControlRowHeight(1.2), closeTo(48 * 1.2, 1e-9));
+      // Past the cap the band stops growing — the row clamps its text at
+      // the same point, so buttons and band stay in step.
+      expect(
+        scaledControlRowHeight(3.0),
+        closeTo(48 * trayControlRowMaxTextScale, 1e-9),
+      );
+    });
+  });
+
   group('trayColumnVisible', () {
     // Window: scrolled 100 to the right, 400 wide -> visible span 100..500.
     const scroll = 100.0;

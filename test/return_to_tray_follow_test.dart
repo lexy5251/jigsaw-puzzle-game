@@ -8,6 +8,7 @@ import 'package:flame/game.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jigsaw_puzzle/jigsaw_game.dart';
 import 'package:jigsaw_puzzle/piece_tray.dart';
+import 'package:jigsaw_puzzle/puzzle_logic.dart';
 import 'package:jigsaw_puzzle/puzzle_piece.dart';
 import 'package:jigsaw_puzzle/puzzle_save.dart';
 
@@ -15,9 +16,7 @@ import 'test_helpers.dart';
 
 void main() {
   const key = 'return-follow-tests';
-  const width = 1600 / 6;
-  const height = 1067 / 4;
-  Vector2 home(int index) => Vector2(index % 6 * width, index ~/ 6 * height);
+  final Vector2 Function(int) home = grid6x4Home;
 
   Future<JigsawGame> boot(
     WidgetTester tester,
@@ -128,29 +127,32 @@ void main() {
     expect(tray.landingPieceIndex, isNull);
   });
 
-  testWidgets('the finger decides: releasing above the tray keeps the piece '
-      'on the board even when its center hangs over the tray', (tester) async {
+  testWidgets('the finger decides: releasing above the return band keeps the '
+      'piece on the board even when its center hangs inside it', (tester) async {
     final store = InMemorySaveStore();
     final game = await boot(tester, store, loose: {8: home(8)});
     final piece = pieceOf(game, 8)!;
     final trayTop = trayOf(game).position.y;
+    // The return boundary is the control-row band's top, 48px above the
+    // tray itself (drops in the band count as tray returns).
+    final bandTop = trayTop - trayControlRowHeight;
 
     // Grab the piece near its TOP edge, so its center hangs well below the
-    // finger, then stop with the finger just above the tray: the center is
-    // inside the tray band, the finger is not.
+    // finger, then stop with the finger just above the band: the center is
+    // inside the return zone, the finger is not.
     final grab = game.camera.localToGlobal(
       piece.position + Vector2(piece.size.x / 2, piece.size.y * 0.1),
     );
     final halfPieceOnScreen =
         piece.size.y / 2 * game.camera.viewfinder.zoom;
-    final fingerEnd = Vector2(game.size.x / 2, trayTop - 10);
+    final fingerEnd = Vector2(game.size.x / 2, bandTop - 10);
     final gesture = await dragTo(tester, grab, fingerEnd);
 
     final carried = pieceOf(game, 8)!;
     expect(
       centerOnScreen(game, carried).y,
-      greaterThan(trayTop),
-      reason: 'the setup must hang the center over the tray '
+      greaterThan(bandTop),
+      reason: 'the setup must hang the center inside the return band '
           '(half piece on screen: $halfPieceOnScreen)',
     );
 
@@ -161,10 +163,10 @@ void main() {
 
     expect(pieceOf(game, 8), isNotNull);
     expect(game.trayPieceIndexes, isNot(contains(8)));
-    // The normal drop rules ran: the piece was pushed clear of the tray.
+    // The normal drop rules ran: the piece was pushed clear of the band.
     final settled = pieceOf(game, 8)!;
     final bottom = game.camera.localToGlobal(settled.position + settled.size);
-    expect(bottom.y, lessThan(trayTop));
+    expect(bottom.y, lessThanOrEqualTo(bandTop));
   });
 
   testWidgets('a cancelled gesture never returns the piece to the tray', (

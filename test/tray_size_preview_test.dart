@@ -10,153 +10,14 @@
 // never go stale. Sheets 2-4 (iPad portrait/landscape, tall web window):
 // three large-screen piece-size policies for the owner's ruling.
 
-import 'dart:math';
 import 'dart:ui' as ui;
 
-import 'package:flame/flame.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:jigsaw_puzzle/game_screen.dart';
-import 'package:jigsaw_puzzle/puzzle_catalog.dart';
 import 'package:jigsaw_puzzle/puzzle_logic.dart';
-import 'package:jigsaw_puzzle/studio_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'test_helpers.dart';
-
-/// Decodes a bundled catalog photo and center-crops it square, matching the
-/// decided 1:1 catalog shape before the regenerated images land.
-Future<ui.Image> _squareCatalogPhoto(String assetPath) async {
-  final source = await decodeAssetImage(assetPath);
-  try {
-    final side = min(source.width, source.height);
-    final recorder = ui.PictureRecorder();
-    Canvas(recorder).drawImageRect(
-      source,
-      Rect.fromLTWH(
-        (source.width - side) / 2,
-        (source.height - side) / 2,
-        side.toDouble(),
-        side.toDouble(),
-      ),
-      Rect.fromLTWH(0, 0, side.toDouble(), side.toDouble()),
-      Paint()..filterQuality = FilterQuality.high,
-    );
-    final picture = recorder.endRecording();
-    try {
-      return await picture.toImage(side, side);
-    } finally {
-      picture.dispose();
-    }
-  } finally {
-    source.dispose();
-  }
-}
-
-/// Boots the real GameScreen on [photo] (ownership transfers: the panel's
-/// game disposes it via the image cache) and returns the captured screen.
-Future<ui.Image> _captureGamePanel(
-  WidgetTester tester, {
-  required ui.Image photo,
-  required String panelId,
-  required Size screenSize,
-  required int trayColumns,
-  double? trayMaxThumbnailHeight,
-}) async {
-  final assetName = '$panelId.webp';
-  Flame.images.add(assetName, photo);
-  final boundaryKey = GlobalKey();
-  await pumpPhoneApp(
-    tester,
-    GameScreen(
-      image: PuzzleImage(
-        id: panelId,
-        title: 'Tray preview',
-        categoryId: 'animals',
-        fileName: assetName,
-      ),
-      // Square cells on the square photo, like the migrated catalog.
-      size: const PuzzleSize(columns: 5, rows: 5),
-      soundsFactory: SilentGameSounds.new,
-      trayColumns: trayColumns,
-      trayMaxThumbnailHeight: trayMaxThumbnailHeight,
-    ),
-    size: screenSize,
-    boundaryKey: boundaryKey,
-  );
-  await currentGame(tester).loaded;
-  // Same settle window as the tray pixel tests: lets the cut pieces mount
-  // and the tray lay out its thumbnails.
-  for (var i = 0; i < 3; i++) {
-    await tester.pump(const Duration(milliseconds: 16));
-  }
-  return capturePreviewImage(boundaryKey);
-}
-
-/// Draws the captured panels side by side with a label band on top and
-/// writes the sheet. Takes ownership of the panel images.
-Future<void> _composeSheet(
-  List<(ui.Image, String)> panels,
-  String path,
-) async {
-  const margin = 48.0;
-  const gap = 48.0;
-  const labelBand = 120.0;
-  try {
-    final sheetWidth =
-        margin * 2 +
-        panels.fold(0.0, (sum, p) => sum + p.$1.width) +
-        (panels.length - 1) * gap;
-    final sheetHeight =
-        margin * 2 +
-        labelBand +
-        panels.map((p) => p.$1.height).reduce(max).toDouble();
-
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder)
-      ..drawRect(
-        Rect.fromLTWH(0, 0, sheetWidth, sheetHeight),
-        Paint()..color = StudioColors.ground,
-      );
-    var left = margin;
-    for (final (panel, label) in panels) {
-      final text = TextPainter(
-        text: TextSpan(
-          text: label,
-          style: const TextStyle(
-            fontFamily: 'Nunito',
-            fontWeight: FontWeight.w800,
-            fontSize: 56,
-            color: StudioColors.ink,
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      text.paint(
-        canvas,
-        Offset(
-          left + (panel.width - text.width) / 2,
-          margin + (labelBand - text.height) / 2,
-        ),
-      );
-      text.dispose();
-      canvas.drawImage(panel, Offset(left, margin + labelBand), Paint());
-      left += panel.width + gap;
-    }
-    final picture = recorder.endRecording();
-    final sheet = await picture.toImage(sheetWidth.ceil(), sheetHeight.ceil());
-    picture.dispose();
-    try {
-      await writePreviewPng(sheet, path);
-    } finally {
-      sheet.dispose();
-    }
-  } finally {
-    for (final (panel, _) in panels) {
-      panel.dispose();
-    }
-  }
-}
 
 void main() {
   final enabled = previewEnabled('TRAY_SIZE_PREVIEW');
@@ -169,7 +30,7 @@ void main() {
       await loadMaterialIcons();
 
       final (width, height, _) = previewPhoneSizes.first;
-      final square = await _squareCatalogPhoto(sourcePhoto);
+      final square = await squareCatalogPhoto(sourcePhoto);
       final panels = <(ui.Image, String)>[];
       try {
         for (final columns in const [6, 5, 4, 3]) {
@@ -178,7 +39,7 @@ void main() {
               ? 'Today - $columns across'
               : '$columns across';
           panels.add((
-            await _captureGamePanel(
+            await captureGameScreenPanel(
               tester,
               photo: square.clone(),
               panelId: 'tray-density-$columns',
@@ -194,7 +55,7 @@ void main() {
       } finally {
         square.dispose();
       }
-      await _composeSheet(panels, 'docs/tray-size-preview.png');
+      await composePreviewSheet(panels, 'docs/tray-size-preview.png');
     });
   }, skip: !enabled);
 
@@ -219,13 +80,13 @@ void main() {
         (Size(800, 1200), 'web-tall'),
       ];
 
-      final square = await _squareCatalogPhoto(sourcePhoto);
+      final square = await squareCatalogPhoto(sourcePhoto);
       try {
         for (final (screenSize, screenName) in screens) {
           final panels = <(ui.Image, String)>[];
           for (final (maxThumbnail, label) in policies) {
             panels.add((
-              await _captureGamePanel(
+              await captureGameScreenPanel(
                 tester,
                 photo: square.clone(),
                 panelId: 'tray-$screenName-${maxThumbnail ?? 'uncapped'}',
@@ -236,7 +97,7 @@ void main() {
               label,
             ));
           }
-          await _composeSheet(panels, 'docs/tray-size-$screenName.png');
+          await composePreviewSheet(panels, 'docs/tray-size-$screenName.png');
         }
       } finally {
         square.dispose();

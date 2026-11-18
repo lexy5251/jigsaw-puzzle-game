@@ -15,8 +15,8 @@ import 'test_helpers.dart';
 void main() {
   const columns = 6;
   const rows = 4;
-  const width = 1600 / columns;
-  const height = 1067 / rows;
+  const width = testPhotoWidth / columns;
+  const height = testPhotoHeight / rows;
 
   /// Boots a 6x4 game with piece 8 loose mid-board, piece 3 locked, and the
   /// rest in the tray.
