@@ -18,8 +18,8 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
 
-      // An Alpine daily under the current 70-image catalog.
-      DateTime fixedNow() => DateTime(2026, 12, 12, 14);
+      // An Alpine daily under the current 80-image catalog.
+      DateTime fixedNow() => DateTime(2027, 2, 21, 14);
       final daily = dailyPuzzleFor(fixedNow());
       expect(daily.id, 'alpine-lakes-panorama');
       final savedSize = puzzleSizes[easyInProgress ? 0 : 1];
@@ -31,7 +31,7 @@ void main() {
         // Begun today, so the daily card counts it as in progress.
         ): fullTraySave(
           savedSize.pieceCount,
-          startedDay: '2026-12-12',
+          startedDay: '2027-02-21',
         ).toJsonString(),
       });
       await pumpSelectScreen(tester, clock: fixedNow);

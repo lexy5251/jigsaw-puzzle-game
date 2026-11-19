@@ -89,6 +89,7 @@ const puzzleCategories = [
   PuzzleCategory(id: 'flowers', title: 'Flowers & Gardens'),
   PuzzleCategory(id: 'cities', title: 'Cities & Travel'),
   PuzzleCategory(id: 'vintage_prints', title: 'Vintage Prints'),
+  PuzzleCategory(id: 'food', title: 'Food & Harvest'),
   PuzzleCategory(id: 'art', title: 'Art & Patterns'),
 ];
 
@@ -458,6 +459,67 @@ const puzzleCatalog = [
     title: 'Flower Bicycle',
     categoryId: 'vintage_prints',
     fileName: 'vintage_prints/flower_bicycle_print.webp',
+  ),
+  // -- Food & Harvest --
+  PuzzleImage(
+    id: 'farmers-market-stall',
+    title: "Farmers' Market",
+    categoryId: 'food',
+    fileName: 'food/farmers_market_stall.webp',
+  ),
+  PuzzleImage(
+    id: 'bread-and-cheese-board',
+    title: 'Bread & Cheese',
+    categoryId: 'food',
+    fileName: 'food/bread_and_cheese_board.webp',
+  ),
+  PuzzleImage(
+    id: 'vineyard-grape-harvest',
+    title: 'Grape Harvest',
+    categoryId: 'food',
+    fileName: 'food/vineyard_grape_harvest.webp',
+  ),
+  PuzzleImage(
+    id: 'berry-jam-pantry',
+    title: 'Jam Pantry',
+    categoryId: 'food',
+    fileName: 'food/berry_jam_pantry.webp',
+  ),
+  PuzzleImage(
+    id: 'pumpkin-farm-stand',
+    title: 'Pumpkin Stand',
+    categoryId: 'food',
+    fileName: 'food/pumpkin_farm_stand.webp',
+  ),
+  PuzzleImage(
+    id: 'citrus-lemonade-table',
+    title: 'Summer Lemonade',
+    categoryId: 'food',
+    fileName: 'food/citrus_lemonade_table.webp',
+  ),
+  PuzzleImage(
+    id: 'orchard-apple-harvest',
+    title: 'Apple Harvest',
+    categoryId: 'food',
+    fileName: 'food/orchard_apple_harvest.webp',
+  ),
+  PuzzleImage(
+    id: 'pasta-making-table',
+    title: 'Pasta Afternoon',
+    categoryId: 'food',
+    fileName: 'food/pasta_making_table.webp',
+  ),
+  PuzzleImage(
+    id: 'harvest-feast-table',
+    title: 'Harvest Feast',
+    categoryId: 'food',
+    fileName: 'food/harvest_feast_table.webp',
+  ),
+  PuzzleImage(
+    id: 'gingerbread-baking',
+    title: 'Gingerbread Day',
+    categoryId: 'food',
+    fileName: 'food/gingerbread_baking.webp',
   ),
   // -- Art & Patterns --
   PuzzleImage(

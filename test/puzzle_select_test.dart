@@ -49,9 +49,9 @@ void main() {
   for (final dailyMatchesCatalog in [false, true]) {
     testWidgets('catalog selection and completion use the fixed date when the daily image '
         '${dailyMatchesCatalog ? 'matches' : 'differs'}', (tester) async {
-      // Pinned to the current 70-image catalog: an Alpine day vs not.
+      // Pinned to the current 80-image catalog: an Alpine day vs not.
       final now = dailyMatchesCatalog
-          ? DateTime(2026, 12, 12, 14)
+          ? DateTime(2027, 2, 21, 14)
           : DateTime(2026, 11, 2, 14);
       // Pin both cases so the duplicate-title regression is always exercised.
       expect(
@@ -134,8 +134,8 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
 
-      // An Alpine daily under the current 70-image catalog.
-      final now = DateTime(2026, 12, 12, 14);
+      // An Alpine daily under the current 80-image catalog.
+      final now = DateTime(2027, 2, 21, 14);
       expect(dailyPuzzleFor(now).title, 'Alpine Lake Morning');
       await pumpSelectScreen(tester, clock: () => now);
 
@@ -197,7 +197,7 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
 
-      final now = DateTime(2026, 12, 12, 14);
+      final now = DateTime(2027, 2, 21, 14);
       // A save on the last size — the row deepest below the list's fold.
       final saved = puzzleSizes.last;
       SharedPreferences.setMockInitialValues({
@@ -207,7 +207,7 @@ void main() {
           rows: saved.rows,
         ): fullTraySave(
           saved.pieceCount,
-          startedDay: '2026-12-12',
+          startedDay: '2027-02-21',
         ).toJsonString(),
       });
       await pumpSelectScreen(tester, clock: () => now);

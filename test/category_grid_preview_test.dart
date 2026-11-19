@@ -3,6 +3,8 @@
 // as an image before a device build. Skipped unless CATEGORY_GRID_PREVIEW=1:
 //   CATEGORY_GRID_PREVIEW=1 flutter test test/category_grid_preview_test.dart
 
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jigsaw_puzzle/category_screen.dart';
@@ -22,7 +24,12 @@ void main() {
       // the test-default Ahem boxes.
       await loadStudioFonts();
 
-      final category = puzzleCategories.firstWhere((c) => c.id == 'landscapes');
+      // Judged category defaults to landscapes; override to vet a new
+      // category's grid: CATEGORY_GRID_PREVIEW_CATEGORY=food
+      final categoryId =
+          Platform.environment['CATEGORY_GRID_PREVIEW_CATEGORY'] ??
+          'landscapes';
+      final category = puzzleCategories.firstWhere((c) => c.id == categoryId);
 
       // The shared judging sizes.
       for (final (width, height, name) in previewPhoneSizes) {
@@ -45,7 +52,7 @@ void main() {
 
         await capturePreviewPng(
           boundaryKey,
-          'docs/category-grid-preview-$name.png',
+          'docs/category-grid-preview-$categoryId-$name.png',
         );
       }
     });

@@ -181,6 +181,13 @@ const studioCategoryStyles = <String, StudioCategoryStyle>{
     accent: Color(0xFFAD6A74),
     tint: Color(0xFFF2DCDC),
   ),
+  // TEMP cinnamon, pending owner ruling — the warm ochre slot of the aged
+  // palette, picked to stay distinct from cozy's terracotta and flowers'
+  // mustard.
+  'food': StudioCategoryStyle(
+    accent: Color(0xFFA8784A),
+    tint: Color(0xFFF0E3CF),
+  ),
   'art': StudioCategoryStyle(
     accent: Color(0xFF9D6A80),
     tint: Color(0xFFEAD9E0),

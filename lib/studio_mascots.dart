@@ -32,6 +32,9 @@ const categoryMascots = <String, StudioMascot>{
   'flowers': StudioMascot.daisy,
   'cities': StudioMascot.houses,
   'vintage_prints': StudioMascot.sunflower,
+  // TEMP: no food motif in the mockup cast yet (owner ruling pending);
+  // the explicit palette entry keeps the sync test honest about that.
+  'food': StudioMascot.palette,
   'art': StudioMascot.palette,
 };
 
