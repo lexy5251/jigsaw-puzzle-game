@@ -431,70 +431,84 @@ class _SizeOption extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Material(
-      color: StudioColors.card,
-      shape: RoundedRectangleBorder(
-        borderRadius: _radius,
-        side: selected
-            ? const BorderSide(color: StudioColors.ink, width: 2)
-            : const BorderSide(color: StudioColors.boardOutline),
+    final shape = RoundedRectangleBorder(
+      borderRadius: _radius,
+      side: selected
+          // The sticker treatment marks the picked row (riso chrome).
+          ? const BorderSide(color: StudioColors.structureInk, width: 2.5)
+          : const BorderSide(color: StudioColors.boardOutline),
+    );
+    return DecoratedBox(
+      // Side-less shape: this box exists only to carry the hard offset
+      // shadow — the Material below paints the border, and giving both
+      // the sided shape would stroke it twice (visibly darkening the
+      // translucent unselected outline).
+      decoration: ShapeDecoration(
+        shape: const RoundedRectangleBorder(borderRadius: _radius),
+        shadows: selected ? const [PaintedCard.groundShadow] : const [],
       ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: _radius,
-        // The labeled node below owns the activation; without this the
-        // InkWell adds a second, unlabeled tap stop per row for screen
-        // readers and switch access.
-        excludeFromSemantics: true,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          child: Row(
-            children: [
-              Expanded(
-                child: Semantics(
-                  // The stable e2e hook. The labeled node must own the
-                  // activation too — screen readers send their tap here.
-                  identifier:
-                      'puzzle-size-${image.id}-${size.columns}x${size.rows}',
-                  label: '${size.pieceCount} pieces',
-                  button: true,
-                  selected: selected,
-                  onTap: onTap,
-                  child: ExcludeSemantics(
-                    child: Text.rich(
-                      TextSpan(
-                        children: [
-                          TextSpan(
-                            text: '${size.pieceCount}',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          const TextSpan(text: ' pieces'),
-                        ],
+      child: Material(
+        color: StudioColors.card,
+        shape: shape,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: _radius,
+          // The labeled node below owns the activation; without this the
+          // InkWell adds a second, unlabeled tap stop per row for screen
+          // readers and switch access.
+          excludeFromSemantics: true,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Semantics(
+                    // The stable e2e hook. The labeled node must own the
+                    // activation too — screen readers send their tap here.
+                    identifier:
+                        'puzzle-size-${image.id}-${size.columns}x${size.rows}',
+                    label: '${size.pieceCount} pieces',
+                    button: true,
+                    selected: selected,
+                    onTap: onTap,
+                    child: ExcludeSemantics(
+                      child: Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(
+                              text: '${size.pieceCount}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const TextSpan(text: ' pieces'),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-              // The Maestro e2e flow (resume_after_restart.yaml) asserts
-              // these exact status texts — change them together.
-              if (status == _SizeStatus.resume)
-                Semantics(
-                  // Identify this size's status independently of the daily
-                  // card's status text.
-                  identifier:
-                      'puzzle-in-progress-${image.id}-'
-                      '${size.columns}x${size.rows}',
-                  child: Text(
-                    statusInProgressLabel,
-                    style: TextStyle(color: theme.colorScheme.primary),
+                // The Maestro e2e flow (resume_after_restart.yaml) asserts
+                // these exact status texts — change them together.
+                if (status == _SizeStatus.resume)
+                  Semantics(
+                    // Identify this size's status independently of the daily
+                    // card's status text.
+                    identifier:
+                        'puzzle-in-progress-${image.id}-'
+                        '${size.columns}x${size.rows}',
+                    child: Text(
+                      statusInProgressLabel,
+                      style: TextStyle(color: theme.colorScheme.primary),
+                    ),
+                  )
+                else if (status == _SizeStatus.replay)
+                  Text(
+                    statusCompletedLabel,
+                    style: TextStyle(color: theme.colorScheme.tertiary),
                   ),
-                )
-              else if (status == _SizeStatus.replay)
-                Text(
-                  statusCompletedLabel,
-                  style: TextStyle(color: theme.colorScheme.tertiary),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

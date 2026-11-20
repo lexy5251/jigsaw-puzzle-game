@@ -9,6 +9,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import 'puzzle_catalog.dart';
+import 'riso_icons.dart';
 import 'studio_surfaces.dart';
 import 'studio_theme.dart';
 
@@ -66,7 +67,7 @@ class CompletionCard extends StatelessWidget {
   /// Deeper than the resting card shadows: this card floats over a blur,
   /// so its edge only exists as shadow.
   static const _floatShadow = BoxShadow(
-    color: StudioColors.cardShadow,
+    color: StudioColors.warmShadow,
     offset: Offset(0, 10),
     blurRadius: 30,
     spreadRadius: -6,
@@ -139,7 +140,6 @@ class CompletionCard extends StatelessWidget {
       return SizedBox(
         width: math.min(maxCardWidth, 360),
         child: PaintedCard(
-          variant: 2,
           shadow: _floatShadow,
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
           child: Column(
@@ -168,7 +168,6 @@ class CompletionCard extends StatelessWidget {
     return SizedBox(
       width: math.min(maxCardWidth, 620),
       child: PaintedCard(
-        variant: 2,
         shadow: _floatShadow,
         padding: const EdgeInsets.all(16),
         child: Row(
@@ -214,7 +213,8 @@ class CompletionCard extends StatelessWidget {
       Text(
         'FINISHED',
         style: theme.textTheme.labelSmall?.copyWith(
-          color: StudioColors.terracotta,
+          // Eyebrows are structure-dark small caps (riso spec).
+          color: StudioColors.structureDark,
           fontWeight: FontWeight.w800,
           letterSpacing: 2.4,
         ),
@@ -266,7 +266,7 @@ class CompletionCard extends StatelessWidget {
                       Text(
                         'BONUS PUZZLE UNLOCKED',
                         style: theme.textTheme.labelSmall?.copyWith(
-                          color: StudioColors.terracotta,
+                          color: StudioColors.structureDark,
                           fontWeight: FontWeight.w800,
                           letterSpacing: 1.6,
                         ),
@@ -306,15 +306,11 @@ class CompletionCard extends StatelessWidget {
                 ),
                 Semantics(
                   identifier: 'bonus-play-now',
-                  // Moss, not the themed terracotta: the card keeps ONE
-                  // terracotta hero (Next puzzle); the gift's own action
-                  // stays a step quieter.
                   child: FilledButton(
                     onPressed: onPlayBonus,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: StudioColors.moss,
-                      foregroundColor: StudioColors.onTerracotta,
-                    ),
+                    // Actions are tomato (the old quieter-moss distinction
+                    // retired with the chrome) — the theme already styles
+                    // FilledButton, so no override needed.
                     child: const Text('Play now'),
                   ),
                 ),
@@ -334,7 +330,11 @@ class CompletionCard extends StatelessWidget {
         width: double.infinity,
         child: FilledButton.icon(
           onPressed: onNextPuzzle,
-          icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+          icon: const RisoIcon(
+            RisoGlyph.forward,
+            size: 18,
+            color: StudioColors.onTomato,
+          ),
           iconAlignment: IconAlignment.end,
           label: const Text('Next puzzle'),
         ),

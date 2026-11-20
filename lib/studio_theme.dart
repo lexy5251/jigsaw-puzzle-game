@@ -1,9 +1,12 @@
-// The approved "Studio — Linen & Terracotta" look (see the APPROVED style
-// section in docs/puzzle-game-mvp-plan.md). This file is the single source
-// of truth for its tokens; screens read colors via Theme.of(context) and
-// Flame code uses StudioColors directly.
+// The approved "riso chrome" look (owner-locked 2026-11-14, built out through
+// mock rounds v17–v26b; palette doc: docs/ui-theme-colors.md, icon reference:
+// docs/design/icon-set-final.png). This file is the single source of truth for
+// its tokens; screens read colors via Theme.of(context) and Flame code uses
+// StudioColors directly.
 
 import 'package:flutter/material.dart';
+
+import 'riso_icons.dart';
 
 /// Status wording shared by every surface that names a run's state (size
 /// sheet, category badges, daily card). The Maestro e2e flows assert these
@@ -11,59 +14,92 @@ import 'package:flutter/material.dart';
 const statusInProgressLabel = 'In progress';
 const statusCompletedLabel = 'Completed';
 
-/// Design tokens. Hex values come from the approved mockup
-/// (docs/design/brushwork-mockup.html) and must stay in sync with the plan.
+/// Design tokens. Hex values come from the locked v17 riso palette
+/// (docs/ui-theme-colors.md) and must stay in sync with it.
 abstract final class StudioColors {
-  /// Warm canvas the whole app sits on.
-  static const ground = Color(0xFFF0E7D2);
+  /// THE structure ink: borders, hard offset shadows, big titles, doodles.
+  /// Owner-locked electric violet; the official fallback is cobalt
+  /// 0xFF2B4ECB (with [structureDark] 0xFF223FA6) — swapping these two
+  /// constants is the entire violet→cobalt change.
+  static const structureInk = Color(0xFF7A4BFF);
 
-  /// Linen card surface.
-  static const card = Color(0xFFF9F3E3);
+  /// Darker structure shade for small-caps labels (eyebrows, section
+  /// kickers) and "Completed" status words.
+  static const structureDark = Color(0xFF5A34D6);
 
-  /// Soft warm shadow under painted cards (mockup: rgba(40,25,10,.35)).
-  static const cardShadow = Color(0x5928190A);
+  /// Cream page background the whole app sits on.
+  static const ground = Color(0xFFF6EEDF);
 
-  /// Light mat ring painted over framed artwork.
-  static const matRing = Color(0x8CFFFFFF);
+  /// Card / hero fill, a half-step lighter than the ground.
+  static const card = Color(0xFFFDF8EC);
 
-  /// Warm near-black used for all text and icons.
-  static const ink = Color(0xFF423528);
+  /// Hard sticker shadow under cards — same ink as the border, zero blur
+  /// (rule 2 of the dials: border + shadow in ONE ink = printed shape).
+  /// NEVER use with a blurRadius: an opaque ink under blur reads as a
+  /// saturated glow — blurred surfaces take [warmShadow].
+  static const cardShadow = structureInk;
 
-  /// Primary accent.
-  static const terracotta = Color(0xFFBD6A48);
+  /// The translucent warm shadow for the few surfaces that legitimately
+  /// keep a soft BLURRED shadow (gameplay chrome, the completion card's
+  /// float) — these sit outside the sticker system by the board-calm gate.
+  static const warmShadow = Color(0x5928190A);
 
-  /// Text/icons on terracotta.
-  static const onTerracotta = Color(0xFFFDF8EC);
+  /// Near-black text ink for titles, names and body. Never structure ink.
+  static const ink = Color(0xFF26231C);
 
-  /// Secondary accent.
-  static const moss = Color(0xFF7D8A5A);
+  /// Secondary text (counts, captions, inactive labels).
+  static const mutedInk = Color(0xFF6B6657);
 
-  /// Tertiary accent (completed states, highlights).
-  static const sunflower = Color(0xFFD9A33F);
+  /// Action color — Play/Begin buttons, active-tab underline, streak-filled
+  /// pieces, "In progress" words. ACTIONS AND PROGRESS ONLY.
+  static const tomato = Color(0xFFE34A33);
 
-  /// Soft fill for chips and selected states.
-  static const chip = Color(0xFFE4D7BA);
+  /// Same-hue press shadow under tomato buttons.
+  static const tomatoPress = Color(0xFFB23420);
 
-  /// Flame board backdrop — a step below [ground] so the play area reads
-  /// as its own zone without a hard border.
+  /// Text/icons on tomato.
+  static const onTomato = Color(0xFFFFF7EC);
+
+  /// The one "slipped ink" accent: big-title misprint shadow only.
+  static const salmon = Color(0xFFEFA08E);
+
+  /// Warm blush fill for selected chip/control states (v26b tray-row pick).
+  static const chip = Color(0xFFF8E3DE);
+
+  // ---- migration aliases (old studio roles → riso values). Call sites
+  // move to the named riso tokens as each page is restyled; these keep the
+  // in-between states compiling with sane colors.
+
+  /// Old primary accent slot — now the tomato action ink.
+  static const terracotta = tomato;
+
+  /// Text/icons on the primary accent.
+  static const onTerracotta = onTomato;
+
+  /// Old secondary accent (story trail, gift CTA) — structure ink now owns
+  /// the decorative uses; action uses are being moved to tomato per page.
+  static const moss = structureInk;
+
+  /// Old tertiary accent (completed states) — completed is structure-dark
+  /// in the riso chrome.
+  static const sunflower = structureDark;
+
+  // ---- gameplay surfaces: deliberately UNCHANGED. The board and tray stay
+  // quiet warm neutrals so the riso chrome never competes with the puzzle
+  // (owner's board-calm gate).
+
+  /// Flame board backdrop — the classic warm tan.
   static const board = Color(0xFFE7DABD);
 
-  /// Board outline stroke: ink at ~35%, visible on the light backdrop
-  /// (the old translucent white disappeared on it).
+  /// Board outline stroke on light backdrops (warm near-black at ~35%).
   static const boardOutline = Color(0x59423528);
 
-  /// Board outline for dark backdrops — cream at the same ~35%; the ink
-  /// stroke composites to near-invisible on slate and charcoal.
+  /// Board outline for dark backdrops — cream at the same ~35%.
   static const boardOutlineOnDark = Color(0x59FDF8EC);
 
   /// Piece tray wood; keeps a hint of translucency so dragged pieces
   /// passing under its edge stay faintly visible.
   static const tray = Color(0xF2E0CFA9);
-
-  /// Card ground variants — some cards sit on blush or moss instead of
-  /// linen ("cards may sit on cream/blush/moss grounds").
-  static const blushGround = Color(0xFFF4DDCD);
-  static const mossGround = Color(0xFFE5E4C8);
 }
 
 /// One selectable board backdrop. Dark fills need their own outline color:
@@ -139,9 +175,10 @@ const defaultBoardColorOption = BoardColorOption(
 BoardColorOption boardColorOptionFor(String id) => boardColorOptions
     .firstWhere((option) => option.id == id, orElse: () => defaultBoardColorOption);
 
-/// Per-category personality (mockup section F): only two things change per
-/// category — the accent and its tint. One table over the shared theme,
-/// never six themes.
+/// Per-category personality: only two things change per category — the
+/// accent and its tint. One table over the shared theme, never eight themes.
+/// Under the riso chrome these color only small in-page touches (mascot
+/// motifs); cards sit plain on the ground.
 class StudioCategoryStyle {
   const StudioCategoryStyle({required this.accent, required this.tint});
 
@@ -199,52 +236,59 @@ const studioCategoryStyles = <String, StudioCategoryStyle>{
 StudioCategoryStyle categoryStyleFor(String categoryId) =>
     studioCategoryStyles[categoryId] ??
     const StudioCategoryStyle(
-      accent: StudioColors.terracotta,
+      accent: StudioColors.tomato,
       tint: StudioColors.chip,
     );
 
-/// The app-wide theme: light, warm, rounded. Fredoka carries headings,
+/// The app-wide theme: cream ground, violet structure, tomato actions.
+/// Rokkitt (the shippable Rockwell cousin) carries headings and card names,
 /// Nunito carries everything else.
 ThemeData studioTheme() {
   final scheme =
       ColorScheme.fromSeed(
-        seedColor: StudioColors.terracotta,
+        seedColor: StudioColors.tomato,
         brightness: Brightness.light,
       ).copyWith(
-        primary: StudioColors.terracotta,
-        onPrimary: StudioColors.onTerracotta,
-        secondary: StudioColors.moss,
-        tertiary: StudioColors.sunflower,
+        primary: StudioColors.tomato,
+        onPrimary: StudioColors.onTomato,
+        secondary: StudioColors.structureInk,
+        tertiary: StudioColors.structureDark,
         surface: StudioColors.card,
         onSurface: StudioColors.ink,
         surfaceContainerHighest: StudioColors.chip,
       );
 
   final base = ThemeData(colorScheme: scheme, fontFamily: 'Nunito');
-  // Inactive nav/tab items: half-strength ink, one value for icons and
-  // labels alike so the pieces can't drift apart.
-  final mutedInk = StudioColors.ink.withValues(alpha: 0.5);
+  // Inactive nav/tab items: the muted text ink, one value for icons and
+  // labels alike so the pieces can't drift apart. Active items are TEXT ink
+  // with the tomato underline/icon doing the "on" work (the nav grammar).
   Color navItemColor(Set<WidgetState> states) =>
       states.contains(WidgetState.selected)
-      ? StudioColors.terracotta
-      : mutedInk;
+      ? StudioColors.ink
+      : StudioColors.mutedInk;
   final textTheme = base.textTheme
       .apply(bodyColor: StudioColors.ink, displayColor: StudioColors.ink)
       .copyWith(
         bodySmall: base.textTheme.bodySmall?.copyWith(
-          color: scheme.onSurface.withValues(alpha: 0.6),
+          color: StudioColors.mutedInk,
         ),
         headlineSmall: base.textTheme.headlineSmall?.copyWith(
-          fontFamily: 'Fredoka',
-          fontWeight: FontWeight.w600,
+          fontFamily: 'Rokkitt',
+          fontWeight: FontWeight.w800,
           color: StudioColors.ink,
         ),
         titleLarge: base.textTheme.titleLarge?.copyWith(
-          fontFamily: 'Fredoka',
-          fontWeight: FontWeight.w600,
+          fontFamily: 'Rokkitt',
+          fontWeight: FontWeight.w700,
           color: StudioColors.ink,
         ),
         titleMedium: base.textTheme.titleMedium?.copyWith(
+          fontFamily: 'Rokkitt',
+          fontWeight: FontWeight.w700,
+          color: StudioColors.ink,
+        ),
+        titleSmall: base.textTheme.titleSmall?.copyWith(
+          fontFamily: 'Rokkitt',
           fontWeight: FontWeight.w700,
           color: StudioColors.ink,
         ),
@@ -253,6 +297,11 @@ ThemeData studioTheme() {
   return base.copyWith(
     scaffoldBackgroundColor: StudioColors.ground,
     textTheme: textTheme,
+    // Every BackButton app-wide draws the hand-bent arrow instead of the
+    // Material glyph (tests still find.byType(BackButton)).
+    actionIconTheme: ActionIconThemeData(
+      backButtonIconBuilder: (context) => const RisoIcon(RisoGlyph.back),
+    ),
     appBarTheme: const AppBarTheme(
       backgroundColor: StudioColors.ground,
       foregroundColor: StudioColors.ink,
@@ -262,15 +311,17 @@ ThemeData studioTheme() {
     ),
     cardTheme: CardThemeData(
       color: StudioColors.card,
-      elevation: 1,
+      elevation: 0,
       surfaceTintColor: Colors.transparent,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        backgroundColor: StudioColors.terracotta,
-        foregroundColor: StudioColors.onTerracotta,
-        shape: const StadiumBorder(),
+        backgroundColor: StudioColors.tomato,
+        foregroundColor: StudioColors.onTomato,
+        // Rounded rectangle, not a stadium — the mock's button shape; the
+        // same-hue press shadow is painted by the sticker surfaces.
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
         textStyle: const TextStyle(
           fontFamily: 'Nunito',
@@ -285,12 +336,12 @@ ThemeData studioTheme() {
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
     ),
-    // Top tabs (My Puzzles): terracotta for the active tab, half-strength
-    // ink for the rest, no hairline divider on the wallpaper.
+    // Top tabs (My Puzzles): active word in text ink over a tomato
+    // underline, the rest muted, no hairline divider on the wallpaper.
     tabBarTheme: TabBarThemeData(
-      labelColor: StudioColors.terracotta,
-      indicatorColor: StudioColors.terracotta,
-      unselectedLabelColor: mutedInk,
+      labelColor: StudioColors.ink,
+      indicatorColor: StudioColors.tomato,
+      unselectedLabelColor: StudioColors.mutedInk,
       dividerColor: Colors.transparent,
       labelStyle: const TextStyle(
         fontFamily: 'Nunito',
@@ -303,13 +354,13 @@ ThemeData studioTheme() {
         fontWeight: FontWeight.w700,
       ),
     ),
-    // The mockup's bottom nav: items sit straight on the wallpaper, the
-    // active one in accent with a chip-colored dot behind its icon,
-    // inactive ones at half strength.
+    // Bottom nav: items sit straight on the cream, no indicator pill — the
+    // active item is the tomato-filled piece icon + ink label (home_shell
+    // paints the underline), inactive ones in muted ink.
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: StudioColors.ground,
       elevation: 0,
-      indicatorColor: StudioColors.chip,
+      indicatorColor: Colors.transparent,
       indicatorShape: const StadiumBorder(),
       iconTheme: WidgetStateProperty.resolveWith(
         (states) => IconThemeData(color: navItemColor(states)),
@@ -319,7 +370,14 @@ ThemeData studioTheme() {
           fontFamily: 'Nunito',
           fontSize: 11,
           fontWeight: FontWeight.w700,
+          letterSpacing: 1.1,
           color: navItemColor(states),
+          // The active-tab grammar: a tomato underline under the word.
+          decoration: states.contains(WidgetState.selected)
+              ? TextDecoration.underline
+              : TextDecoration.none,
+          decorationColor: StudioColors.tomato,
+          decorationThickness: 2.5,
         ),
       ),
     ),

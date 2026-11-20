@@ -28,6 +28,7 @@ import 'puzzle_catalog.dart';
 import 'puzzle_completion.dart';
 import 'puzzle_logic.dart';
 import 'puzzle_save.dart';
+import 'riso_icons.dart';
 import 'story_track.dart';
 import 'studio_surfaces.dart';
 import 'studio_theme.dart';
@@ -193,18 +194,19 @@ class _GameScreenState extends State<GameScreen> {
       // The closing tap must not also hit what's beneath it — the back
       // button or a puzzle piece.
       consumeOutsideTap: true,
-      // Dressed like the app's painted cards: warm soft shadow and round
-      // corners instead of the widget's default hard black-edged shadow.
-      // Elevation stays low — higher values wrap the shadow around the
-      // panel and it reads as a thick border on the flat ground.
+      // Dressed like the app's sticker cards: the structure-ink border
+      // carries the edge. Elevation stays low — higher values wrap the
+      // shadow around the panel and it reads as a thick border (owner's
+      // 11-17 menu-shadow ruling).
       style: const MenuStyle(
-        backgroundColor: WidgetStatePropertyAll(StudioColors.ground),
+        backgroundColor: WidgetStatePropertyAll(StudioColors.card),
         surfaceTintColor: WidgetStatePropertyAll(Colors.transparent),
-        shadowColor: WidgetStatePropertyAll(StudioColors.cardShadow),
+        shadowColor: WidgetStatePropertyAll(StudioColors.warmShadow),
         elevation: WidgetStatePropertyAll(3),
         shape: WidgetStatePropertyAll(
           RoundedRectangleBorder(
             borderRadius: BorderRadius.all(Radius.circular(16)),
+            side: BorderSide(color: StudioColors.structureInk, width: 2.5),
           ),
         ),
       ),
@@ -214,7 +216,14 @@ class _GameScreenState extends State<GameScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Board color', style: theme.textTheme.labelLarge),
+              Text(
+                'Board color',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 2,
+                  color: StudioColors.structureDark,
+                ),
+              ),
               const SizedBox(height: 10),
               // Three swatches per row; an open menu rebuilds on setState,
               // so the check mark follows the selection live.
@@ -243,19 +252,19 @@ class _GameScreenState extends State<GameScreen> {
           // Stays open: zoom is one step per tap, and the board visibly
           // zooming behind the menu is the feedback.
           closeOnActivate: false,
-          leadingIcon: const Icon(Icons.zoom_in),
+          leadingIcon: const RisoIcon(RisoGlyph.zoomIn, size: 22),
           onPressed: () => _game.zoomInStep(),
           child: const Text('Zoom in'),
         ),
         MenuItemButton(
-          leadingIcon: const Icon(Icons.replay),
+          leadingIcon: const RisoIcon(RisoGlyph.startOver, size: 22),
           onPressed: _restarting ? null : _confirmRestart,
           child: const Text('Start over'),
         ),
       ],
       builder: (context, controller, child) => IconButton(
         tooltip: 'Options',
-        icon: const Icon(Icons.more_horiz),
+        icon: const RisoIcon(RisoGlyph.options),
         onPressed: () =>
             controller.isOpen ? controller.close() : controller.open(),
       ),
@@ -602,8 +611,11 @@ class _GameScreenState extends State<GameScreen> {
                   IconButton(
                     tooltip: 'Image preview',
                     isSelected: _showGhostPreview,
-                    icon: const Icon(Icons.image_outlined),
-                    selectedIcon: const Icon(Icons.image),
+                    icon: const RisoIcon(RisoGlyph.imagePreview),
+                    selectedIcon: const RisoIcon(
+                      RisoGlyph.imagePreview,
+                      color: StudioColors.tomato,
+                    ),
                     onPressed: () {
                       setState(() => _showGhostPreview = !_showGhostPreview);
                       _game.setGhostPreview(_showGhostPreview);
@@ -747,7 +759,7 @@ class _PaletteCounter extends StatelessWidget {
           ),
           boxShadow: [
             BoxShadow(
-              color: StudioColors.cardShadow,
+              color: StudioColors.warmShadow,
               offset: Offset(0, 3),
               blurRadius: 10,
               spreadRadius: -5,
@@ -837,14 +849,9 @@ class _TrayControlRow extends StatelessWidget {
               // every supported width, so it normally never engages.
               child: FittedBox(
                 fit: BoxFit.scaleDown,
-                child: FilterChip(
-                  label: const Text('Edges only'),
-                  labelStyle: labelStyle,
-                  visualDensity: VisualDensity.compact,
+                child: EdgesOnlyToggle(
                   selected: edgesOnly,
-                  onSelected: onEdgesOnlyChanged,
-                  selectedColor: StudioColors.chip,
-                  checkmarkColor: StudioColors.ink,
+                  onChanged: onEdgesOnlyChanged,
                 ),
               ),
             ),
@@ -856,14 +863,81 @@ class _TrayControlRow extends StatelessWidget {
                 style: TextButton.styleFrom(
                   visualDensity: VisualDensity.compact,
                   textStyle: labelStyle,
+                  foregroundColor: StudioColors.ink,
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                 ),
-                icon: const Icon(Icons.move_to_inbox_outlined, size: 16),
+                icon: const RisoIcon(RisoGlyph.broom, size: 16),
                 label: const Text('Tidy'),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// The bare "Edges only" toggle (owner's v26b pick A: BOTH tray controls
+/// are bare icon + word so the pair reads even; the on-state borrows the
+/// nav's active grammar — tomato ink plus a tomato underline). Visible
+/// only so tests can read [selected] where they used to read the
+/// FilterChip's — not part of the screen's real API.
+@visibleForTesting
+class EdgesOnlyToggle extends StatelessWidget {
+  const EdgesOnlyToggle({
+    super.key,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final bool selected;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final ink = selected ? StudioColors.tomato : StudioColors.mutedInk;
+    // MergeSemantics folds the button's own node into this one — without
+    // it the toggled flag sits on a label-less ancestor and screen readers
+    // announce the button with no on/off state.
+    return MergeSemantics(
+      child: Semantics(
+        toggled: selected,
+        child: TextButton(
+        onPressed: () => onChanged(!selected),
+        style: TextButton.styleFrom(
+          visualDensity: VisualDensity.compact,
+          foregroundColor: ink,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        ),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: selected ? StudioColors.tomato : Colors.transparent,
+                width: 3,
+              ),
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 2),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                RisoIcon(RisoGlyph.edgePiece, size: 16, color: ink),
+                const SizedBox(width: 6),
+                const Text(
+                  'Edges only',
+                  style: TextStyle(
+                    fontFamily: 'Nunito',
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
       ),
     );
   }

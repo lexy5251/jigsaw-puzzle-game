@@ -62,7 +62,7 @@ void main() {
     final finishedThumbs = [cozy, landscapes[1]];
 
     await tester.runAsync(() async {
-      // Real fonts: titles render in the theme's Fredoka/Nunito, not the
+      // Real fonts: titles render in the theme's Rokkitt/Nunito, not the
       // test-default Ahem boxes — and the nav/check icons need the real
       // Material glyphs.
       await loadStudioFonts();

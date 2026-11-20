@@ -16,6 +16,7 @@ import 'package:flutter/material.dart';
 
 import 'bonus_track.dart';
 import 'puzzle_catalog.dart';
+import 'riso_icons.dart';
 import 'puzzle_completion.dart';
 import 'puzzle_launcher.dart';
 import 'story_track.dart';
@@ -92,7 +93,7 @@ class _StoryScreenState extends State<StoryScreen>
   Widget build(BuildContext context) {
     final story = _story;
     return Scaffold(
-      appBar: AppBar(title: const Text('Story')),
+      appBar: risoAppBar('Story'),
       body: story == null
           ? const SizedBox.shrink()
           : ListView(
@@ -176,7 +177,9 @@ class _HeaderCard extends StatelessWidget {
             story.complete ? 'THE END' : 'A TRUE STORY',
             textAlign: TextAlign.center,
             style: theme.textTheme.labelSmall?.copyWith(
-              color: StudioColors.terracotta,
+              // Tomato by name: the story kicker is the one eyebrow the
+              // approved mock keeps in the action ink.
+              color: StudioColors.tomato,
               fontWeight: FontWeight.w800,
               letterSpacing: 2.4,
             ),
@@ -229,7 +232,6 @@ class _FinishedSceneCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return PaintedCard(
-      variant: number,
       onTap: onTap,
       padding: const EdgeInsets.all(12),
       child: Row(
@@ -237,7 +239,6 @@ class _FinishedSceneCard extends StatelessWidget {
         children: [
           FramedThumbnail(
             dimension: 64,
-            seed: number,
             assetPath: stop.image.assetPath,
             title: stop.image.title,
           ),
@@ -273,7 +274,6 @@ class _NextSceneCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return PaintedCard(
-      variant: number,
       onTap: onTap,
       padding: const EdgeInsets.all(12),
       child: Row(
@@ -281,10 +281,18 @@ class _NextSceneCard extends StatelessWidget {
           SizedBox.square(
             dimension: 64,
             child: FramedArt(
-              seed: number,
               child: const ColoredBox(
                 color: StudioColors.ground,
-                child: Icon(Icons.extension, color: StudioColors.terracotta),
+                // Center gives the icon loose constraints — under the frame's
+                // tight 64px box a CustomPaint would otherwise be forced to
+                // fill the whole tile.
+                child: Center(
+                  child: RisoIcon(
+                    RisoGlyph.pieceFilled,
+                    size: 26,
+                    color: StudioColors.tomato,
+                  ),
+                ),
               ),
             ),
           ),
@@ -428,7 +436,9 @@ class _WrappedParcel extends StatelessWidget {
       // readers announce a context-free second node per parcel.
       excludeSemantics: true,
       child: Transform.rotate(
-        angle: TiltedPhotoCard.tiltFor(number),
+        // The parcels keep their hand-placed tilt: they are kraft objects,
+        // not photo cards, so the no-tilt grid ruling doesn't cover them.
+        angle: (number.isEven ? -0.9 : 0.8) * math.pi / 180,
         child: SizedBox.square(
           dimension: 76,
           child: Stack(

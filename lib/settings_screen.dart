@@ -9,7 +9,9 @@ import 'package:flutter/material.dart';
 
 import 'app_settings.dart';
 import 'background_music.dart';
+import 'riso_icons.dart';
 import 'studio_surfaces.dart';
+import 'studio_theme.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
@@ -55,19 +57,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   /// One chrome for every toggle card, so they can't drift apart.
   Widget _switchCard({
-    required int variant,
     required String identifier,
+    required RisoGlyph glyph,
     required String title,
     required String subtitle,
     required bool value,
     required ValueChanged<bool> onChanged,
   }) {
     return PaintedCard(
-      variant: variant,
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
       child: Semantics(
         identifier: identifier,
         child: SwitchListTile(
+          secondary: RisoIcon(glyph),
           title: Text(title),
           subtitle: Text(subtitle),
           value: value,
@@ -82,7 +84,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final settings = _settings;
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      appBar: risoAppBar('Settings'),
       body: settings == null
           ? const SizedBox.shrink()
           : ListView(
@@ -101,11 +103,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       Row(
                         children: [
-                          Icon(
-                            settings.effectsVolume == 0
-                                ? Icons.volume_off
-                                : Icons.volume_up,
-                            color: theme.colorScheme.onSurface,
+                          RisoIcon(
+                            RisoGlyph.speaker,
+                            // Muted ink when silent — the riso set has no
+                            // slashed variant; dimming reads as "off".
+                            color: settings.effectsVolume == 0
+                                ? StudioColors.mutedInk
+                                : theme.colorScheme.onSurface,
                           ),
                           Expanded(
                             child: Semantics(
@@ -134,11 +138,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       Row(
                         children: [
-                          Icon(
-                            settings.musicVolume == 0
-                                ? Icons.volume_off
-                                : Icons.music_note,
-                            color: theme.colorScheme.onSurface,
+                          RisoIcon(
+                            RisoGlyph.music,
+                            color: settings.musicVolume == 0
+                                ? StudioColors.mutedInk
+                                : theme.colorScheme.onSurface,
                           ),
                           Expanded(
                             child: Semantics(
@@ -170,8 +174,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const SizedBox(height: 16),
                 _switchCard(
-                  variant: 2,
                   identifier: 'settings-haptics',
+                  glyph: RisoGlyph.vibrate,
                   title: 'Vibrate on snap',
                   subtitle:
                       'A light tap when a piece fits, and the buzz when '
@@ -182,8 +186,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const SizedBox(height: 16),
                 _switchCard(
-                  variant: 1,
                   identifier: 'settings-ghost-default',
+                  // The same ghost-picture as the play screen's preview
+                  // toggle: one icon, one meaning.
+                  glyph: RisoGlyph.imagePreview,
                   title: 'Start with the image preview',
                   subtitle: 'New puzzles open with the faint picture hint on.',
                   value: settings.ghostPreviewDefault,

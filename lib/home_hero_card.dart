@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'puzzle_catalog.dart';
 import 'studio_surfaces.dart';
+import 'studio_theme.dart';
 
 /// The home screen's hero-card scaffold, shared by the daily Begin card and
 /// the continue card. The two sit stacked on the home screen and must read
@@ -18,6 +19,7 @@ class HomeHeroCard extends StatelessWidget {
     this.action,
     this.marker,
     this.semanticsIdentifier,
+    this.showTitle = true,
   });
 
   /// The painting on the card; also provides the title line and the
@@ -46,6 +48,11 @@ class HomeHeroCard extends StatelessWidget {
 
   /// Stable e2e hook; null for cards found by their texts.
   final String? semanticsIdentifier;
+
+  /// The daily card hides its visible title (owner's v23 "three info"
+  /// ruling — the photo speaks); the painting's name stays in the merged
+  /// screen-reader utterance either way.
+  final bool showTitle;
 
   @override
   Widget build(BuildContext context) {
@@ -99,18 +106,25 @@ class HomeHeroCard extends StatelessWidget {
               Text(
                 eyebrow,
                 style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.primary,
+                  // Eyebrows are structure-dark small caps (riso spec);
+                  // tomato stays reserved for actions and the rule line.
+                  color: StudioColors.structureDark,
                   fontWeight: FontWeight.w800,
                   letterSpacing: 1.1,
                 ),
               ),
-              const SizedBox(height: 2),
-              Text(
-                image.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.titleMedium,
-              ),
+              if (showTitle) ...[
+                const SizedBox(height: 2),
+                Text(
+                  image.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleMedium,
+                ),
+              ] else
+                // Keeps the painting's name in the merged utterance while
+                // the visible card stays title-less.
+                Semantics(label: image.title, child: const SizedBox.shrink()),
               if (details.isNotEmpty) ...[
                 const SizedBox(height: 2),
                 ...details,

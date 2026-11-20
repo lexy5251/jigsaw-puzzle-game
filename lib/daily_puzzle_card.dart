@@ -3,12 +3,13 @@ import 'package:flutter/material.dart';
 import 'daily_puzzle.dart';
 import 'home_hero_card.dart';
 import 'puzzle_catalog.dart';
+import 'riso_markers.dart';
 import 'studio_mascots.dart';
 import 'studio_theme.dart';
 
 /// The daily-puzzle "Begin card": today's image, its status, and the one
 /// action. Deliberately no tracker elements — the streak lives in the
-/// quieter [DailyWindowsill] strip below it, so the home screen reads as an
+/// quieter [DailyStreakRow] strip below it, so the home screen reads as an
 /// invitation to play, not a check-in app (owner ruling, UI-1).
 class DailyPuzzleCard extends StatelessWidget {
   const DailyPuzzleCard({
@@ -40,17 +41,20 @@ class DailyPuzzleCard extends StatelessWidget {
     final theme = Theme.of(context);
     return HomeHeroCard(
       image: image,
-      eyebrow: "TODAY'S PAINTING",
+      // Owner's v23 rulings: challenge wording, and no visible title —
+      // eyebrow + status + rule line are the card's three info.
+      eyebrow: "TODAY'S CHALLENGE",
+      showTitle: false,
       details: [
-        // The done state has no status text: the bloomed pot alone marks
-        // it (owner ruling, UI-2 follow-up).
+        // The done state has no status text: the bloomed cactus alone
+        // marks it (owner ruling, UI-2 follow-up).
         if (!doneToday) ...[
           Text(_statusText(), style: theme.textTheme.bodySmall),
           if (bloomsToday)
             // The rule players otherwise trip over: only this painting
-            // blooms a pot.
+            // clicks today's streak piece in.
             Text(
-              "Finish it and today's pot blooms.",
+              "Finish it and today's piece clicks in.",
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.primary,
               ),
@@ -83,12 +87,12 @@ class DailyPuzzleCard extends StatelessWidget {
   String _statusText() => inProgress ? statusInProgressLabel : 'Not started';
 }
 
-/// The streak, demoted to ambient decor: the current week as a small row of
-/// pots on a shelf, Monday to Sunday, with one compact text line. A
-/// completed daily blooms, today's empty pot waits in terracotta, other
-/// days stay faint.
-class DailyWindowsill extends StatelessWidget {
-  const DailyWindowsill({
+/// The streak, demoted to ambient decor: the current week as a small row
+/// of family pieces, Monday to Sunday, with one compact text line. A
+/// completed daily clicks its piece in (tomato); today waits bigger;
+/// other days stay faint outlines.
+class DailyStreakRow extends StatelessWidget {
+  const DailyStreakRow({
     super.key,
     required this.now,
     required this.completedDays,
@@ -120,24 +124,8 @@ class DailyWindowsill extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             for (var i = 0; i < 7; i++)
-              _pot(theme, monday.add(Duration(days: i)), today),
+              _dayPiece(theme, monday.add(Duration(days: i)), today),
           ],
-        ),
-        // The wooden shelf the pots stand on (mockup .shelfline).
-        Container(
-          height: 5,
-          margin: const EdgeInsets.fromLTRB(24, 3, 24, 0),
-          decoration: const BoxDecoration(
-            color: Color(0xFFC9A36A),
-            borderRadius: BorderRadius.all(Radius.circular(3)),
-            boxShadow: [
-              BoxShadow(
-                color: Color(0x405A3C1E),
-                offset: Offset(0, 2),
-                blurRadius: 4,
-              ),
-            ],
-          ),
         ),
         const SizedBox(height: 6),
         Text(
@@ -157,40 +145,45 @@ class DailyWindowsill extends StatelessWidget {
       return '${streakLabel(streak)} · longest: $longest';
     }
     if (longest > 0) {
-      return 'longest: $longest · pots regrow, no pressure';
+      return 'longest: $longest · the pieces wait, no pressure';
     }
-    return 'A pot blooms for every quiet day.';
+    return 'A piece clicks in for every quiet day.';
   }
 
-  Widget _pot(ThemeData theme, DateTime day, DateTime today) {
+  Widget _dayPiece(ThemeData theme, DateTime day, DateTime today) {
     final done = completedDays.contains(dayKey(day));
     final isToday = day == today;
-    // The painted motifs carry their own colors, so day states live in the
-    // motif (bloomed cactus vs empty pot), size, and opacity instead of tint.
-    final opacity = done
-        ? (isToday ? 1.0 : 0.75)
-        : isToday
+    final opacity = done || isToday
         ? 1.0
         // Days still to come sit fainter than missed ones.
         : day.isAfter(today)
-        ? 0.25
-        : 0.45;
-    // The pot's state is invisible to screen readers. One label per day
+        ? 0.35
+        : 0.55;
+    // A piece's state is invisible to screen readers. One label per day
     // replaces the bare weekday letter; container keeps each day its own
     // announcement instead of merging into the strip.
     return Semantics(
       container: true,
-      label: _potSemantics(day, today, done),
+      label: _daySemantics(day, today, done),
       excludeSemantics: true,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Opacity(
             opacity: opacity,
-            child: MascotArt(
-              done ? StudioMascot.cactus : StudioMascot.pot,
-              height: isToday ? 30 : 24,
-            ),
+            child: done
+                ? FamilyPiece(
+                    size: isToday ? 21 : 16,
+                    fill: StudioColors.tomato,
+                    // Today's win gets the print rim, like the sticker.
+                    stroke: isToday ? StudioColors.structureDark : null,
+                    strokeWidth: 3,
+                  )
+                : FamilyPiece(
+                    size: isToday ? 21 : 16,
+                    stroke: StudioColors.structureInk,
+                    strokeWidth: 3.5,
+                  ),
           ),
           const SizedBox(height: 2),
           Text(
@@ -207,7 +200,7 @@ class DailyWindowsill extends StatelessWidget {
     );
   }
 
-  String _potSemantics(DateTime day, DateTime today, bool done) {
+  String _daySemantics(DateTime day, DateTime today, bool done) {
     final name = _names[day.weekday - 1];
     if (done) {
       return '$name: done';
@@ -218,3 +211,4 @@ class DailyWindowsill extends StatelessWidget {
     return day.isAfter(today) ? '$name: upcoming' : '$name: not done';
   }
 }
+

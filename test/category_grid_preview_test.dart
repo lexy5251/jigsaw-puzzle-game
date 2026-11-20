@@ -20,7 +20,7 @@ void main() {
   testWidgets('render the category grid at phone sizes', (tester) async {
     SharedPreferences.setMockInitialValues({});
     await tester.runAsync(() async {
-      // Real fonts: the AppBar title renders in the theme's Fredoka, not
+      // Real fonts: the AppBar title renders in the theme's Rokkitt, not
       // the test-default Ahem boxes.
       await loadStudioFonts();
 

@@ -274,7 +274,7 @@ bool previewEnabled(String envVar) => Platform.environment[envVar] == '1';
 /// studio type instead of the test-default Ahem boxes.
 Future<void> loadStudioFonts() async {
   const families = {
-    'Fredoka': ['Fredoka-Medium', 'Fredoka-SemiBold'],
+    'Rokkitt': ['Rokkitt-SemiBold', 'Rokkitt-Bold', 'Rokkitt-ExtraBold'],
     'Nunito': [
       'Nunito-Regular',
       'Nunito-SemiBold',

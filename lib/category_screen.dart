@@ -4,16 +4,19 @@
 // rulings: bare images get straight edges; names live in semantics only).
 // Tapping a painting opens the shared size sheet → game flow.
 
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import 'bonus_track.dart';
 import 'puzzle_catalog.dart';
 import 'puzzle_completion.dart';
 import 'puzzle_launcher.dart';
 import 'puzzle_save.dart';
+import 'riso_markers.dart';
 import 'studio_mascots.dart';
 import 'studio_surfaces.dart';
-import 'studio_theme.dart';
 
 class CategoryScreen extends StatefulWidget {
   const CategoryScreen({
@@ -44,9 +47,10 @@ class _CategoryScreenState extends State<CategoryScreen> {
   /// Images in this category finished at least once, at any size.
   var _completedImageIds = <String>{};
 
-  /// Images with a resumable save at any size (the sprout badge; the player
-  /// must be able to spot a started puzzle without opening its size sheet).
-  var _inProgressImageIds = <String>{};
+  /// Best progress percent per image with a resumable save (the piece
+  /// pill; the player must be able to spot a started puzzle — and how far
+  /// it got — without opening its size sheet).
+  var _progressPercents = <String, int>{};
 
   List<PuzzleImage> get _images =>
       imagesInCategory(widget.category.id, catalog: widget.catalog);
@@ -58,38 +62,55 @@ class _CategoryScreenState extends State<CategoryScreen> {
   }
 
   Future<void> _refreshPuzzleStates() async {
-    final completed = <String>{};
-    final inProgress = <String>{};
-    for (final image in _images) {
-      for (final size in puzzleSizes) {
-        // One size in either state is enough for that badge.
-        if (!completed.contains(image.id) &&
-            await _completionStore.isCompletedForGrid(
-              imageId: image.id,
-              columns: size.columns,
-              rows: size.rows,
-            )) {
-          completed.add(image.id);
-        }
-        final saveKey = puzzleSaveKey(
-          imageId: image.id,
-          columns: size.columns,
-          rows: size.rows,
-        );
-        if (!inProgress.contains(image.id)) {
-          final save = await _saveStore.load(saveKey);
-          if (save?.isConsistentFor(size.pieceCount) ?? false) {
-            inProgress.add(image.id);
-          }
-        }
+    // Two bulk reads instead of an image x size grid of lookups: the old
+    // per-cell loop decoded 40 saves per visit on the UI isolate.
+    final imageIds = {for (final image in _images) image.id};
+    final completed = (await completedImageIds(
+      _completionStore,
+    )).intersection(imageIds);
+
+    final sizesByGrid = {
+      for (final size in puzzleSizes) (size.columns, size.rows): size,
+    };
+    final percents = <String, int>{};
+    final loads = <Future<void>>[];
+    for (final key in await _saveStore.listSavedKeys()) {
+      final parsed = parsePuzzleSaveKey(key);
+      if (parsed == null || !imageIds.contains(parsed.imageId)) {
+        continue;
       }
+      final size = sizesByGrid[(parsed.columns, parsed.rows)];
+      if (size == null) {
+        continue;
+      }
+      // Only keys that actually exist get decoded, concurrently.
+      loads.add(
+        _saveStore.load(key).then((save) {
+          if (!(save?.isConsistentFor(size.pieceCount) ?? false)) {
+            return;
+          }
+          // The pill shows the furthest run: the most advanced save of
+          // any size speaks for the painting. Capped at 99: only the done
+          // sticker may say "complete", and 224/225 would otherwise round
+          // up to a lying 100%.
+          final percent = math.min(
+            99,
+            (save!.lockedPieceIndexes.length * 100 / size.pieceCount).round(),
+          );
+          final best = percents[parsed.imageId];
+          if (best == null || percent > best) {
+            percents[parsed.imageId] = percent;
+          }
+        }),
+      );
     }
+    await Future.wait(loads);
     if (mounted &&
         (!setEquals(_completedImageIds, completed) ||
-            !setEquals(_inProgressImageIds, inProgress))) {
+            !mapEquals(_progressPercents, percents))) {
       setState(() {
         _completedImageIds = completed;
-        _inProgressImageIds = inProgress;
+        _progressPercents = percents;
       });
     }
   }
@@ -111,42 +132,49 @@ class _CategoryScreenState extends State<CategoryScreen> {
   Widget build(BuildContext context) {
     final images = _images;
     return Scaffold(
-      appBar: AppBar(
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            MascotArt(mascotForCategory(widget.category.id), height: 22),
-            const SizedBox(width: 10),
-            // Flexible: long titles ellipsize on narrow phones instead of
-            // overflowing the AppBar.
-            Flexible(
-              child: Text(
-                widget.category.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
+      // The shared riso bar (not a hand copy): same scaling rules and
+      // halftone accent as the tab pages, with the mascot as prefix.
+      appBar: risoAppBar(
+        widget.category.title,
+        fontSize: 24,
+        titlePrefix: MascotArt(
+          mascotForCategory(widget.category.id),
+          height: 22,
         ),
       ),
-      body: GridView.builder(
-        padding: photoGridPadding,
-        // Max width instead of a fixed column count: 2 across on phones so
-        // the photo is big enough to judge (UI-6 ruling, amending #4's ~3),
-        // more columns on tablets and the web build.
-        gridDelegate: photoGridDelegate,
-        itemCount: images.length,
-        itemBuilder: (context, index) {
-          final image = images[index];
-          return _PuzzleCard(
-            image: image,
-            // Grid position, so side-by-side cards get different wobbles.
-            variant: index,
-            isCompleted: _completedImageIds.contains(image.id),
-            isInProgress: _inProgressImageIds.contains(image.id),
-            onTap: () => _open(image),
-          );
-        },
+      body: Column(
+        children: [
+          // The collection's own progress: one mini piece per painting,
+          // filling tomato as the category completes.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+            child: PieceMeter(
+              done: images
+                  .where((image) => _completedImageIds.contains(image.id))
+                  .length,
+              total: images.length,
+            ),
+          ),
+          Expanded(
+            child: GridView.builder(
+              padding: photoGridPadding,
+              // Max width instead of a fixed column count: 2 across on
+              // phones so the photo is big enough to judge (UI-6 ruling),
+              // more columns on tablets and the web build.
+              gridDelegate: photoGridDelegate,
+              itemCount: images.length,
+              itemBuilder: (context, index) {
+                final image = images[index];
+                return _PuzzleCard(
+                  image: image,
+                  isCompleted: _completedImageIds.contains(image.id),
+                  progressPercent: _progressPercents[image.id],
+                  onTap: () => _open(image),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -155,22 +183,19 @@ class _CategoryScreenState extends State<CategoryScreen> {
 class _PuzzleCard extends StatelessWidget {
   const _PuzzleCard({
     required this.image,
-    required this.variant,
     required this.isCompleted,
-    required this.isInProgress,
+    required this.progressPercent,
     required this.onTap,
   });
 
   final PuzzleImage image;
 
-  /// Grid item index: drives the alternating tilt direction.
-  final int variant;
-
-  /// Finished at least once, at any size: shows the check badge.
+  /// Finished at least once, at any size: wears the done piece sticker.
   final bool isCompleted;
 
-  /// Has a resumable save at any size: shows the sprout badge.
-  final bool isInProgress;
+  /// Best resumable progress at any size, or null when untouched: the
+  /// piece pill (replaces the old sprout badge AND tells how far).
+  final int? progressPercent;
 
   final VoidCallback onTap;
 
@@ -180,67 +205,16 @@ class _PuzzleCard extends StatelessWidget {
       assetPath: image.assetPath,
       title: image.title,
       semanticsIdentifier: 'catalog-puzzle-${image.id}',
-      variant: variant,
       onTap: onTap,
+      cornerMarker: isCompleted ? const DonePieceSticker() : null,
       overlays: [
-        if (isCompleted)
-          const Positioned(top: 8, right: 8, child: _CompletedBadge()),
-        if (isInProgress)
-          const Positioned(top: 8, left: 8, child: _InProgressBadge()),
+        if (progressPercent case final percent?)
+          Positioned(
+            right: 9,
+            bottom: 10,
+            child: ProgressPiecePill(percent: percent),
+          ),
       ],
-    );
-  }
-}
-
-/// The growing stem — the "continue progress" costume: a started puzzle's
-/// painting has a young sprout on its corner until it blooms (completion).
-class _InProgressBadge extends StatelessWidget {
-  const _InProgressBadge();
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      // Own node: without this the label merges into the card's
-      // title-labelled node (UI-6 wrapper) and disappears for a11y/e2e.
-      container: true,
-      label: statusInProgressLabel,
-      child: Container(
-        width: 28,
-        height: 28,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          shape: BoxShape.circle,
-        ),
-        child: const MascotArt(StudioMascot.sprout, height: 20),
-      ),
-    );
-  }
-}
-
-class _CompletedBadge extends StatelessWidget {
-  const _CompletedBadge();
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      // Own node, like the sprout badge: without it the label would merge
-      // into the card's title-labelled node and completed state would be
-      // inaudible to screen readers.
-      container: true,
-      label: statusCompletedLabel,
-      child: Container(
-        padding: const EdgeInsets.all(4),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          shape: BoxShape.circle,
-        ),
-        child: Icon(
-          Icons.check_circle,
-          size: 20,
-          color: Theme.of(context).colorScheme.primary,
-        ),
-      ),
     );
   }
 }

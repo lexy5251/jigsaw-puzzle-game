@@ -79,39 +79,36 @@ void main() {
     expect(tester.getSemantics(card('first')).label, 'First Painting');
   });
 
-  testWidgets('photos wear straight rounded edges, not the torn frame', (
+  testWidgets('photos wear the sticker border, not the torn frame', (
     tester,
   ) async {
     await pumpCategory(tester);
 
     expect(find.byType(FramedArt), findsNothing);
-    final clip = tester.widget<ClipRRect>(
-      find.descendant(of: card('first'), matching: find.byType(ClipRRect)),
+    final container = tester.widget<Container>(
+      find.descendant(of: card('first'), matching: find.byType(Container)).first,
     );
+    final decoration = container.decoration as BoxDecoration;
     expect(
-      clip.borderRadius,
-      const BorderRadius.all(Radius.circular(12)),
+      decoration.borderRadius,
+      const BorderRadius.all(TiltedPhotoCard.cornerRadius),
     );
+    expect(decoration.border!.top.color, StudioColors.structureInk);
+    final shadow = decoration.boxShadow!.single;
+    expect(shadow.color, StudioColors.structureInk);
+    expect(shadow.blurRadius, 0);
   });
 
-  testWidgets('neighboring cards tilt in alternating directions', (
-    tester,
-  ) async {
+  testWidgets('cards sit straight — the tilt is retired', (tester) async {
     await pumpCategory(tester);
 
-    Matrix4 tiltOf(String id) => tester
-        .widget<Transform>(
-          find.descendant(of: card(id), matching: find.byType(Transform)).first,
-        )
-        .transform;
-
-    // Index 1 of a rotation matrix is sin(angle): nonzero and of opposite
-    // sign between grid neighbors.
-    final first = tiltOf('first').storage[1];
-    final second = tiltOf('second').storage[1];
-    expect(first, isNot(0));
-    expect(second, isNot(0));
-    expect(first.sign, -second.sign);
+    // Owner's v20 ruling: no rotation on photo grids under the riso chrome.
+    for (final id in ['first', 'second']) {
+      expect(
+        find.descendant(of: card(id), matching: find.byType(Transform)),
+        findsNothing,
+      );
+    }
   });
 
   testWidgets('tapping a photo still opens the size sheet', (tester) async {

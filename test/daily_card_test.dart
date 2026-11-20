@@ -4,7 +4,10 @@ import 'package:jigsaw_puzzle/daily_puzzle.dart';
 import 'package:jigsaw_puzzle/daily_puzzle_card.dart';
 import 'package:jigsaw_puzzle/puzzle_catalog.dart';
 import 'package:jigsaw_puzzle/puzzle_save.dart';
+import 'package:jigsaw_puzzle/riso_markers.dart';
 import 'package:jigsaw_puzzle/studio_mascots.dart';
+import 'package:jigsaw_puzzle/studio_surfaces.dart';
+import 'package:jigsaw_puzzle/studio_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'test_helpers.dart';
@@ -15,16 +18,26 @@ void main() {
   DateTime fixedNow() => DateTime(2026, 11, 6, 14);
   final daily = dailyPuzzleFor(fixedNow());
 
-  // Scoped to the windowsill strip: the category cards show mascots of
-  // their own.
-  Finder bloomedPots() => find.descendant(
-    of: find.byType(DailyWindowsill),
+  // Scoped to the streak strip: a done day's piece is the tomato-filled
+  // family piece (the pots retired with the riso chrome).
+  Finder clickedPieces() => find.descendant(
+    of: find.byType(DailyStreakRow),
     matching: find.byWidgetPredicate(
-      (widget) => widget is MascotArt && widget.mascot == StudioMascot.cactus,
+      (widget) => widget is FamilyPiece && widget.fill == StudioColors.tomato,
     ),
   );
 
-  // The card's done marker: the bloomed pot (owner ruling, UI-2). With the
+  // Which painting the card shows, now that the visible title is gone:
+  // probe the framed thumbnail's asset.
+  Finder cardShows(PuzzleImage image) => find.descendant(
+    of: find.byType(DailyPuzzleCard),
+    matching: find.byWidgetPredicate(
+      (widget) =>
+          widget is FramedThumbnail && widget.assetPath == image.assetPath,
+    ),
+  );
+
+  // The card's done marker: the bloomed cactus (owner ruling, UI-2). With the
   // status text gone, this is how tests probe the done state.
   Finder doneMarker() => find.descendant(
     of: find.byType(DailyPuzzleCard),
@@ -42,23 +55,31 @@ void main() {
     await pumpSelectScreen(tester, clock: fixedNow);
     await tester.pumpAndSettle();
 
-    expect(find.text("TODAY'S PAINTING"), findsOneWidget);
-    expect(find.text(daily.title), findsWidgets);
+    expect(find.text("TODAY'S CHALLENGE"), findsOneWidget);
+    // The card shows no visible title (owner's v23 "three info" ruling);
+    // the photo speaks and the name lives in semantics.
+    expect(
+      find.descendant(
+        of: find.byType(DailyPuzzleCard),
+        matching: find.text(daily.title),
+      ),
+      findsNothing,
+    );
     expect(find.text('Not started'), findsOneWidget);
-    // The Begin card invites; the rule line explains what blooms a pot.
+    // The Begin card invites; the rule line explains the streak piece.
     expect(find.widgetWithText(FilledButton, 'Begin'), findsOneWidget);
-    expect(find.text("Finish it and today's pot blooms."), findsOneWidget);
-    // The streak is one quiet line under the windowsill strip.
+    expect(find.text("Finish it and today's piece clicks in."), findsOneWidget);
+    // The streak is one quiet line under the strip.
     expect(find.text('2-day streak · longest: 2'), findsOneWidget);
-    // Two bloomed pots on the windowsill.
-    expect(bloomedPots(), findsNWidgets(2));
+    // Two clicked-in pieces on the strip.
+    expect(clickedPieces(), findsNWidgets(2));
   });
 
-  testWidgets('the windowsill reads day states to screen readers', (
+  testWidgets('the streak strip reads day states to screen readers', (
     tester,
   ) async {
     // 2026-11-06 is a Friday; Wednesday and Thursday are done. The strip
-    // sits outside the tap target now, so each pot announces itself.
+    // sits outside the tap target now, so each day announces itself.
     final semantics = tester.ensureSemantics();
     SharedPreferences.setMockInitialValues({
       'daily.days': '["2026-11-04", "2026-11-05"]',
@@ -82,9 +103,9 @@ void main() {
     await pumpSelectScreen(tester, clock: fixedNow);
     await tester.pumpAndSettle();
 
-    expect(find.text('A pot blooms for every quiet day.'), findsOneWidget);
+    expect(find.text('A piece clicks in for every quiet day.'), findsOneWidget);
     expect(find.textContaining('longest'), findsNothing);
-    expect(bloomedPots(), findsNothing);
+    expect(clickedPieces(), findsNothing);
   });
 
   testWidgets('shows the done state after finishing today', (tester) async {
@@ -93,7 +114,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('1-day streak · longest: 1'), findsOneWidget);
-    // The done marker is the bloomed pot on the card, with no status text
+    // The done marker is the bloomed cactus on the card, with no status text
     // under the title (owner ruling, UI-2 + follow-up) — never the old
     // stock Material check.
     expect(doneMarker(), findsOneWidget);
@@ -115,7 +136,7 @@ void main() {
       ),
       findsNothing,
     );
-    expect(find.text("Finish it and today's pot blooms."), findsNothing);
+    expect(find.text("Finish it and today's piece clicks in."), findsNothing);
   });
 
   testWidgets('the card is one screen-reader stop, not a card plus a button', (
@@ -127,14 +148,14 @@ void main() {
     await tester.pumpAndSettle();
 
     // Everything announces through the card's single merged node...
-    final card = tester.getSemantics(find.text("TODAY'S PAINTING"));
+    final card = tester.getSemantics(find.text("TODAY'S CHALLENGE"));
     expect(
       card.label,
       stringContainsInOrder([
-        "TODAY'S PAINTING",
+        "TODAY'S CHALLENGE",
         daily.title,
         'Not started',
-        "Finish it and today's pot blooms.",
+        "Finish it and today's piece clicks in.",
       ]),
     );
     // ...and the visual Begin button adds no second, redundant stop.
@@ -178,7 +199,7 @@ void main() {
     );
     expect(find.text('In progress'), findsOneWidget);
     expect(find.widgetWithText(FilledButton, 'Continue'), findsOneWidget);
-    expect(find.text("Finish it and today's pot blooms."), findsNothing);
+    expect(find.text("Finish it and today's piece clicks in."), findsNothing);
   });
 
   testWidgets('an abandoned save that cannot bloom shows Not started', (
@@ -227,7 +248,7 @@ void main() {
     await pumpSelectScreen(tester, clock: fixedNow);
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text("TODAY'S PAINTING"));
+    await tester.tap(find.text("TODAY'S CHALLENGE"));
     await tester.pumpAndSettle();
 
     expect(find.bySemanticsIdentifier('puzzle-start'), findsOneWidget);
@@ -287,24 +308,20 @@ void main() {
     await pumpSelectScreen(tester, clock: () => now);
     await tester.pumpAndSettle();
 
-    final card = find.byType(DailyPuzzleCard);
     expect(doneMarker(), findsOneWidget);
-    expect(bloomedPots(), findsNWidgets(2));
+    expect(clickedPieces(), findsNWidgets(2));
 
     now = monday;
     await tester.pump(const Duration(seconds: 1));
     await tester.pumpAndSettle();
 
-    expect(
-      find.descendant(of: card, matching: find.text(mondayImage.title)),
-      findsOneWidget,
-    );
+    expect(cardShows(mondayImage), findsOneWidget);
     expect(find.text('In progress'), findsOneWidget);
     expect(doneMarker(), findsNothing);
     // An in-progress daily offers to pick the run back up.
     expect(find.widgetWithText(FilledButton, 'Continue'), findsOneWidget);
     expect(find.text('2-day streak · longest: 2'), findsOneWidget);
-    expect(bloomedPots(), findsNothing);
+    expect(clickedPieces(), findsNothing);
 
     // A second rollover checks that the timer was rearmed and that the
     // previous daily's progress does not carry over to the new image.
@@ -314,18 +331,15 @@ void main() {
     await tester.pump(const Duration(days: 1));
     await tester.pumpAndSettle();
 
-    expect(
-      find.descendant(of: card, matching: find.text(tuesdayImage.title)),
-      findsOneWidget,
-    );
+    expect(cardShows(tuesdayImage), findsOneWidget);
     expect(find.text('Not started'), findsOneWidget);
     // Streak broken, but the history stays as one gentle line.
     expect(
-      find.text('longest: 2 · pots regrow, no pressure'),
+      find.text('longest: 2 · the pieces wait, no pressure'),
       findsOneWidget,
     );
 
-    await tester.tap(find.text("TODAY'S PAINTING"));
+    await tester.tap(find.text("TODAY'S CHALLENGE"));
     await tester.pumpAndSettle();
     expect(
       find.descendant(
@@ -351,17 +365,11 @@ void main() {
     // suspended timers while the app was in the background.
     await tester.pumpAndSettle();
 
-    expect(
-      find.descendant(
-        of: find.byType(DailyPuzzleCard),
-        matching: find.text(dailyPuzzleFor(now).title),
-      ),
-      findsOneWidget,
-    );
+    expect(cardShows(dailyPuzzleFor(now)), findsOneWidget);
     expect(doneMarker(), findsNothing);
     expect(find.text('Not started'), findsOneWidget);
     expect(
-      find.text('longest: 1 · pots regrow, no pressure'),
+      find.text('longest: 1 · the pieces wait, no pressure'),
       findsOneWidget,
     );
   });

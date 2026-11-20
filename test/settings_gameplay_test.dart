@@ -27,7 +27,12 @@ void main() {
     expect(game.ghostPreviewOpacity, greaterThan(0));
     expect(
       tester
-          .widget<IconButton>(find.widgetWithIcon(IconButton, Icons.image))
+          .widget<IconButton>(
+            find.ancestor(
+              of: find.byTooltip('Image preview'),
+              matching: find.byType(IconButton),
+            ),
+          )
           .isSelected,
       isTrue,
     );

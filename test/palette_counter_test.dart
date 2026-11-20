@@ -119,7 +119,7 @@ void main() {
         await tester.tap(find.text('Edges only'));
         await tester.pump();
         expect(
-          tester.widget<FilterChip>(find.byType(FilterChip)).selected,
+          tester.widget<EdgesOnlyToggle>(find.byType(EdgesOnlyToggle)).selected,
           isTrue,
         );
         expect(tester.takeException(), isNull);

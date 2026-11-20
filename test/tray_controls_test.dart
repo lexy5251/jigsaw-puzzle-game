@@ -7,6 +7,7 @@
 import 'package:flame/game.dart' hide Route;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:jigsaw_puzzle/game_screen.dart';
 import 'package:jigsaw_puzzle/jigsaw_game.dart';
 import 'package:jigsaw_puzzle/puzzle_catalog.dart';
 import 'package:jigsaw_puzzle/puzzle_piece.dart';
@@ -49,7 +50,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 16));
     expect(game.visibleTrayPieceIndexes, hasLength(16));
     expect(
-      tester.widget<FilterChip>(find.byType(FilterChip)).selected,
+      tester.widget<EdgesOnlyToggle>(find.byType(EdgesOnlyToggle)).selected,
       isTrue,
     );
 
@@ -58,7 +59,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 16));
     expect(game.visibleTrayPieceIndexes, hasLength(24));
     expect(
-      tester.widget<FilterChip>(find.byType(FilterChip)).selected,
+      tester.widget<EdgesOnlyToggle>(find.byType(EdgesOnlyToggle)).selected,
       isFalse,
     );
   });
@@ -101,7 +102,7 @@ void main() {
         .bottom;
     final bandTop = bodyBottom - trayHeight - game.controlRowHeight;
     for (final finder in [
-      find.byType(FilterChip),
+      find.byType(EdgesOnlyToggle),
       find.byTooltip('Return to tray'),
     ]) {
       final rect = tester.getRect(finder);
@@ -120,7 +121,7 @@ void main() {
     final piece = game.world.children.whereType<PuzzlePiece>().single;
 
     Finder rowOpacity() => find
-        .ancestor(of: find.byType(FilterChip), matching: find.byType(Opacity))
+        .ancestor(of: find.byType(EdgesOnlyToggle), matching: find.byType(Opacity))
         .first;
     double rowOpacityValue() => tester.widget<Opacity>(rowOpacity()).opacity;
     expect(rowOpacityValue(), 1.0);

@@ -14,6 +14,8 @@
 //    first two tabs track gift paintings too once they are played — the
 //    summary reads the full catalog, gallery and gifts alike.
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import 'bonus_board.dart';
@@ -24,6 +26,7 @@ import 'puzzle_catalog.dart';
 import 'puzzle_completion.dart';
 import 'puzzle_launcher.dart';
 import 'studio_mascots.dart';
+import 'riso_markers.dart';
 import 'studio_surfaces.dart';
 import 'studio_theme.dart';
 import 'tab_activation.dart';
@@ -52,12 +55,6 @@ class _MyPuzzlesScreenState extends State<MyPuzzlesScreen>
 
   /// Loaded together with [_summary], so the body gate below covers both.
   BonusTrackState? _bonus;
-
-  /// Tilt by catalog position, not list index: these lists reorder by
-  /// recency, and an index-based tilt would flip cards between visits.
-  static final _tiltVariants = {
-    for (final (index, image) in fullPuzzleCatalog.indexed) image.id: index,
-  };
 
   @override
   void initState() {
@@ -112,8 +109,8 @@ class _MyPuzzlesScreenState extends State<MyPuzzlesScreen>
     return DefaultTabController(
       length: 3,
       child: Scaffold(
-        appBar: AppBar(
-          title: const Text('My Puzzles'),
+        appBar: risoAppBar(
+          'My Puzzles',
           bottom: const TabBar(
             tabs: [
               Tab(text: 'In progress'),
@@ -148,8 +145,22 @@ class _MyPuzzlesScreenState extends State<MyPuzzlesScreen>
         assetPath: run.image.assetPath,
         title: run.image.title,
         semanticsIdentifier: 'my-puzzles-in-progress-${run.image.id}',
-        variant: _tiltVariants[run.image.id] ?? 0,
         onTap: () => _open(run.image),
+        overlays: [
+          // The tab already means "started"; the pill adds how far.
+          Positioned(
+            right: 9,
+            bottom: 10,
+            child: ProgressPiecePill(
+              // Capped at 99 like the category pill: 100% is the done
+              // sticker's word, and near-finishes would round up to it.
+              percent: math.min(
+                99,
+                (run.placedCount * 100 / run.size.pieceCount).round(),
+              ),
+            ),
+          ),
+        ],
       );
     });
   }
@@ -170,7 +181,6 @@ class _MyPuzzlesScreenState extends State<MyPuzzlesScreen>
         assetPath: photo.image.assetPath,
         title: photo.image.title,
         semanticsIdentifier: 'my-puzzles-finished-${photo.image.id}',
-        variant: _tiltVariants[photo.image.id] ?? 0,
         onTap: () => _open(photo.image),
         overlays: [
           // Anchored strip, not a bare bottom/right Positioned: an
@@ -244,7 +254,6 @@ class _MyPuzzlesScreenState extends State<MyPuzzlesScreen>
                 assetPath: image.assetPath,
                 title: image.title,
                 semanticsIdentifier: 'my-puzzles-collection-${image.id}',
-                variant: _tiltVariants[image.id] ?? 0,
                 onTap: () => _open(image),
               );
             },

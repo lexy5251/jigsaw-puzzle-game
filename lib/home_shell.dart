@@ -12,8 +12,10 @@ import 'app_settings.dart';
 import 'background_music.dart';
 import 'my_puzzles_screen.dart';
 import 'puzzle_select_screen.dart';
+import 'riso_icons.dart';
 import 'settings_screen.dart';
 import 'story_screen.dart';
+import 'studio_theme.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({
@@ -96,8 +98,8 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   List<_Tab> _tabs() => [
     _Tab(
       destination: const NavigationDestination(
-        icon: Icon(Icons.collections_outlined),
-        selectedIcon: Icon(Icons.collections),
+        icon: RisoIcon(RisoGlyph.gallery),
+        selectedIcon: RisoIcon(RisoGlyph.gallery, color: StudioColors.tomato),
         label: 'Gallery',
         tooltip: 'Gallery tab',
       ),
@@ -106,8 +108,8 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     ),
     _Tab(
       destination: const NavigationDestination(
-        icon: Icon(Icons.auto_stories_outlined),
-        selectedIcon: Icon(Icons.auto_stories),
+        icon: RisoIcon(RisoGlyph.story),
+        selectedIcon: RisoIcon(RisoGlyph.story, color: StudioColors.tomato),
         label: 'Story',
         tooltip: 'Story tab',
       ),
@@ -116,8 +118,13 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     ),
     _Tab(
       destination: const NavigationDestination(
-        icon: Icon(Icons.extension_outlined),
-        selectedIcon: Icon(Icons.extension),
+        icon: RisoIcon(RisoGlyph.piece),
+        // Active = the filled piece in tomato — the exact marker shape, so
+        // the nav speaks the same language as the card markers.
+        selectedIcon: RisoIcon(
+          RisoGlyph.pieceFilled,
+          color: StudioColors.tomato,
+        ),
         label: 'My Puzzles',
         tooltip: 'My Puzzles tab',
       ),
@@ -126,8 +133,8 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     ),
     _Tab(
       destination: const NavigationDestination(
-        icon: Icon(Icons.settings_outlined),
-        selectedIcon: Icon(Icons.settings),
+        icon: RisoIcon(RisoGlyph.sliders),
+        selectedIcon: RisoIcon(RisoGlyph.sliders, color: StudioColors.tomato),
         label: 'Settings',
         tooltip: 'Settings tab',
       ),

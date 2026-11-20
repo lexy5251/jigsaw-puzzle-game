@@ -242,7 +242,7 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
     ];
     return Scaffold(
       // Settings moved from a gear here to its own bottom-nav tab.
-      appBar: AppBar(title: const Text('Choose a puzzle')),
+      appBar: risoAppBar('Choose a puzzle'),
       // Nothing until the first status load: see [_statusLoaded].
       body: !_statusLoaded
           ? const SizedBox.shrink()
@@ -266,11 +266,26 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
                   onPlay: () => _playDaily(daily),
                 ),
                 const SizedBox(height: 10),
-                DailyWindowsill(
+                DailyStreakRow(
                   now: _dailyDate,
                   completedDays: _completedDailyDays,
                 ),
                 const SizedBox(height: 16),
+                // Small-caps section kicker over the category cards (the
+                // v17 mock's COLLECTIONS label).
+                const Padding(
+                  padding: EdgeInsets.only(left: 2, bottom: 10),
+                  child: Text(
+                    'COLLECTIONS',
+                    style: TextStyle(
+                      fontFamily: 'Nunito',
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 2.2,
+                      color: StudioColors.structureDark,
+                    ),
+                  ),
+                ),
                 LayoutBuilder(
                   builder: (context, constraints) {
                     const spacing = 16.0;
@@ -287,12 +302,11 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
                       spacing: spacing,
                       runSpacing: spacing,
                       children: [
-                        for (final (index, category) in categories.indexed)
+                        for (final category in categories)
                           SizedBox(
                             width: cardWidth,
                             child: _CategoryCard(
                               category: category,
-                              variant: index,
                               onOpen: () => _openCategory(category),
                             ),
                           ),
@@ -335,14 +349,12 @@ InProgressRun? continueRunFrom(
 class _CategoryCard extends StatelessWidget {
   const _CategoryCard({
     required this.category,
-    required this.variant,
     required this.onOpen,
   });
 
   final PuzzleCategory category;
 
   /// Wobble preset for [PaintedCard]; the grid passes its item index.
-  final int variant;
 
   final VoidCallback onOpen;
 
@@ -350,7 +362,6 @@ class _CategoryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final images = imagesInCategory(category.id);
     return PaintedCard(
-      variant: variant,
       // One background for every card — the wallpaper color; the shadow
       // alone makes it read as a card, so it runs a touch deeper here
       // (owner ruling, UI-3 follow-up: the per-category tints are gone
@@ -369,8 +380,6 @@ class _CategoryCard extends StatelessWidget {
             AspectRatio(
               aspectRatio: 3 / 2,
               child: FramedArt(
-                // The grid index: neighboring covers tear differently.
-                seed: variant,
                 // The owner-made cover for this category (UI-3 ruling: the
                 // "first catalog image" covers didn't sell the categories).
                 child: Image.asset(
@@ -401,8 +410,12 @@ class _CategoryCard extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 2),
               child: Text(
-                '${images.length} paintings',
-                style: Theme.of(context).textTheme.bodySmall,
+                '${images.length} paintings'.toUpperCase(),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.8,
+                ),
               ),
             ),
           ],

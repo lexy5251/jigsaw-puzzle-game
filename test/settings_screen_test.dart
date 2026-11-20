@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:jigsaw_puzzle/app_settings.dart';
 import 'package:jigsaw_puzzle/background_music.dart';
 import 'package:jigsaw_puzzle/home_shell.dart';
+import 'package:jigsaw_puzzle/riso_icons.dart';
 import 'package:jigsaw_puzzle/settings_screen.dart';
 import 'package:jigsaw_puzzle/studio_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -80,15 +81,23 @@ void main() {
     expect(music.setVolumes.last, store.settings.musicVolume);
   });
 
-  testWidgets('muting shows the muted icon', (tester) async {
+  // The riso set has no slashed "off" glyph; silent = the same icon dimmed
+  // to the muted ink.
+  RisoIcon glyphOf(WidgetTester tester, RisoGlyph glyph) =>
+      tester.widget<RisoIcon>(
+        find.byWidgetPredicate((w) => w is RisoIcon && w.glyph == glyph),
+      );
+
+  testWidgets('muting dims the effects icon to the muted ink', (tester) async {
     await pumpSettings(tester, initial: const AppSettings(effectsVolume: 0));
-    expect(find.byIcon(Icons.volume_off), findsOneWidget);
+    expect(glyphOf(tester, RisoGlyph.speaker).color, StudioColors.mutedInk);
+    expect(glyphOf(tester, RisoGlyph.music).color, isNot(StudioColors.mutedInk));
   });
 
-  testWidgets('muting the music shows its muted icon', (tester) async {
+  testWidgets('muting the music dims its icon', (tester) async {
     await pumpSettings(tester, initial: const AppSettings(musicVolume: 0));
-    expect(find.byIcon(Icons.volume_off), findsOneWidget);
-    expect(find.byIcon(Icons.music_note), findsNothing);
+    expect(glyphOf(tester, RisoGlyph.music).color, StudioColors.mutedInk);
+    expect(glyphOf(tester, RisoGlyph.speaker).color, isNot(StudioColors.mutedInk));
   });
 
   testWidgets('toggling the preview default persists', (tester) async {

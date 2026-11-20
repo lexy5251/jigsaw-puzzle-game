@@ -56,7 +56,7 @@ class BonusBoardCard extends StatelessWidget {
             'BONUS PUZZLE',
             textAlign: TextAlign.center,
             style: theme.textTheme.labelSmall?.copyWith(
-              color: StudioColors.terracotta,
+              color: StudioColors.structureDark,
               fontWeight: FontWeight.w800,
               letterSpacing: 2.4,
             ),
