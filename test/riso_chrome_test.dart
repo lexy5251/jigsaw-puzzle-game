@@ -57,34 +57,6 @@ void main() {
     });
   });
 
-  group('PieceMeter', () {
-    testWidgets('fills one piece per finished painting and labels itself', (
-      tester,
-    ) async {
-      final semantics = tester.ensureSemantics();
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: studioTheme(),
-          home: const Scaffold(body: PieceMeter(done: 3, total: 10)),
-        ),
-      );
-      expect(find.text(pieceMeterText(3, 10)), findsOneWidget);
-      Finder pieces({required bool filled}) => find.byWidgetPredicate(
-        (widget) =>
-            widget is FamilyPiece &&
-            (widget.fill == StudioColors.tomato) == filled,
-      );
-      expect(pieces(filled: true), findsNWidgets(3));
-      expect(pieces(filled: false), findsNWidgets(7));
-      // One merged announcement; the 10 mini pieces stay silent.
-      expect(
-        find.bySemanticsLabel('3 of 10 pieced together'),
-        findsOneWidget,
-      );
-      semantics.dispose();
-    });
-  });
-
   testWidgets('the done sticker never eats the card tap', (tester) async {
     var taps = 0;
     await tester.pumpWidget(

@@ -11,8 +11,6 @@ import 'riso_icons.dart';
 import 'studio_theme.dart';
 
 /// The category header's progress line; shared with tests.
-String pieceMeterText(int done, int total) => '$done of $total pieced together';
-
 /// One family piece, painted. The building block of every marker.
 class FamilyPiece extends StatelessWidget {
   const FamilyPiece({
@@ -223,56 +221,6 @@ class ProgressPiecePill extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-/// The category header's meter: "N of M pieced together" with one mini
-/// piece per painting filling tomato as the collection completes.
-class PieceMeter extends StatelessWidget {
-  const PieceMeter({super.key, required this.done, required this.total});
-
-  final int done;
-  final int total;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      container: true,
-      label: pieceMeterText(done, total),
-      excludeSemantics: true,
-      // Wrap, not Row: at accessibility text scales the line and the
-      // pieces stack instead of overflowing the page's width.
-      child: Wrap(
-        spacing: 10,
-        runSpacing: 6,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          Text(
-            pieceMeterText(done, total),
-            style: const TextStyle(
-              fontFamily: 'Nunito',
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: StudioColors.mutedInk,
-            ),
-          ),
-          Wrap(
-            spacing: 4,
-            runSpacing: 4,
-            children: [
-              for (var i = 0; i < total; i++)
-                i < done
-                    ? const FamilyPiece(size: 13, fill: StudioColors.tomato)
-                    : const FamilyPiece(
-                        size: 13,
-                        stroke: StudioColors.structureInk,
-                        strokeWidth: 4,
-                      ),
-            ],
-          ),
-        ],
       ),
     );
   }

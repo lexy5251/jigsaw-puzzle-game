@@ -2,44 +2,59 @@
 // 0. When a puzzle is unfinished, a "Continue puzzle" card sits on top:
 //    the most recently played run, resumed in one tap (no size sheet).
 // 1. A "Today's painting" card shows the daily puzzle with the
-//    streak windowsill — a pot blooms for every day the daily was finished.
-// 2. Below it, one painted card per themed category (owner-made cover art
-//    from assets/covers/, accent tint, painting count); categories with no
-//    images yet are hidden. Tapping a card opens that category's own
-//    screen with its puzzle grid.
-// 3. Starting a puzzle (daily card or category screen) goes through the
-//    shared size-sheet flow in puzzle_launcher.dart.
+//    streak row — a piece clicks in for every day the daily was finished.
+// 2. Below them, the whole gallery as ONE grid of photo cards, narrowed in
+//    place by a scrolling row of filter chips ("All" + one per category;
+//    owner's layout-B ruling — covers and per-category pages are gone).
+//    Started paintings wear the % piece pill, finished ones the done
+//    sticker, exactly like the retired category grid did.
+// 3. Starting a puzzle (daily card or grid) goes through the shared
+//    size-sheet flow in puzzle_launcher.dart.
 
 import 'dart:async';
-import 'dart:math' show max;
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 
-import 'category_screen.dart';
+import 'bonus_track.dart';
 import 'continue_puzzle_card.dart';
 import 'daily_puzzle.dart';
 import 'daily_puzzle_card.dart';
 import 'daily_streak.dart';
 import 'my_puzzles.dart';
 import 'puzzle_catalog.dart';
+import 'puzzle_completion.dart';
 import 'puzzle_launcher.dart';
 import 'puzzle_save.dart';
+import 'riso_markers.dart';
 import 'studio_surfaces.dart';
 import 'studio_theme.dart';
 import 'tab_activation.dart';
 
 class PuzzleSelectScreen extends StatefulWidget {
-  const PuzzleSelectScreen({super.key, this.clock, this.isActive = true});
+  const PuzzleSelectScreen({
+    super.key,
+    this.clock,
+    this.isActive = true,
+    this.catalog = puzzleCatalog,
+  });
 
   /// Returns "now"; tests fix the date to make the daily puzzle
   /// deterministic. Defaults to [DateTime.now].
   final DateTime Function()? clock;
 
-  /// Whether the shell currently shows this tab; the daily status reloads
+  /// Whether the shell currently shows this tab; the status reloads
   /// when the tab becomes visible again (a daily can be finished from the
   /// My Puzzles tab's flows).
   final bool isActive;
+
+  /// Where the grid's images come from. Tests supply a small fixture
+  /// catalog so grid tests stay independent of the real bundled photos.
+  /// The daily card and continue card deliberately keep reading the real
+  /// catalogs — fixture saves never produce either.
+  final List<PuzzleImage> catalog;
 
   @override
   State<PuzzleSelectScreen> createState() => _PuzzleSelectScreenState();
@@ -49,6 +64,7 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
     with WidgetsBindingObserver, TabActivationAware<PuzzleSelectScreen> {
   static const _saveStore = SharedPreferencesSaveStore();
   static const _dailyStore = SharedPreferencesDailyStreakStore();
+  static const _completionStore = SharedPreferencesCompletionStore();
 
   /// Days on which the daily puzzle was finished (streak input).
   var _completedDailyDays = <String>{};
@@ -63,6 +79,17 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
   /// painting is excluded only while the daily card already offers
   /// Continue for it. Null hides the card.
   InProgressRun? _continueRun;
+
+  /// Grid images finished at least once, at any size (done sticker).
+  var _completedImageIds = <String>{};
+
+  /// Best progress percent per grid image with a resumable save (the piece
+  /// pill; the player must be able to spot a started puzzle — and how far
+  /// it got — without opening its size sheet).
+  var _progressPercents = <String, int>{};
+
+  /// The selected filter chip; null shows the whole catalog ("All").
+  String? _selectedCategoryId;
 
   /// False until the first status load lands. The body renders nothing
   /// before that: painting defaults first would let the continue card pop
@@ -141,6 +168,56 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
     return null;
   }
 
+  /// Best progress percent per grid image, from the refresh's one shared
+  /// save-store snapshot. The pill shows the furthest run: the most
+  /// advanced save of any size speaks for the painting. Capped at 99: only
+  /// the done sticker may say "complete", and 224/225 would otherwise
+  /// round up to a lying 100%.
+  Map<String, int> _progressPercentsFrom(
+    Map<String, PuzzleSaveState> saves,
+    Map<String, CompletionRecord> completions,
+    Set<String> gridIds,
+  ) {
+    final sizesByGrid = {
+      for (final size in puzzleSizes) (size.columns, size.rows): size,
+    };
+    final percents = <String, int>{};
+    for (final MapEntry(:key, value: save) in saves.entries) {
+      final parsed = parsePuzzleSaveKey(key);
+      if (parsed == null || !gridIds.contains(parsed.imageId)) {
+        continue;
+      }
+      final size = sizesByGrid[(parsed.columns, parsed.rows)];
+      if (size == null || !save.isConsistentFor(size.pieceCount)) {
+        continue;
+      }
+      // Same rule as buildMyPuzzlesSummary: an interrupted final snap can
+      // leave a fully locked save behind; once its completion record
+      // landed, the painting is done — a 99% pill next to the done sticker
+      // would lie (without the record, the save is the retry vehicle and
+      // the pill rightly stays).
+      if (save.lockedPieceIndexes.length == size.pieceCount &&
+          completions.containsKey(
+            puzzleCompletionKey(
+              imageId: parsed.imageId,
+              columns: size.columns,
+              rows: size.rows,
+            ),
+          )) {
+        continue;
+      }
+      final percent = math.min(
+        99,
+        (save.lockedPieceIndexes.length * 100 / size.pieceCount).round(),
+      );
+      final best = percents[parsed.imageId];
+      if (best == null || percent > best) {
+        percents[parsed.imageId] = percent;
+      }
+    }
+    return percents;
+  }
+
   void _scheduleMidnightRefresh(DateTime now) {
     // Construct the next calendar midnight instead of adding 24 hours:
     // local days can be shorter or longer around daylight-saving changes.
@@ -163,15 +240,19 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
 
     final days = await _dailyStore.completedDays();
     final daily = dailyPuzzleFor(now);
-    // ONE save-store scan feeds both the daily credit check and the
-    // continue card, instead of each re-reading the same keys.
+    // ONE scan per store feeds everything on this page: the saves snapshot
+    // serves the daily credit check, the continue card AND the grid pills;
+    // the completions snapshot serves the continue card AND the done
+    // stickers. Nothing below re-reads a store.
     final saves = await loadAllSaves(_saveStore);
+    final completions = await _completionStore.loadAllCompletionRecords();
     final runCredit = _dailyRunCreditDay(daily, now, saves);
     // The FULL catalog: a bonus gift or story scene can be the most
     // recently played run, and this card must agree with My Puzzles
     // (which reads the full catalog for the same reason) about it.
     final summary = await loadMyPuzzlesSummary(
       saves: saves,
+      completions: completions,
       catalog: fullPuzzleCatalog,
     );
     final continueRun = continueRunFrom(
@@ -182,6 +263,10 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
       // resume surface on the whole home screen for the day.
       excludedDailyId: runCredit != null ? daily.id : null,
     );
+    final gridIds = {for (final image in widget.catalog) image.id};
+    final completed = imageIdsFromCompletions(completions)
+        .intersection(gridIds);
+    final percents = _progressPercentsFrom(saves, completions, gridIds);
     // A read started before midnight must not overwrite the next day's data.
     if (!mounted || dayKey(now) != dayKey(_now)) {
       return;
@@ -193,7 +278,9 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
         dayKey(_dailyDate) == dayKey(now) &&
         setEquals(_completedDailyDays, days) &&
         _dailyRunCredit == runCredit &&
-        _continueRun == continueRun) {
+        _continueRun == continueRun &&
+        setEquals(_completedImageIds, completed) &&
+        mapEquals(_progressPercents, percents)) {
       return;
     }
     setState(() {
@@ -202,6 +289,8 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
       _completedDailyDays = days;
       _dailyRunCredit = runCredit;
       _continueRun = continueRun;
+      _completedImageIds = completed;
+      _progressPercents = percents;
     });
   }
 
@@ -218,18 +307,20 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
 
   Future<void> _playDaily(PuzzleImage daily) async {
     await startPuzzleFlow(context, daily, clock: widget.clock);
-    // Finishing it changes the windowsill; refresh when the player returns.
+    // Finishing it changes the streak row; refresh when the player returns.
     await _refreshDailyStatus();
   }
 
-  Future<void> _openCategory(PuzzleCategory category) async {
-    await Navigator.push<void>(
+  Future<void> _openPuzzle(PuzzleImage image) async {
+    // Forward this screen's catalog so "Next puzzle" picks from the same
+    // set the grid shows (a fixture catalog in tests, the global one live).
+    await startPuzzleFlow(
       context,
-      MaterialPageRoute<void>(
-        builder: (_) => CategoryScreen(category: category, clock: widget.clock),
-      ),
+      image,
+      clock: widget.clock,
+      catalogs: PuzzleCatalogs(gallery: widget.catalog),
     );
-    // Today's daily may have been finished from inside the category.
+    // The puzzle may have been started or finished while the game was open.
     await _refreshDailyStatus();
   }
 
@@ -238,84 +329,101 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
     final daily = dailyPuzzleFor(_dailyDate);
     final categories = [
       for (final category in puzzleCategories)
-        if (imagesInCategory(category.id).isNotEmpty) category,
+        if (imagesInCategory(category.id, catalog: widget.catalog).isNotEmpty)
+          category,
     ];
-    return Scaffold(
-      // Settings moved from a gear here to its own bottom-nav tab.
-      appBar: risoAppBar('Choose a puzzle'),
-      // Nothing until the first status load: see [_statusLoaded].
-      body: !_statusLoaded
-          ? const SizedBox.shrink()
-          : ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                if (_continueRun case final run?) ...[
-                  ContinuePuzzleCard(run: run, onResume: () => _resumeRun(run)),
-                  const SizedBox(height: 10),
-                ],
-                DailyPuzzleCard(
-                  image: daily,
-                  doneToday: _completedDailyDays.contains(dayKey(_dailyDate)),
-                  inProgress: _dailyRunCredit != null,
-                  // A fresh start always credits today; an in-progress run only
-                  // when it was begun today (a yesterday-begun run blooms
-                  // yesterday's pot, so the card must not promise today's).
-                  bloomsToday:
-                      _dailyRunCredit == null ||
-                      _dailyRunCredit == dayKey(_dailyDate),
-                  onPlay: () => _playDaily(daily),
-                ),
-                const SizedBox(height: 10),
-                DailyStreakRow(
-                  now: _dailyDate,
-                  completedDays: _completedDailyDays,
-                ),
-                const SizedBox(height: 16),
-                // Small-caps section kicker over the category cards (the
-                // v17 mock's COLLECTIONS label).
-                const Padding(
-                  padding: EdgeInsets.only(left: 2, bottom: 10),
-                  child: Text(
-                    'COLLECTIONS',
-                    style: TextStyle(
-                      fontFamily: 'Nunito',
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 2.2,
-                      color: StudioColors.structureDark,
+    final gridImages = _selectedCategoryId == null
+        ? widget.catalog
+        : imagesInCategory(_selectedCategoryId!, catalog: widget.catalog);
+    return PopScope(
+      // A selected filter is not a route, but Android back should still
+      // "leave the category" the way it left the old pushed pages: first
+      // back clears the filter to All, only then does back exit the app.
+      canPop: _selectedCategoryId == null,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) {
+          setState(() => _selectedCategoryId = null);
+        }
+      },
+      child: Scaffold(
+        // Settings moved from a gear here to its own bottom-nav tab.
+        appBar: risoAppBar('Choose a puzzle'),
+        // Nothing until the first status load: see [_statusLoaded]. The new
+        // grid state rides the same load, so the first painted frame already
+        // wears its pills and stickers — nothing pops in later.
+        body: !_statusLoaded
+            ? const SizedBox.shrink()
+            : CustomScrollView(
+                slivers: [
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                    sliver: SliverToBoxAdapter(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (_continueRun case final run?) ...[
+                            ContinuePuzzleCard(
+                              run: run,
+                              onResume: () => _resumeRun(run),
+                            ),
+                            const SizedBox(height: 10),
+                          ],
+                          DailyPuzzleCard(
+                            image: daily,
+                            doneToday: _completedDailyDays.contains(
+                              dayKey(_dailyDate),
+                            ),
+                            inProgress: _dailyRunCredit != null,
+                            // A fresh start always credits today; an in-progress
+                            // run only when it was begun today (a
+                            // yesterday-begun run blooms yesterday's pot, so the
+                            // card must not promise today's).
+                            bloomsToday:
+                                _dailyRunCredit == null ||
+                                _dailyRunCredit == dayKey(_dailyDate),
+                            onPlay: () => _playDaily(daily),
+                          ),
+                          const SizedBox(height: 10),
+                          DailyStreakRow(
+                            now: _dailyDate,
+                            completedDays: _completedDailyDays,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    const spacing = 16.0;
-                    // Keep the responsive columns, but let card heights follow
-                    // their content when enlarged text wraps onto extra lines.
-                    final columns = max(
-                      1,
-                      (constraints.maxWidth / (260 + spacing)).ceil(),
-                    );
-                    final cardWidth =
-                        (constraints.maxWidth - spacing * (columns - 1)) /
-                        columns;
-                    return Wrap(
-                      spacing: spacing,
-                      runSpacing: spacing,
-                      children: [
-                        for (final category in categories)
-                          SizedBox(
-                            width: cardWidth,
-                            child: _CategoryCard(
-                              category: category,
-                              onOpen: () => _openCategory(category),
-                            ),
-                          ),
-                      ],
-                    );
-                  },
-                ),
-              ],
-            ),
+                  // Full-bleed so chips scroll under the screen edge; the row
+                  // carries the 16dp gutters itself.
+                  SliverToBoxAdapter(
+                    child: _CategoryChipRow(
+                      categories: categories,
+                      selectedId: _selectedCategoryId,
+                      onSelect: (id) =>
+                          setState(() => _selectedCategoryId = id),
+                    ),
+                  ),
+                  SliverPadding(
+                    padding: photoGridPadding,
+                    sliver: SliverGrid.builder(
+                      // Max width instead of a fixed column count: 2 across on
+                      // phones so the photo is big enough to judge (UI-6
+                      // ruling), more columns on tablets and the web build.
+                      gridDelegate: photoGridDelegate,
+                      itemCount: gridImages.length,
+                      itemBuilder: (context, index) {
+                        final image = gridImages[index];
+                        return _PuzzleCard(
+                          image: image,
+                          isCompleted: _completedImageIds.contains(image.id),
+                          progressPercent: _progressPercents[image.id],
+                          onTap: () => _openPuzzle(image),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+      ),
     );
   }
 }
@@ -344,83 +452,172 @@ InProgressRun? continueRunFrom(
   return null;
 }
 
-/// One tappable collection on the home screen: cover painting, title,
-/// count. No corner mascot chip — the owner ruled it clutter (UI-3).
-class _CategoryCard extends StatelessWidget {
-  const _CategoryCard({
-    required this.category,
-    required this.onOpen,
+/// The horizontally scrolling filter row: "All" + one chip per non-empty
+/// category. The selected chip wears the sticker treatment (owner's
+/// style-C ruling): blush fill plus the hard violet offset shadow.
+class _CategoryChipRow extends StatelessWidget {
+  const _CategoryChipRow({
+    required this.categories,
+    required this.selectedId,
+    required this.onSelect,
   });
 
-  final PuzzleCategory category;
+  final List<PuzzleCategory> categories;
 
-  /// Wobble preset for [PaintedCard]; the grid passes its item index.
+  /// The selected category id; null means "All".
+  final String? selectedId;
 
-  final VoidCallback onOpen;
+  final ValueChanged<String?> onSelect;
 
   @override
   Widget build(BuildContext context) {
-    final images = imagesInCategory(category.id);
-    return PaintedCard(
-      // One background for every card — the wallpaper color; the shadow
-      // alone makes it read as a card, so it runs a touch deeper here
-      // (owner ruling, UI-3 follow-up: the per-category tints are gone
-      // on the main page).
-      color: StudioColors.ground,
-      shadow: PaintedCard.groundShadow,
-      onTap: onOpen,
-      padding: const EdgeInsets.fromLTRB(9, 9, 9, 10),
-      child: Semantics(
-        // Lets e2e tests open a category without matching on its title.
-        identifier: 'category-${category.id}',
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+    return ScrollConfiguration(
+      // Mouse drag is off Flutter's default dragDevices and horizontal
+      // scrollables get no scrollbar on web/desktop — without this, chips
+      // past the right edge are unreachable for mouse-only users.
+      behavior: ScrollConfiguration.of(context)
+          .copyWith(dragDevices: PointerDeviceKind.values.toSet()),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        // Bottom padding leaves room for the selected chip's offset shadow.
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 5),
+        child: Row(
           children: [
-            AspectRatio(
-              aspectRatio: 3 / 2,
-              child: FramedArt(
-                // The owner-made cover for this category (UI-3 ruling: the
-                // "first catalog image" covers didn't sell the categories).
-                child: Image.asset(
-                  categoryCoverPath(category.id),
-                  fit: BoxFit.cover,
-                  // Decode smaller previews to reduce memory use.
-                  cacheWidth: TiltedPhotoCard.thumbnailCacheWidth,
-                  // A category without a cover file yet (e.g. a freshly
-                  // added one) degrades to the old rule: first catalog
-                  // painting.
-                  errorBuilder: (context, _, _) => Image.asset(
-                    images.first.assetPath,
-                    fit: BoxFit.cover,
-                    cacheWidth: TiltedPhotoCard.thumbnailCacheWidth,
-                  ),
-                ),
-              ),
+            _FilterChip(
+              label: 'All',
+              identifier: 'category-all',
+              selected: selectedId == null,
+              onTap: () => onSelect(null),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(2, 8, 2, 0),
-              child: Text(
-                category.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.titleMedium,
+            for (final category in categories) ...[
+              const SizedBox(width: 8),
+              _FilterChip(
+                label: category.title,
+                // The same identifier the category cards wore, so the Maestro
+                // flow's selectors keep working unchanged.
+                identifier: 'category-${category.id}',
+                selected: selectedId == category.id,
+                onTap: () => onSelect(category.id),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2),
-              child: Text(
-                '${images.length} paintings'.toUpperCase(),
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.8,
-                ),
-              ),
-            ),
+            ],
           ],
         ),
       ),
+    );
+  }
+}
+
+class _FilterChip extends StatelessWidget {
+  const _FilterChip({
+    required this.label,
+    required this.identifier,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final String identifier;
+  final bool selected;
+  final VoidCallback onTap;
+
+  static const _radius = BorderRadius.all(Radius.circular(999));
+
+  /// The chip's own hard shadow: smaller than [PaintedCard.groundShadow]
+  /// so the lift reads at pill size.
+  static const _selectedShadow = BoxShadow(
+    color: StudioColors.cardShadow,
+    offset: Offset(3, 3),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      // Side-less shape: this box exists only to carry the hard offset
+      // shadow — the Material below paints the border (same split as the
+      // size sheet's rows, and for the same double-stroke reason).
+      decoration: ShapeDecoration(
+        shape: const RoundedRectangleBorder(borderRadius: _radius),
+        shadows: selected ? const [_selectedShadow] : const [],
+      ),
+      child: Material(
+        color: selected ? StudioColors.chip : StudioColors.card,
+        shape: const RoundedRectangleBorder(
+          borderRadius: _radius,
+          // Thinner than PaintedCard.borderWidth on purpose: 2.5 reads
+          // heavy at pill size (the approved filter-row mock uses 2).
+          side: BorderSide(color: StudioColors.structureInk, width: 2),
+        ),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: _radius,
+          // The labeled node below owns the activation; without this the
+          // InkWell adds a second, unlabeled tap stop per chip for screen
+          // readers and switch access.
+          excludeFromSemantics: true,
+          child: Padding(
+            // Vertical padding brings the tap target to 48dp at default
+            // text size (20dp text line + 2x14; measured — the 2px border
+            // paints inside and adds nothing); large text grows it further.
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            child: Semantics(
+              // The stable e2e hook. The labeled node must own the
+              // activation too — screen readers send their tap here.
+              identifier: identifier,
+              label: label,
+              button: true,
+              selected: selected,
+              onTap: onTap,
+              child: ExcludeSemantics(
+                child: Text(
+                  label,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One painting in the grid: picture-only photo card; started runs wear
+/// the % piece pill, finished ones the overhanging done sticker.
+class _PuzzleCard extends StatelessWidget {
+  const _PuzzleCard({
+    required this.image,
+    required this.isCompleted,
+    required this.progressPercent,
+    required this.onTap,
+  });
+
+  final PuzzleImage image;
+
+  /// Finished at least once, at any size: wears the done piece sticker.
+  final bool isCompleted;
+
+  /// Best resumable progress at any size, or null when untouched: the
+  /// piece pill (replaces the old sprout badge AND tells how far).
+  final int? progressPercent;
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return TiltedPhotoCard(
+      assetPath: image.assetPath,
+      title: image.title,
+      semanticsIdentifier: 'catalog-puzzle-${image.id}',
+      onTap: onTap,
+      cornerMarker: isCompleted ? const DonePieceSticker() : null,
+      overlays: [
+        if (progressPercent case final percent?)
+          Positioned(
+            right: 9,
+            bottom: 10,
+            child: ProgressPiecePill(percent: percent),
+          ),
+      ],
     );
   }
 }

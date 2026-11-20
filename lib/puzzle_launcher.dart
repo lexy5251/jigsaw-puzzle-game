@@ -1,7 +1,7 @@
 // The shared "tap a painting → play" flow: normally tap → size sheet →
-// game, used by the select screen's daily card, every category screen, and
-// My Puzzles. The home continue card enters with [startPuzzleFlow]'s
-// `resumeSize` and skips the sheet — the one sheet-less launch path.
+// game, used by the home screen's daily card and grid, and by My Puzzles.
+// The home continue card enters with [startPuzzleFlow]'s `resumeSize` and
+// skips the sheet — the one sheet-less launch path.
 
 import 'package:flutter/material.dart';
 

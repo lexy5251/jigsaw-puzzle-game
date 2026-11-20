@@ -4,9 +4,9 @@
 //    dropped the progress chip for now, it sat heavy on the art;
 //    "Finished" chips name the piece counts done (his explicit pick).
 // 2. Tapping any card opens the usual size sheet — the same flow as the
-//    category pages — where every size shows its own In progress /
+//    home grid — where every size shows its own In progress /
 //    Completed status.
-// 3. Cards are picture-only like the category grids (names live in the
+// 3. Cards are picture-only like the home grid (names live in the
 //    semantics labels); the lists reload after a game closes and whenever
 //    the shell makes this tab visible again.
 // 4. "Collection" is the bonus track: the current gift painting assembling
@@ -263,7 +263,7 @@ class _MyPuzzlesScreenState extends State<MyPuzzlesScreen>
     );
   }
 
-  /// The category pages' grid; the storage key keeps each tab's scroll
+  /// The home grid's geometry; the storage key keeps each tab's scroll
   /// offset alive across tab switches (TabBarView disposes hidden tabs).
   Widget _photoGrid(
     String name,

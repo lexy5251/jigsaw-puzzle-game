@@ -84,15 +84,4 @@ void main() {
     );
   });
 
-  test('every category has its cover on disk', () {
-    // Covers fall back to the first catalog photo at the call site, so a
-    // missing one is not fatal — but it is always a packaging mistake.
-    final missing = [
-      for (final category in puzzleCategories)
-        if (!File(categoryCoverPath(category.id)).existsSync())
-          categoryCoverPath(category.id),
-    ];
-
-    expect(missing, isEmpty, reason: 'categories without a cover file');
-  });
 }

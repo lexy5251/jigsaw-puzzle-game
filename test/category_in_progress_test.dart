@@ -8,8 +8,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'test_helpers.dart';
 
 /// A started puzzle must be findable without opening its size sheet
-/// (2026-11-06 phone feedback): its category card wears the progress
+/// (2026-11-06 phone feedback): its grid tile wears the progress
 /// piece-pill (the sprout's riso successor — same signal, plus how far).
+/// The chips narrow the home grid in place (layout B); these pins run on
+/// the filtered Landscapes view.
 void main() {
   DateTime fixedNow() => DateTime(2026, 11, 6, 14);
 
@@ -96,14 +98,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(progressPills(), findsNothing);
       expect(find.bySemanticsLabel('In progress'), findsNothing);
-      await tester.tap(
-        find
-            .descendant(
-              of: find.byType(GridView),
-              matching: find.byType(InkWell),
-            )
-            .first,
-      );
+      await tester.tap(catalogPuzzleCard(started.id));
       await tester.pumpAndSettle();
       expect(find.byType(BottomSheet), findsOneWidget);
       expect(find.text('In progress'), findsNothing);

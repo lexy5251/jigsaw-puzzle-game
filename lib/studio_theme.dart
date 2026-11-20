@@ -183,10 +183,12 @@ class StudioCategoryStyle {
   const StudioCategoryStyle({required this.accent, required this.tint});
 
   /// Saturated color for the category's swatch, kickers, and CTAs.
+  // Nothing renders these since the category pages retired with layout B
+  // (2026-11-19); the owner's curated palette and its catalog-sync test
+  // stay for the next categorized surface.
   final Color accent;
 
-  /// Pale wash for the category's hero band (used by the category screens
-  /// when their layout lands).
+  /// Pale wash for a category hero band, should one return.
   final Color tint;
 }
 

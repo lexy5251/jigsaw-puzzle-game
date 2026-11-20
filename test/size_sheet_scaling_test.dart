@@ -18,10 +18,9 @@ void main() {
 
     SharedPreferences.setMockInitialValues({});
     await pumpSelectScreen(tester, clock: () => DateTime(2026, 12, 12, 14));
-    final landscapes = find.bySemanticsIdentifier('category-landscapes');
-    await scrollSelectScreenTo(tester, landscapes, delta: 150);
-    await tester.tap(landscapes);
-    await tester.pumpAndSettle();
+    // Straight to the tile on the home grid (layout B) — the chip row's
+    // own hostile-geometry behavior has its dedicated probe in
+    // home_grid_test.dart.
     final card = catalogPuzzleCard('alpine-lakes-panorama');
     await scrollSelectScreenTo(tester, card, delta: 150);
     await tester.tap(card);

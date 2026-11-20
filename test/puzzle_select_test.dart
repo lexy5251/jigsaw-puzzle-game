@@ -60,10 +60,11 @@ void main() {
       );
       await pumpSelectScreen(tester, clock: () => now);
 
-      // Categories live on their own pages now: open Landscapes first.
-      final landscapesCard = find.text('Landscapes');
-      await scrollSelectScreenTo(tester, landscapesCard);
-      await tester.tap(landscapesCard);
+      // Filter to Landscapes through its chip (layout B: the chips narrow
+      // the home grid in place — no pushed category page anymore).
+      final landscapesChip = find.text('Landscapes');
+      await scrollSelectScreenTo(tester, landscapesChip);
+      await tester.tap(landscapesChip);
       await tester.pumpAndSettle();
 
       // Cards carry no visible title; the semantics identifier is the hook.
@@ -139,9 +140,9 @@ void main() {
       expect(dailyPuzzleFor(now).title, 'Alpine Lake Morning');
       await pumpSelectScreen(tester, clock: () => now);
 
-      final landscapesCard = find.text('Landscapes');
-      await scrollSelectScreenTo(tester, landscapesCard);
-      await tester.tap(landscapesCard);
+      final landscapesChip = find.text('Landscapes');
+      await scrollSelectScreenTo(tester, landscapesChip);
+      await tester.tap(landscapesChip);
       await tester.pumpAndSettle();
 
       final catalogImage = catalogPuzzleCard('alpine-lakes-panorama');
@@ -212,9 +213,9 @@ void main() {
       });
       await pumpSelectScreen(tester, clock: () => now);
 
-      final landscapesCard = find.text('Landscapes');
-      await scrollSelectScreenTo(tester, landscapesCard);
-      await tester.tap(landscapesCard);
+      final landscapesChip = find.text('Landscapes');
+      await scrollSelectScreenTo(tester, landscapesChip);
+      await tester.tap(landscapesChip);
       await tester.pumpAndSettle();
 
       final catalogImage = catalogPuzzleCard('alpine-lakes-panorama');

@@ -44,14 +44,13 @@ void main() {
         );
         await tester.pumpAndSettle();
         // Deterministic decode wait: warm the exact cache entries the card
-        // thumbnails and category covers resolve, then paint a frame.
+        // thumbnails and the first grid rows resolve, then paint a frame.
         await precachePreviewImages(
           tester.element(find.byType(PuzzleSelectScreen)),
           [
             featured.assetPath,
             dailyPuzzleFor(previewNow()).assetPath,
-            for (final category in puzzleCategories)
-              categoryCoverPath(category.id),
+            for (final painting in puzzleCatalog.take(6)) painting.assetPath,
           ],
           width: TiltedPhotoCard.thumbnailCacheWidth,
         );

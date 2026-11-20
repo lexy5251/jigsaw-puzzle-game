@@ -62,7 +62,6 @@ flutter:
 
   assets:
     - assets/audio/
-    - assets/covers/
     - assets/images/
     - assets/images/landscapes/
     - assets/images/cozy/

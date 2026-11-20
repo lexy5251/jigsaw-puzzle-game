@@ -25,6 +25,9 @@ enum StudioMascot {
 
 /// Category mascots (mockup section F). Keys match `PuzzleCategory.id`;
 /// a test keeps the two in sync.
+// Nothing renders these since the category pages retired with layout B
+// (2026-11-19, text-only filter chips); the owner's curated pairing and its
+// catalog-sync test stay for the next categorized surface.
 const categoryMascots = <String, StudioMascot>{
   'landscapes': StudioMascot.mountains,
   'cozy': StudioMascot.mug,
@@ -37,11 +40,6 @@ const categoryMascots = <String, StudioMascot>{
   'food': StudioMascot.palette,
   'art': StudioMascot.palette,
 };
-
-/// Falls back to the palette (the generic "art" motif) so an unstyled new
-/// category degrades gracefully, mirroring `categoryStyleFor`.
-StudioMascot mascotForCategory(String categoryId) =>
-    categoryMascots[categoryId] ?? StudioMascot.palette;
 
 /// One motif at a given height; width follows the motif's own aspect ratio.
 class MascotArt extends StatelessWidget {

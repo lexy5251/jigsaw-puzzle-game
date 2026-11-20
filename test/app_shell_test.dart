@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:jigsaw_puzzle/category_screen.dart';
+import 'package:jigsaw_puzzle/game_screen.dart';
 import 'package:jigsaw_puzzle/main.dart';
+import 'package:jigsaw_puzzle/puzzle_catalog.dart';
 import 'package:jigsaw_puzzle/my_puzzles_screen.dart';
 import 'package:jigsaw_puzzle/puzzle_select_screen.dart';
 import 'package:jigsaw_puzzle/settings_screen.dart';
 import 'package:jigsaw_puzzle/story_screen.dart';
 import 'package:jigsaw_puzzle/studio_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'test_helpers.dart';
 
 /// Pins the app shell's wiring. Every other test builds its own MaterialApp
 /// (to inject a clock), so without these a broken theme, home tab, or nav
@@ -96,13 +99,38 @@ void main() {
     );
   });
 
-  testWidgets('a pushed screen covers the nav bar', (tester) async {
+  testWidgets('chips filter in place; only the game covers the nav bar', (
+    tester,
+  ) async {
     await bootApp(tester);
 
+    // A filter chip is not a route: the grid narrows on the SAME page and
+    // the bottom nav stays reachable (layout B replaced the pushed
+    // category screens).
     await tester.tap(find.bySemanticsIdentifier('category-landscapes'));
     await tester.pumpAndSettle();
+    expect(find.byType(NavigationBar).hitTestable(), findsOneWidget);
 
-    expect(find.byType(CategoryScreen), findsOneWidget);
+    // Launching a puzzle pushes the game on the ROOT navigator — the one
+    // route in the flow that must cover the nav bar. No other suite pins
+    // this wiring.
+    // First LANDSCAPES painting, not puzzleCatalog.first — the grid is
+    // filtered by the chip tapped above, and nothing pins the catalog's
+    // lead category.
+    final tile = catalogPuzzleCard(imagesInCategory('landscapes').first.id);
+    await scrollSelectScreenTo(tester, tile);
+    await tester.tap(tile);
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier('puzzle-start'));
+    await tester.runAsync(() async {
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 60));
+      }
+      await currentGame(tester).loaded;
+    });
+    await tester.pump();
+
+    expect(find.byType(GameScreen), findsOneWidget);
     expect(find.byType(NavigationBar).hitTestable(), findsNothing);
 
     await tester.pageBack();

@@ -145,7 +145,7 @@ class FramedThumbnail extends StatelessWidget {
 }
 
 /// The photo grids' shared geometry (2 across on phones — UI-6 ruling):
-/// category pages and My Puzzles must render identically, so both read
+/// the home grid and My Puzzles must render identically, so both read
 /// this one spec.
 const photoGridPadding = EdgeInsets.all(16);
 const photoGridDelegate = SliverGridDelegateWithMaxCrossAxisExtent(
@@ -159,7 +159,7 @@ const photoGridDelegate = SliverGridDelegateWithMaxCrossAxisExtent(
 /// A catalog photo as a sticker card: straight rounded edges (the tilt
 /// retired with the riso chrome — owner's v19→v20 "no tilt" ruling), a
 /// structure-ink border with the hard offset shadow, and no visible title
-/// (names live on in the semantics label). Shared by the category pages
+/// (names live on in the semantics label). Shared by the home grid
 /// and My Puzzles so the two grids cannot drift apart.
 class TiltedPhotoCard extends StatelessWidget {
   const TiltedPhotoCard({

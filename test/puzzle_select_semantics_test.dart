@@ -45,11 +45,11 @@ void main() {
       );
       expect(easyStatus, findsNothing);
 
-      // Categories live on their own pages now: open Landscapes first,
-      // through the same identifier the Maestro flow uses.
-      final landscapesCard = find.bySemanticsIdentifier('category-landscapes');
-      await scrollSelectScreenTo(tester, landscapesCard, delta: 150);
-      await tester.tap(landscapesCard);
+      // Filter to Landscapes through its chip — the same identifier the
+      // Maestro flow uses (the chips inherited it from the old cards).
+      final landscapesChip = find.bySemanticsIdentifier('category-landscapes');
+      await scrollSelectScreenTo(tester, landscapesChip, delta: 150);
+      await tester.tap(landscapesChip);
       await tester.pumpAndSettle();
 
       final catalogTitle = catalogPuzzleCard('alpine-lakes-panorama');

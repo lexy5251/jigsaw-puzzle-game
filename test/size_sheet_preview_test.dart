@@ -73,15 +73,12 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        final categoryCard = find.bySemanticsIdentifier('category-landscapes');
-        await scrollSelectScreenTo(tester, categoryCard, delta: 150);
-        await tester.tap(categoryCard);
-        await tester.pumpAndSettle();
-
         // Warm the one cache entry both the backdrop grid and the sheet's
         // framed preview resolve, so neither paints gray in the capture.
+        // Layout B: the home grid opens on All, whose first rows are the
+        // landscapes paintings.
         await precachePreviewImages(
-          tester.element(find.byType(GridView)),
+          tester.element(find.byType(PuzzleSelectScreen)),
           [for (final painting in landscapes) painting.assetPath],
           width: TiltedPhotoCard.thumbnailCacheWidth,
         );

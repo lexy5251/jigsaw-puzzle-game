@@ -132,8 +132,7 @@ void main() {
         await precachePreviewImages(
           tester.element(find.byType(PuzzleSelectScreen)),
           [
-            for (final category in puzzleCategories)
-              categoryCoverPath(category.id),
+            for (final painting in puzzleCatalog.take(6)) painting.assetPath,
             dailyPuzzleFor(previewNow()).assetPath,
           ],
           width: TiltedPhotoCard.thumbnailCacheWidth,

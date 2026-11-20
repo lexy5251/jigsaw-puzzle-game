@@ -16,8 +16,11 @@ appId: com.lexy5251.jigsawpuzzle
     clearState: true
 - assertVisible: "Choose a puzzle"
 
-# Catalog images live on per-category pages: open Landscapes first, then
-# scroll its grid to the image.
+# Layout B: the Landscapes chip narrows the home grid in place (it kept
+# the old category card's id), then scroll the grid to the image.
+# NOTE: the chip ROW scrolls horizontally — Landscapes is reachable with a
+# DOWN scroll only because it sits first after All. A future flow that
+# targets a later category (food, art, …) must scroll the chip row RIGHT.
 - scrollUntilVisible:
     element:
       id: "category-landscapes"
