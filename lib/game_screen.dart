@@ -16,6 +16,7 @@ import 'dart:async';
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 
+import 'analytics.dart';
 import 'app_settings.dart';
 import 'bonus_track.dart';
 import 'completion_card.dart';
@@ -272,6 +273,10 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   void _selectBoardColor(BoardColorOption option) {
+    // Re-picking the active swatch changes nothing and is not an event.
+    if (option.id != _boardColor.id) {
+      Analytics.instance.boardColorChanged(colorId: option.id);
+    }
     // setState so the GameWidget rebuilds — Flame only re-reads
     // backgroundColor() during the widget build (see setBoardColor).
     setState(() {
@@ -331,6 +336,13 @@ class _GameScreenState extends State<GameScreen> {
       // The GameWidget's ObjectKey ensures the old widget is disposed too.
       _game = _createGame();
     });
+    // A restart is a new run the launcher never sees — without this, the
+    // start/complete funnel would show completions with no matching start.
+    Analytics.instance.puzzleStarted(
+      puzzleId: widget.image.id,
+      pieceCount: widget.size.pieceCount,
+      source: LaunchSource.restart,
+    );
   }
 
   /// "resumed" vs "new puzzle" lets the Maestro flow verify that reopening
@@ -343,6 +355,20 @@ class _GameScreenState extends State<GameScreen> {
 
   Future<bool> _onPuzzleCompleted(JigsawGame game) async {
     if (!mounted || _restarting || !identical(_game, game)) return false;
+    // Logged synchronously, BEFORE the awaits below and before the game
+    // persists the finished board (which happens after this callback's
+    // first suspension) — so a finished save can never exist whose event
+    // didn't fire, and an exit mid-flow can't lose the count. The gate:
+    // a board that loaded already finished is a replay of a recorded
+    // finish (its celebration re-runs only so the record writes get their
+    // retry) — counting it again would inflate completions for exactly
+    // the players whose first write failed.
+    if (!game.completedOnLoad) {
+      Analytics.instance.puzzleCompleted(
+        puzzleId: widget.image.id,
+        pieceCount: widget.size.pieceCount,
+      );
+    }
     // The card reveals when BOTH the glow delay and its data (the
     // next-puzzle offer) are ready: the delay is armed first so storage
     // latency hides inside the 0.9s glow instead of stacking after it, and
@@ -677,6 +703,9 @@ class _GameScreenState extends State<GameScreen> {
                         child: _TrayControlRow(
                           edgesOnly: _edgesOnly,
                           onEdgesOnlyChanged: (edgesOnly) {
+                            Analytics.instance.edgesOnlyToggled(
+                              enabled: edgesOnly,
+                            );
                             setState(() => _edgesOnly = edgesOnly);
                             _game.setEdgesOnlyFilter(edgesOnly);
                           },

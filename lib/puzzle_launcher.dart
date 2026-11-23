@@ -5,6 +5,7 @@
 
 import 'package:flutter/material.dart';
 
+import 'analytics.dart';
 import 'app_settings.dart';
 import 'daily_puzzle.dart';
 import 'game_screen.dart';
@@ -130,6 +131,7 @@ Future<PuzzleSize?> _pickSizeFromSheet(
 Future<void> startPuzzleFlow(
   BuildContext context,
   PuzzleImage image, {
+  required LaunchSource source,
   DateTime Function()? clock,
   // One bundle so fixture-driven flows stay fixtures across every chained
   // hop, not just the first screen.
@@ -170,7 +172,13 @@ Future<void> startPuzzleFlow(
     final selectedSize = pickedSize;
 
     var current = image;
+    var launchSource = source;
     while (true) {
+      Analytics.instance.puzzleStarted(
+        puzzleId: current.id,
+        pieceCount: selectedSize.pieceCount,
+        source: launchSource,
+      );
       // The game screen pops with the painting the player chose via the
       // completion card's "Next puzzle" button, or null on a plain exit.
       final pushed = Navigator.push<PuzzleImage>(
@@ -194,7 +202,9 @@ Future<void> startPuzzleFlow(
       if (next == null || !context.mounted) {
         return;
       }
+      Analytics.instance.nextPuzzleAccepted(puzzleId: next.id);
       current = next;
+      launchSource = LaunchSource.nextChain;
       // The player commits to the new run now, not when the chain began.
       startedDay = dayKey((clock ?? DateTime.now)());
       settings = await _settingsStore.load();

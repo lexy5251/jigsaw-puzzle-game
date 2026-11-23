@@ -18,6 +18,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'analytics.dart';
 import 'bonus_board.dart';
 import 'bonus_track.dart';
 import 'daily_streak.dart';
@@ -96,7 +97,12 @@ class _MyPuzzlesScreenState extends State<MyPuzzlesScreen>
   }
 
   Future<void> _open(PuzzleImage image) async {
-    await startPuzzleFlow(context, image, clock: widget.clock);
+    await startPuzzleFlow(
+      context,
+      image,
+      source: LaunchSource.myPuzzles,
+      clock: widget.clock,
+    );
     // The run may have moved tabs (or new ones begun) while the game was
     // open.
     await _load();

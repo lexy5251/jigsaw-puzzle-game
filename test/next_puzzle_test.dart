@@ -5,19 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jigsaw_puzzle/game_screen.dart';
 import 'package:jigsaw_puzzle/puzzle_catalog.dart';
-import 'package:jigsaw_puzzle/puzzle_launcher.dart';
 
 import 'test_helpers.dart';
-
-/// A sibling of [singlePieceImage] in the same fixture category.
-const secondTestImage = PuzzleImage(
-  id: 'test-b',
-  title: 'Second test puzzle',
-  categoryId: 'test',
-  fileName: 'test_photo.jpg',
-);
-
-const testCatalog = [singlePieceImage, secondTestImage];
 
 void main() {
   group('nextPuzzleAfter', () {
@@ -80,7 +69,7 @@ void main() {
         tester,
         image: singlePieceImage,
         size: singlePieceSize,
-        catalogs: const PuzzleCatalogs(gallery: testCatalog),
+        catalogs: const PuzzleCatalogs(gallery: chainTestCatalog),
       );
       await completePuzzle(tester, currentGame(tester));
 
@@ -101,28 +90,11 @@ void main() {
     testWidgets('the launcher chains into the popped painting, no size sheet', (
       tester,
     ) async {
-      var flowDone = false;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Builder(
-              builder: (context) => TextButton(
-                onPressed: () async {
-                  await startPuzzleFlow(
-                    context,
-                    singlePieceImage,
-                    catalogs: const PuzzleCatalogs(gallery: testCatalog),
-                  );
-                  flowDone = true;
-                },
-                child: const Text('open'),
-              ),
-            ),
-          ),
-        ),
+      final flow = await launchPuzzleFlowToSheet(
+        tester,
+        image: singlePieceImage,
+        catalogs: const PuzzleCatalogs(gallery: chainTestCatalog),
       );
-      await tester.tap(find.text('open'));
-      await tester.pumpAndSettle();
       await tester.tap(find.bySemanticsIdentifier('puzzle-start'));
       await tester.runAsync(() => settleLaunchedGame(tester));
       expect(
@@ -140,11 +112,11 @@ void main() {
       expect(chained.image.id, secondTestImage.id);
       // Straight into the chained game — no size sheet in between.
       expect(find.bySemanticsIdentifier('puzzle-start'), findsNothing);
-      expect(flowDone, isFalse, reason: 'The flow ends at the real exit.');
+      expect(flow.done, isFalse, reason: 'The flow ends at the real exit.');
 
       await tester.pageBack();
       await tester.pumpAndSettle();
-      expect(flowDone, isTrue);
+      expect(flow.done, isTrue);
       await tester.pumpWidget(const SizedBox.shrink());
     });
 
@@ -158,7 +130,7 @@ void main() {
         tester,
         image: singlePieceImage,
         size: singlePieceSize,
-        catalogs: const PuzzleCatalogs(gallery: testCatalog),
+        catalogs: const PuzzleCatalogs(gallery: chainTestCatalog),
       );
       await completePuzzle(tester, game);
 
@@ -180,7 +152,7 @@ void main() {
         tester,
         image: singlePieceImage,
         size: singlePieceSize,
-        catalogs: const PuzzleCatalogs(gallery: testCatalog),
+        catalogs: const PuzzleCatalogs(gallery: chainTestCatalog),
       );
       await completePuzzle(tester, game);
 

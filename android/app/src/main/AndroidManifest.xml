@@ -1,4 +1,11 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <!-- Analytics runs without the advertising ID: strip the permission the
+         Firebase SDK would otherwise merge in, so the Play data-safety form
+         stays in the no-ad-ID category. -->
+    <uses-permission
+        android:name="com.google.android.gms.permission.AD_ID"
+        tools:node="remove" />
     <application
         android:label="Jigsaw Puzzle"
         android:name="${applicationName}"
@@ -30,6 +37,11 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- Belt to the AD_ID permission's braces: even with the permission
+             present (e.g. once ads land), analytics must not read the id. -->
+        <meta-data
+            android:name="google_analytics_adid_collection_enabled"
+            android:value="false" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

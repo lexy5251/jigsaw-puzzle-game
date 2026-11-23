@@ -17,6 +17,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'analytics.dart';
 import 'app_settings.dart';
 import 'bonus_track.dart';
 import 'game_haptics.dart';
@@ -393,6 +394,7 @@ class _StoryScreenState extends State<StoryScreen>
       _tearing = false;
       return;
     }
+    Analytics.instance.storySceneUnlocked(scene: finished + 1);
     // Show first, persist after: the in-memory state flips before the
     // guard reopens, so no tap can slip in and replay the tear.
     final seen = _seen.copyWith(opened: finished + 1);
@@ -402,7 +404,12 @@ class _StoryScreenState extends State<StoryScreen>
   }
 
   Future<void> _openScene(PuzzleImage image) async {
-    await startPuzzleFlow(context, image, clock: widget.clock);
+    await startPuzzleFlow(
+      context,
+      image,
+      source: LaunchSource.story,
+      clock: widget.clock,
+    );
     // The run may have read new scenes while the game was open.
     await _load();
   }

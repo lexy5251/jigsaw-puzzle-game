@@ -18,6 +18,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 
+import 'analytics.dart';
 import 'bonus_track.dart';
 import 'continue_puzzle_card.dart';
 import 'daily_puzzle.dart';
@@ -298,6 +299,7 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
     await startPuzzleFlow(
       context,
       run.image,
+      source: LaunchSource.continueCard,
       clock: widget.clock,
       resumeSize: run.size,
     );
@@ -306,7 +308,12 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
   }
 
   Future<void> _playDaily(PuzzleImage daily) async {
-    await startPuzzleFlow(context, daily, clock: widget.clock);
+    await startPuzzleFlow(
+      context,
+      daily,
+      source: LaunchSource.daily,
+      clock: widget.clock,
+    );
     // Finishing it changes the streak row; refresh when the player returns.
     await _refreshDailyStatus();
   }
@@ -317,6 +324,7 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
     await startPuzzleFlow(
       context,
       image,
+      source: LaunchSource.gallery,
       clock: widget.clock,
       catalogs: PuzzleCatalogs(gallery: widget.catalog),
     );

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "821960773616",
+    "project_id": "jigsaw-puzzle-3eufs",
+    "storage_bucket": "jigsaw-puzzle-3eufs.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:821960773616:android:ae90b6360c79b5c5249735",
+        "android_client_info": {
+          "package_name": "com.lexy5251.jigsawpuzzle"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDzaqPXM3vFT-tyJ1Xvdzwy0HXLK7odpRI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

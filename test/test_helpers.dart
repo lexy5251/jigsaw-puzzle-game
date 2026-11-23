@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:jigsaw_puzzle/analytics.dart';
 import 'package:jigsaw_puzzle/app_settings.dart';
 import 'package:jigsaw_puzzle/background_music.dart';
 import 'package:jigsaw_puzzle/completion_card.dart';
@@ -20,6 +21,7 @@ import 'package:jigsaw_puzzle/game_sounds.dart';
 import 'package:jigsaw_puzzle/jigsaw_game.dart';
 import 'package:jigsaw_puzzle/puzzle_catalog.dart';
 import 'package:jigsaw_puzzle/puzzle_completion.dart';
+import 'package:jigsaw_puzzle/puzzle_launcher.dart';
 import 'package:jigsaw_puzzle/puzzle_logic.dart';
 import 'package:jigsaw_puzzle/puzzle_piece.dart';
 import 'package:jigsaw_puzzle/puzzle_save.dart';
@@ -36,6 +38,19 @@ const singlePieceImage = PuzzleImage(
   fileName: 'test_photo.jpg',
 );
 const singlePieceSize = PuzzleSize(columns: 1, rows: 1);
+
+/// A sibling of [singlePieceImage] in the same fixture category — the
+/// chain suites' second painting, shared so the "test-b" fixture cannot
+/// drift between them.
+const secondTestImage = PuzzleImage(
+  id: 'test-b',
+  title: 'Second test puzzle',
+  categoryId: 'test',
+  fileName: 'test_photo.jpg',
+);
+
+/// The two-painting catalog the chain suites launch against.
+const chainTestCatalog = [singlePieceImage, secondTestImage];
 
 /// [MockSharedPreferences.storage] key for [image]'s save at a grid — the
 /// channel-backed mock needs the plugin's `flutter.` prefix, which is easy
@@ -279,6 +294,49 @@ Future<PushedGameRoute> pushGameScreen(
   await tester.tap(find.text('open'));
   await tester.runAsync(() => settleLaunchedGame(tester));
   return route;
+}
+
+/// Completion flag for a [launchPuzzleFlowToSheet] run — flips only when
+/// [startPuzzleFlow] truly returns (the player exited the whole chain).
+class LaunchedFlow {
+  bool done = false;
+}
+
+/// Pumps a host app whose 'open' button runs [startPuzzleFlow] on [image]
+/// and taps it, settling with the size sheet up — [pushGameScreen]'s twin
+/// for the sheet path, hoisted for the same reason: the launch recipe
+/// cannot drift between suites. Callers continue by tapping the sheet's
+/// 'puzzle-start' semantics and running [settleLaunchedGame].
+Future<LaunchedFlow> launchPuzzleFlowToSheet(
+  WidgetTester tester, {
+  required PuzzleImage image,
+  LaunchSource source = LaunchSource.gallery,
+  PuzzleCatalogs catalogs = const PuzzleCatalogs(),
+}) async {
+  final flow = LaunchedFlow();
+  await tester.pumpWidget(
+    MaterialApp(
+      home: Scaffold(
+        body: Builder(
+          builder: (context) => TextButton(
+            onPressed: () async {
+              await startPuzzleFlow(
+                context,
+                image,
+                source: source,
+                catalogs: catalogs,
+              );
+              flow.done = true;
+            },
+            child: const Text('open'),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.tap(find.text('open'));
+  await tester.pumpAndSettle();
+  return flow;
 }
 
 /// True when the named preview harness was explicitly requested, e.g.
@@ -527,6 +585,50 @@ class SilentGameSounds implements GameSounds {
   void playRip() {}
   @override
   Future<void> dispose() async {}
+}
+
+/// Records analytics events (one compact line each) so suites can assert
+/// gameplay reports what actually happened. [install] swaps it in for the
+/// current test and restores the silent default on teardown.
+class RecordingAnalytics implements Analytics {
+  final events = <String>[];
+
+  void install() {
+    Analytics.instance = this;
+    addTearDown(() => Analytics.instance = const NoopAnalytics());
+  }
+
+  @override
+  void puzzleStarted({
+    required String puzzleId,
+    required int pieceCount,
+    required LaunchSource source,
+  }) => events.add('started:$puzzleId:$pieceCount:${source.name}');
+
+  @override
+  void puzzleCompleted({required String puzzleId, required int pieceCount}) =>
+      events.add('completed:$puzzleId:$pieceCount');
+
+  @override
+  void nextPuzzleAccepted({required String puzzleId}) =>
+      events.add('next:$puzzleId');
+
+  @override
+  void edgesOnlyToggled({required bool enabled}) =>
+      events.add('edges:${enabled ? 'on' : 'off'}');
+
+  @override
+  void tidyUsed() => events.add('tidy');
+
+  @override
+  void zoomInUsed() => events.add('zoom');
+
+  @override
+  void boardColorChanged({required String colorId}) =>
+      events.add('color:$colorId');
+
+  @override
+  void storySceneUnlocked({required int scene}) => events.add('scene:$scene');
 }
 
 /// Counts haptic cues so gameplay tests can assert the vibration setting

@@ -161,6 +161,7 @@ void main() {
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
+    final analytics = RecordingAnalytics()..install();
     final (sounds, haptics) = await pumpStory(tester);
 
     await tester.tap(find.bySemanticsIdentifier('story-stop-1'));
@@ -173,6 +174,7 @@ void main() {
     expect(find.text(storyTapToOpenText), findsNothing);
     expect(sounds.rips, 1);
     expect(haptics.snaps, 1);
+    expect(analytics.events, ['scene:1']);
     expect((await storedCelebrations()).opened, 1);
 
     // A fresh open shows the card directly — the tear never replays.

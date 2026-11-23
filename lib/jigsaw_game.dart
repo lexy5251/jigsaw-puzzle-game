@@ -30,6 +30,7 @@ import 'package:flame/game.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import 'analytics.dart';
 import 'game_haptics.dart';
 import 'game_sounds.dart';
 import 'piece_groups.dart';
@@ -196,6 +197,13 @@ class JigsawGame extends FlameGame
   late Vector2 _boardSize;
   final List<ShapedPieceImage> _pieceImages = [];
   bool _disposed = false;
+  bool _completedOnLoad = false;
+
+  /// True when the board was already finished when it loaded (an interrupted
+  /// final snap left a fully placed save, see onLoad). Its completion
+  /// celebration re-runs so the record writes get their retry — but it is a
+  /// replay of a finish, not a new one, so analytics must not count it again.
+  bool get completedOnLoad => _completedOnLoad;
 
   // Toggles arrive from the host screen's buttons, possibly before onLoad
   // finishes, so the desired state is stored and applied once loading is done.
@@ -401,7 +409,10 @@ class JigsawGame extends FlameGame
     onBoardLoaded?.call(savedState != null);
     // An interrupted final snap can leave a fully placed save. Finish
     // recording it after the board and its restored counter are ready.
-    if (progress.isComplete) _celebrateCompletion();
+    if (progress.isComplete) {
+      _completedOnLoad = true;
+      _celebrateCompletion();
+    }
   }
 
   @override
@@ -649,7 +660,15 @@ class JigsawGame extends FlameGame
       boardCenterOnCanvas.x.clamp(0, size.x).toDouble(),
       boardCenterOnCanvas.y.clamp(0, _availableBoardHeight).toDouble(),
     );
-    zoomTo(stepZoomIn(camera.viewfinder.zoom, _fitZoom), focal);
+    // Logged here, not in the menu handler, and by before/after compare:
+    // only a step that actually moves the camera counts — taps at the 4x
+    // ceiling are no-ops, not usage. (Compared on the stored zoom, which is
+    // float32: a target-vs-current check never matches the ceiling exactly.)
+    final zoomBefore = camera.viewfinder.zoom;
+    zoomTo(stepZoomIn(zoomBefore, _fitZoom), focal);
+    if (camera.viewfinder.zoom != zoomBefore) {
+      Analytics.instance.zoomInUsed();
+    }
   }
 
   /// Keeps the world point under [canvasPoint] fixed on screen while zooming.
@@ -752,6 +771,9 @@ class JigsawGame extends FlameGame
     if (loose.isEmpty) {
       return;
     }
+    // Logged here, not in the button handler: a tap with nothing loose
+    // sweeps nothing and must not count as usage.
+    Analytics.instance.tidyUsed();
     // No landing flights for a batch: the tray keeps one flight alive at a
     // time, so animating N returns would cancel every glide but the last —
     // popping them all in with one strip re-layout reads cleaner.
