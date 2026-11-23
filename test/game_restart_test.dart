@@ -23,6 +23,9 @@ class _FakeSounds implements GameSounds {
   void playSnap() {}
   @override
   void playComplete() {}
+
+  @override
+  void playRip() {}
 }
 
 void main() {

@@ -102,7 +102,7 @@ void main() {
     expect(playersCreated, 0);
   });
 
-  test('repeated cues reuse three players and preserve cue volumes', () async {
+  test('repeated cues reuse four players and preserve cue volumes', () async {
     final players = <_FakePlayer>[];
     final sounds = FlameAudioSounds(
       audioCache: _FakeCache(),
@@ -118,16 +118,18 @@ void main() {
     for (var i = 0; i < 12; i++) {
       sounds.playDrop();
       sounds.playSnap();
+      sounds.playRip();
       sounds.playComplete();
     }
     // Wait for each player's already queued playback requests.
     await sounds.preload();
-    expect(players.length, 3);
+    expect(players.length, 4);
     expect(
       {for (final p in players) p.file: p.configuredVolume},
       {
         'piece_drop.wav': 0.4,
         'piece_snap.wav': 0.55,
+        'paper_rip.wav': 0.6,
         'puzzle_complete.wav': 0.8,
       },
     );
@@ -137,10 +139,11 @@ void main() {
     expect(players.map((p) => p.disposals), everyElement(1));
     sounds.playDrop();
     sounds.playSnap();
+    sounds.playRip();
     sounds.playComplete();
     await sounds.preload();
     await sounds.dispose();
-    expect(players.length, 3);
+    expect(players.length, 4);
     expect(players.map((p) => p.resumes), everyElement(12));
     expect(players.map((p) => p.disposals), everyElement(1));
     expect(players.map((p) => p.commandsAfterDisposal), everyElement(0));
@@ -150,7 +153,7 @@ void main() {
     'disposal waits for pending preparation and prevents queued playback',
     () async {
       final gate = Completer<void>();
-      final players = List.generate(3, (_) => _FakePlayer(prepareGate: gate));
+      final players = List.generate(4, (_) => _FakePlayer(prepareGate: gate));
       var nextPlayer = 0;
       final sounds = FlameAudioSounds(
         playerFactory: () => players[nextPlayer++],
@@ -176,6 +179,7 @@ void main() {
         _FakePlayer(failPreparation: true, failDisposal: true),
         _FakePlayer(),
         _FakePlayer(),
+        _FakePlayer(),
       ];
       var nextPlayer = 0;
       final sounds = FlameAudioSounds(
@@ -185,9 +189,10 @@ void main() {
       await sounds.preload();
       sounds.playDrop();
       sounds.playSnap();
+      sounds.playRip();
       sounds.playComplete();
       await sounds.preload();
-      expect(players.map((p) => p.resumes), [0, 1, 1]);
+      expect(players.map((p) => p.resumes), [0, 1, 1, 1]);
       await sounds.dispose();
       expect(players.map((p) => p.disposals), everyElement(1));
     },
@@ -214,6 +219,7 @@ void main() {
         {
           'piece_drop.wav': 0.2,
           'piece_snap.wav': 0.275,
+          'paper_rip.wav': 0.3,
           'puzzle_complete.wav': 0.4,
         },
       );
@@ -239,6 +245,7 @@ void main() {
       {
         'piece_drop.wav': 0.4,
         'piece_snap.wav': 0.55,
+        'paper_rip.wav': 0.6,
         'puzzle_complete.wav': 0.8,
       },
     );

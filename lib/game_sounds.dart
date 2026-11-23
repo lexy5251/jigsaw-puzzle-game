@@ -22,6 +22,9 @@ abstract class GameSounds {
   /// A piece locked into its correct spot.
   void playSnap();
 
+  /// A wrapped story parcel was torn open.
+  void playRip();
+
   /// The last piece locked; the puzzle is finished.
   void playComplete();
 
@@ -59,6 +62,12 @@ class FlameAudioSounds implements GameSounds {
         playerFactory,
         audioCache,
       ),
+      _rip = _SoundCue(
+        'paper_rip.wav',
+        0.6 * volumeScale,
+        playerFactory,
+        audioCache,
+      ),
       _complete = _SoundCue(
         'puzzle_complete.wav',
         0.8 * volumeScale,
@@ -68,11 +77,17 @@ class FlameAudioSounds implements GameSounds {
 
   final _SoundCue _drop;
   final _SoundCue _snap;
+  final _SoundCue _rip;
   final _SoundCue _complete;
 
   @override
   Future<void> preload() async {
-    await Future.wait([_drop.preload(), _snap.preload(), _complete.preload()]);
+    await Future.wait([
+      _drop.preload(),
+      _snap.preload(),
+      _rip.preload(),
+      _complete.preload(),
+    ]);
   }
 
   // Dropping happens constantly — keep it quietest. The completion chime is
@@ -84,11 +99,19 @@ class FlameAudioSounds implements GameSounds {
   void playSnap() => _snap.play();
 
   @override
+  void playRip() => _rip.play();
+
+  @override
   void playComplete() => _complete.play();
 
   @override
   Future<void> dispose() async {
-    await Future.wait([_drop.dispose(), _snap.dispose(), _complete.dispose()]);
+    await Future.wait([
+      _drop.dispose(),
+      _snap.dispose(),
+      _rip.dispose(),
+      _complete.dispose(),
+    ]);
   }
 }
 

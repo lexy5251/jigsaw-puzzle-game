@@ -27,13 +27,18 @@ class Story {
   final List<StoryStop> stops;
 }
 
-/// One scene: its painting (whose title is the scene title) and the lines
-/// it reveals when finished.
+/// One scene: its painting (whose title is the scene title), the lines it
+/// reveals when finished, and the era tag it wears on the trail.
 class StoryStop {
-  const StoryStop({required this.image, required this.text});
+  const StoryStop({required this.image, required this.text, required this.era});
 
   final PuzzleImage image;
   final String text;
+
+  /// Short era label ("1760s" … "TODAY") shown on the trail stop. Visible
+  /// even on locked scenes — a year spoils nothing, and together the tags
+  /// read as a timeline.
+  final String era;
 }
 
 /// The scene texts, keyed by scene id so a catalog edit can never slide a
@@ -66,6 +71,19 @@ const _jigsawSceneTexts = <String, String>{
       'your table — one piece at a time, just like always.',
 };
 
+/// Era tags, keyed like the texts so a catalog edit can never slide a tag
+/// under the wrong scene.
+const _jigsawSceneEras = <String, String>{
+  'story-mapmakers-shop': '1760s',
+  'story-first-cut': '1766',
+  'story-learning-the-world': '1770s',
+  'story-pictures-join-in': '1800s',
+  'story-swooping-saw': '1880s',
+  'story-cardboard-boom': '1930s',
+  'story-boxes-on-every-shelf': '1950s',
+  'story-your-table-today': 'TODAY',
+};
+
 /// The MVP story. Final, not const: stops borrow their images from the
 /// catalog list so the two can never disagree.
 final jigsawStory = Story(
@@ -73,7 +91,11 @@ final jigsawStory = Story(
   title: 'How the Jigsaw Was Born',
   stops: [
     for (final image in storyPuzzleCatalog)
-      StoryStop(image: image, text: _jigsawSceneTexts[image.id]!),
+      StoryStop(
+        image: image,
+        text: _jigsawSceneTexts[image.id]!,
+        era: _jigsawSceneEras[image.id]!,
+      ),
   ],
 );
 

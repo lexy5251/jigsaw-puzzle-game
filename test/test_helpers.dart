@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:ui' as ui;
@@ -83,10 +84,8 @@ const grid6x4PieceWidth = testPhotoWidth / 6;
 const grid6x4PieceHeight = testPhotoHeight / 4;
 
 /// World position of piece [index]'s correct cell on the 6x4 test grid.
-Vector2 grid6x4Home(int index) => Vector2(
-  index % 6 * grid6x4PieceWidth,
-  index ~/ 6 * grid6x4PieceHeight,
-);
+Vector2 grid6x4Home(int index) =>
+    Vector2(index % 6 * grid6x4PieceWidth, index ~/ 6 * grid6x4PieceHeight);
 
 /// One loose piece at its target; a settle completes the puzzle.
 PuzzleSaveState singleLoosePieceSave({String? startedDay}) => PuzzleSaveState(
@@ -206,6 +205,22 @@ const sceneImageThree = PuzzleImage(
   fileName: 'test_photo.jpg',
 );
 const sceneFixtures = [sceneImageOne, sceneImageTwo, sceneImageThree];
+
+/// The celebration-store entry for a reader who has already SEEN every
+/// story celebration up to [finished] scenes — the trail renders at rest,
+/// with the current stop torn open into its card when [torn].
+MapEntry<String, Object> storyCelebratedEntry(
+  int finished, {
+  bool torn = false,
+  bool finale = false,
+}) => MapEntry(
+  'story.celebrations',
+  jsonEncode({
+    'arrivals': finished + 1,
+    'opened': finished + (torn ? 1 : 0),
+    'finaleShown': finale,
+  }),
+);
 
 /// Completion entries marking the first [count] scenes of the real story
 /// read (one 5x5 finish each), in the unprefixed form
@@ -507,6 +522,9 @@ class SilentGameSounds implements GameSounds {
   void playSnap() {}
   @override
   void playComplete() {}
+
+  @override
+  void playRip() {}
   @override
   Future<void> dispose() async {}
 }

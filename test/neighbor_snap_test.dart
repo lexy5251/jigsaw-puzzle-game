@@ -24,6 +24,9 @@ class _Sounds implements GameSounds {
   void playDrop() => drops++;
   @override
   void playComplete() => completes++;
+
+  @override
+  void playRip() {}
 }
 
 void main() {

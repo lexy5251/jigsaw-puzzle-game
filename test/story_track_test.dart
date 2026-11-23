@@ -17,7 +17,7 @@ final _fixtureStory = Story(
   title: 'Fixture Story',
   stops: [
     for (final (index, image) in sceneFixtures.indexed)
-      StoryStop(image: image, text: 'Line ${index + 1}.'),
+      StoryStop(image: image, text: 'Line ${index + 1}.', era: 'ERA$index'),
   ],
 );
 
@@ -115,7 +115,21 @@ void main() {
     for (final (index, stop) in jigsawStory.stops.indexed) {
       expect(stop.image, same(storyPuzzleCatalog[index]));
       expect(stop.text, isNotEmpty);
+      expect(stop.era, isNotEmpty);
     }
+  });
+
+  test('the era tags climb from the 1760s to TODAY', () {
+    // The trail reads as a timeline; a reordered or mistagged scene would
+    // quietly break that story. First and last anchor the direction.
+    expect(jigsawStory.stops.first.era, '1760s');
+    expect(jigsawStory.stops.last.era, 'TODAY');
+    final years = [
+      for (final stop in jigsawStory.stops)
+        int.tryParse(stop.era.replaceAll(RegExp('[^0-9]'), '')),
+    ];
+    final numeric = years.whereType<int>().toList();
+    expect(numeric, List.of(numeric)..sort());
   });
 
   test('scene finishes fund the gift track (owner ruling)', () {

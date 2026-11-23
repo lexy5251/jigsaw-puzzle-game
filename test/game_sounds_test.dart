@@ -13,6 +13,7 @@ class _FakeSounds implements GameSounds {
   int drops = 0;
   int snaps = 0;
   int completes = 0;
+  int rips = 0;
   int disposals = 0;
 
   @override
@@ -26,6 +27,9 @@ class _FakeSounds implements GameSounds {
 
   @override
   void playComplete() => completes++;
+
+  @override
+  void playRip() => rips++;
 
   @override
   Future<void> dispose() async => disposals++;
