@@ -128,3 +128,6 @@ pubspec_overrides.yaml
 
 # Local backups of pre-compression puzzle images
 originals/
+
+# Image QA tool output (reports + contact sheets)
+tool/image_qa/out/

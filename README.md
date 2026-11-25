@@ -45,4 +45,23 @@ flutter build apk --release
 Tests live in `test/`: game-logic unit tests plus widget tests for snapping
 and the select-screen flow. Run them with `flutter test`.
 
+## Adding a new puzzle image
+
+Before a new image goes into the catalog, run the image QA check on it:
+
+```sh
+export OPENAI_API_KEY=sk-...   # once per terminal, or put it in ~/.zshrc
+python3 tool/image_qa/check_image.py assets/images/<category>/<new-image>.webp
+```
+
+It verifies the image works as puzzle pieces (no unreadable patches, no
+AI-generation artifacts) and prints PASS or CHECK. On CHECK, read the report
+in `tool/image_qa/out/<image>/` and decide: keep or regenerate. Details and
+options (e.g. the cheaper `--flags-only` mode) in `tool/image_qa/README.md`.
+
+The full pipeline for a new image: keep the source PNG in
+`originals/regen-square/<category>/` (not in Git), convert with
+`cwebp -q 85 <source>.png -o assets/images/<category>/<name>.webp`,
+run the QA check, then add the entry to the catalog in `lib/`.
+
 Planning notes in `docs/` are local files and are excluded from Git.
