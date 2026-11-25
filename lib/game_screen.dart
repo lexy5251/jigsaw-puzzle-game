@@ -33,6 +33,7 @@ import 'riso_icons.dart';
 import 'story_track.dart';
 import 'studio_surfaces.dart';
 import 'studio_theme.dart';
+import 'whimsy_plan.dart';
 
 /// Hosts one running puzzle.
 class GameScreen extends StatefulWidget {
@@ -163,6 +164,8 @@ class _GameScreenState extends State<GameScreen> {
       clock: widget.clock,
       trayColumns: widget.trayColumns,
       trayMaxThumbnailHeight: widget.trayMaxThumbnailHeight,
+      // The hidden figures this image can carry, matched to its scene.
+      whimsyPool: whimsyPoolFor(widget.image),
       // The camera's reserve must match the control row the screen draws
       // over it, including the text-scale growth.
       controlRowHeight: scaledControlRowHeight(_textScaleFactor),

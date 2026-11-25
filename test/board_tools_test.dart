@@ -1,4 +1,3 @@
-import 'package:flame/game.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jigsaw_puzzle/jigsaw_game.dart';
 import 'package:jigsaw_puzzle/puzzle_logic.dart';
@@ -11,29 +10,10 @@ import 'test_helpers.dart';
 /// ghost image preview. Both can be flipped before the game finishes loading
 /// (the buttons exist immediately), so that path is tested too.
 void main() {
-  Future<JigsawGame> bootGame(
-    WidgetTester tester, {
-    void Function(JigsawGame game)? beforeLoad,
-    JigsawGame? puzzle,
-  }) async {
-    final game =
-        puzzle ?? JigsawGame(imageAsset: 'test_photo.jpg', columns: 6, rows: 4);
-    beforeLoad?.call(game);
-    await tester.runAsync(() async {
-      await tester.pumpWidget(GameWidget(game: game));
-      await game.loaded;
-    });
-    // A few real ticks so queued component additions (tray, ghost) mount.
-    for (var i = 0; i < 3; i++) {
-      await tester.pump(const Duration(milliseconds: 16));
-    }
-    return game;
-  }
-
   testWidgets('edges-only filter hides interior pieces, keeps them in play', (
     tester,
   ) async {
-    final game = await bootGame(tester);
+    final game = await bootBareGame(tester);
     expect(game.visibleTrayPieceIndexes.length, 24);
 
     game.setEdgesOnlyFilter(true);
@@ -57,7 +37,7 @@ void main() {
   testWidgets('ghost preview toggles between invisible and faint', (
     tester,
   ) async {
-    final game = await bootGame(tester);
+    final game = await bootBareGame(tester);
     expect(game.ghostPreviewOpacity, 0);
 
     game.setGhostPreview(true);
@@ -82,9 +62,9 @@ void main() {
             boardWidth: testPhotoWidth,
           ),
         );
-        final game = await bootGame(
+        final game = await bootBareGame(
           tester,
-          puzzle: JigsawGame(
+          game: JigsawGame(
             imageAsset: 'test_photo.jpg',
             columns: 6,
             rows: 4,
@@ -139,7 +119,7 @@ void main() {
   testWidgets('toggles flipped before loading apply once the board is ready', (
     tester,
   ) async {
-    final game = await bootGame(
+    final game = await bootBareGame(
       tester,
       beforeLoad: (game) {
         game.setGhostPreview(true);

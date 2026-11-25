@@ -805,6 +805,39 @@ Future<void> scrollSelectScreenTo(
   await tester.pumpAndSettle();
 }
 
+/// Boots a bare [JigsawGame] in a [GameWidget] and settles enough frames
+/// for its queued components (tray, ghost) to mount — the game-only
+/// sibling of [bootGameScreen]. The pump counts are tuned; change them
+/// here, not at a call site. Pass [game] to boot a pre-built instance, or
+/// let the default 6x4 test-photo board be built; [beforeLoad] runs before
+/// the first pump (e.g. to flip toggles while loading).
+Future<JigsawGame> bootBareGame(
+  WidgetTester tester, {
+  JigsawGame? game,
+  int columns = 6,
+  int rows = 4,
+  String? saveKey,
+  void Function(JigsawGame game)? beforeLoad,
+}) async {
+  final booted =
+      game ??
+      JigsawGame(
+        imageAsset: 'test_photo.jpg',
+        columns: columns,
+        rows: rows,
+        saveKey: saveKey,
+      );
+  beforeLoad?.call(booted);
+  await tester.runAsync(() async {
+    await tester.pumpWidget(GameWidget(game: booted));
+    await booted.loaded;
+  });
+  for (var i = 0; i < 3; i++) {
+    await tester.pump(const Duration(milliseconds: 16));
+  }
+  return booted;
+}
+
 /// Loads the real game and advances enough frames to mount its pieces.
 Future<JigsawGame> bootGameScreen(
   WidgetTester tester, {

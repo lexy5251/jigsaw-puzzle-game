@@ -41,6 +41,8 @@ import 'puzzle_logic.dart';
 import 'puzzle_piece.dart';
 import 'puzzle_save.dart';
 import 'studio_theme.dart';
+import 'whimsy_plan.dart';
+import 'whimsy_shapes.dart';
 
 /// The board uses image pixels as world units; the tray stays in screen space.
 /// Pinching zooms the camera; dragging empty space pans it, but only while
@@ -62,6 +64,7 @@ class JigsawGame extends FlameGame
     this.trayColumns = trayVisibleColumns,
     this.trayMaxThumbnailHeight = trayThumbnailHeightCap,
     this._controlRowHeight = trayControlRowHeight,
+    this.whimsyPool = universalWhimsyShapes,
   }) {
     // Claim at construction, not load: a restart creates the new game before
     // the old one disposes, so the handover keeps the cached photo warm.
@@ -88,6 +91,17 @@ class JigsawGame extends FlameGame
   final String imageAsset;
   final int columns;
   final int rows;
+
+  /// Figures this puzzle may hide (the host screen passes the image's
+  /// scene-matched pool). The plan itself derives from the save key at load:
+  /// nothing about whimsies is ever persisted.
+  final List<WhimsyShape> whimsyPool;
+
+  /// This board's whimsy layout, fixed at load. Exposed for tests; gameplay
+  /// treats whimsy pieces exactly like any other piece.
+  @visibleForTesting
+  WhimsyPlan get whimsyPlan => _whimsyPlan;
+  WhimsyPlan _whimsyPlan = WhimsyPlan.none;
 
   /// How many tray columns must fit across the screen — the knob that sets
   /// tray piece size. Defaults to the shipped density; the preview harness
@@ -345,16 +359,28 @@ class JigsawGame extends FlameGame
     // Cut the photo into shaped pieces. The seed comes from the save key so
     // a resumed puzzle is re-cut exactly the same way; without a key (tests)
     // the image + grid still give one stable cut per puzzle.
+    final cutKey = saveKey ?? '$imageAsset.${columns}x$rows';
+    // Whimsies derive from the same key on a separate namespaced stream:
+    // resume and restart reproduce the same figures, and the knob cut away
+    // from them stays identical to a whimsy-free board.
+    _whimsyPlan = whimsyPlanFor(
+      columns: columns,
+      rows: rows,
+      seed: whimsySeedForKey(cutKey),
+      pool: whimsyPool,
+    );
     final shapes = PieceShapeGrid.generate(
       columns: columns,
       rows: rows,
-      seed: shapeSeedForKey(saveKey ?? '$imageAsset.${columns}x$rows'),
+      seed: shapeSeedForKey(cutKey),
+      whimsyCells: _whimsyPlan.cellIndexes,
     );
     final shapedImages = await rasterizePieces(
       source: image,
       columns: columns,
       rows: rows,
       shapes: shapes,
+      whimsyPlan: _whimsyPlan,
     );
     _pieceImages.addAll(shapedImages);
     // The tray's preferred height depends on the cut pieces' aspect ratio.

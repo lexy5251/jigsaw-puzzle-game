@@ -21,6 +21,8 @@ import 'dart:ui' as ui;
 import 'package:flame/components.dart';
 
 import 'piece_shapes.dart';
+import 'whimsy_plan.dart';
+import 'whimsy_shapes.dart';
 
 // ——— Clean-flat look: the owner-tunable knobs. ———
 // The photo runs edge-to-edge to the cut; the ONLY depth cue is the soft
@@ -214,28 +216,85 @@ Future<List<ShapedPieceImage>> rasterizePieces({
   required int columns,
   required int rows,
   required PieceShapeGrid shapes,
+  WhimsyPlan whimsyPlan = WhimsyPlan.none,
 }) async {
   final cellWidth = source.width / columns;
   final cellHeight = source.height / rows;
   // Room for the farthest a tab can stick out, plus 1px for the clip's
   // antialiased edge.
-  final bleed =
+  final knobBleed =
       (knobOverhangFraction * min(cellWidth, cellHeight)).ceilToDouble() + 1;
+  // A flap neighbor reaches the whimsy cell's center — farther than any
+  // knob — so only those pieces carry the grown margin: their sprite box is
+  // ~2x the cell per side (~1.66x the baked pixels of a knob box), paid by
+  // just the four neighbors of each figure. Everything else (including the
+  // whimsy piece itself: its figure never leaves the cell) keeps the knob
+  // bleed, so tray thumbnails stay as large as on a whimsy-free board. The
+  // tray reads one shared sprite aspect off the first piece; that stays
+  // valid because whimsy plans only exist on the square catalog grids,
+  // where every cell-plus-bleed box is square.
+  final flapBleed = max(
+    knobBleed,
+    (max(cellWidth, cellHeight) / 2).ceilToDouble() + 1,
+  );
+  double bleedFor(int index) =>
+      !whimsyPlan.cells.containsKey(index) &&
+          whimsyPlan.neighborOf(index, columns, rows) != null
+      ? flapBleed
+      : knobBleed;
 
-  // Decorations are baked at source-pixel scale, so size them from the cell:
-  // proportional pieces look the same on a 24-piece and a 216-piece board.
-  final decorationUnit = max(1.0, min(cellWidth, cellHeight) / 40);
-  final spriteWidth = (cellWidth + 2 * bleed).ceil();
-  final spriteHeight = (cellHeight + 2 * bleed).ceil();
+  // The caller must cut whimsy edges flat: a knob left on an edge facing a
+  // whimsy cell would poke through or under the neighbor's flap and leave
+  // a hole in the picture. (The grid cannot own the plan — that would cycle
+  // the pure-geometry imports — so the pairing is asserted instead.)
+  assert(
+    whimsyPlan.cells.length == shapes.whimsyCells.length &&
+        whimsyPlan.cells.keys.every(shapes.whimsyCells.contains),
+    'shapes.whimsyCells must equal whimsyPlan cells — generate the grid '
+    'with whimsyCells: whimsyPlan.cellIndexes',
+  );
 
-  Future<ShapedPieceImage> cutPiece(int index) async {
-    final row = index ~/ columns;
-    final column = index % columns;
-    final outlinePath = buildPiecePath(
+  // Each figure path is shared by the whimsy piece and its four flap
+  // neighbors — built once here, never mutated downstream.
+  final figures = {
+    for (final entry in whimsyPlan.cells.entries)
+      entry.key: buildWhimsyFigurePath(
+        shape: entry.value,
+        cellWidth: cellWidth,
+        cellHeight: cellHeight,
+      ),
+  };
+
+  ui.Path outlineFor(int index) {
+    final figure = figures[index];
+    if (figure != null) return figure;
+    final base = buildPiecePath(
       shape: shapes.shapeAtIndex(index),
       width: cellWidth,
       height: cellHeight,
     );
+    final relation = whimsyPlan.neighborOf(index, columns, rows);
+    if (relation == null) return base;
+    return buildWhimsyNeighborOutline(
+      basePath: base,
+      side: relation.side,
+      figurePath: figures[relation.whimsyIndex]!,
+      cellWidth: cellWidth,
+      cellHeight: cellHeight,
+    );
+  }
+
+  // Decorations are baked at source-pixel scale, so size them from the cell:
+  // proportional pieces look the same on a 24-piece and a 216-piece board.
+  final decorationUnit = max(1.0, min(cellWidth, cellHeight) / 40);
+
+  Future<ShapedPieceImage> cutPiece(int index) async {
+    final row = index ~/ columns;
+    final column = index % columns;
+    final bleed = bleedFor(index);
+    final spriteWidth = (cellWidth + 2 * bleed).ceil();
+    final spriteHeight = (cellHeight + 2 * bleed).ceil();
+    final outlinePath = outlineFor(index);
     final artwork = PieceArtwork(
       source: source,
       sourceCell: ui.Rect.fromLTWH(

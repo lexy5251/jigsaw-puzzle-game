@@ -35,7 +35,7 @@ do not auto-fix.
 # Gotchas
 
 - Save/resume re-creates a puzzle from its key, so randomness must be seeded
-  and stable across platforms and Dart versions. Use `_Xorshift32` and
+  and stable across platforms and Dart versions. Use `Xorshift32` and
   `shapeSeedForKey` — never `dart:math` `Random` or `String.hashCode` for
   anything persisted.
 - Sound and haptics swallow their own errors (decoration must never crash

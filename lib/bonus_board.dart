@@ -145,23 +145,12 @@ class _BonusReveal extends StatelessWidget {
 /// dart:math Random is banned for anything persistent-feeling.
 @visibleForTesting
 List<int> revealOrderFor(int seed) {
+  // Shares the cutter's generator and shuffle on purpose: this order is
+  // persistent-feeling (a board that re-shuffled between visits would read
+  // as broken), and seededShuffle draws exactly like the inline loop this
+  // replaced — existing boards keep their reveal order.
   final order = [for (var i = 0; i < bonusBoardPieces; i++) i];
-  var state = (seed & 0xFFFFFFFF) == 0 ? 0x9E3779B9 : seed & 0xFFFFFFFF;
-  int nextState() {
-    var x = state;
-    x = (x ^ (x << 13)) & 0xFFFFFFFF;
-    x ^= x >>> 17;
-    x = (x ^ (x << 5)) & 0xFFFFFFFF;
-    return state = x;
-  }
-
-  // Fisher-Yates with the seeded generator.
-  for (var i = order.length - 1; i > 0; i--) {
-    final j = nextState() % (i + 1);
-    final swap = order[i];
-    order[i] = order[j];
-    order[j] = swap;
-  }
+  seededShuffle(order, Xorshift32(seed));
   return order;
 }
 

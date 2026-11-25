@@ -57,8 +57,12 @@ class PieceShapeGrid {
     required this.columns,
     required this.rows,
     required int seed,
+    this.whimsyCells = const {},
   }) {
-    final random = _Xorshift32(seed);
+    // Whimsy cells must not change how many random draws happen: the rest of
+    // the board has to cut identically for the same seed whether or not a
+    // whimsy plan exists (pre-feature saves resume onto the same knobs).
+    final random = Xorshift32(seed);
     _horizontalTabPointsDown = List.generate(
       (rows - 1) * columns,
       (_) => random.nextBool(),
@@ -71,6 +75,11 @@ class PieceShapeGrid {
 
   final int columns;
   final int rows;
+
+  /// Cells cut as whimsy figures. The grid only needs to know one thing
+  /// about them: every edge touching such a cell is flat (the figure and
+  /// its neighbors' flaps replace the knob there).
+  final Set<int> whimsyCells;
 
   // One flag per interior edge. "Points down/right" means the knob bulges
   // toward the lower/right piece, i.e. the upper/left piece owns the tab.
@@ -85,18 +94,28 @@ class PieceShapeGrid {
   bool _tabPointsRight(int row, int column) =>
       _verticalTabPointsRight[row * (columns - 1) + column];
 
+  bool _isWhimsy(int row, int column) =>
+      whimsyCells.contains(row * columns + column);
+
   PieceShape shapeAt(int row, int column) {
+    const flatAllAround = PieceShape(
+      top: EdgeType.flat,
+      right: EdgeType.flat,
+      bottom: EdgeType.flat,
+      left: EdgeType.flat,
+    );
+    if (_isWhimsy(row, column)) return flatAllAround;
     return PieceShape(
-      top: row == 0
+      top: row == 0 || _isWhimsy(row - 1, column)
           ? EdgeType.flat
           : (_tabPointsDown(row - 1, column) ? EdgeType.blank : EdgeType.tab),
-      bottom: row == rows - 1
+      bottom: row == rows - 1 || _isWhimsy(row + 1, column)
           ? EdgeType.flat
           : (_tabPointsDown(row, column) ? EdgeType.tab : EdgeType.blank),
-      left: column == 0
+      left: column == 0 || _isWhimsy(row, column - 1)
           ? EdgeType.flat
           : (_tabPointsRight(row, column - 1) ? EdgeType.blank : EdgeType.tab),
-      right: column == columns - 1
+      right: column == columns - 1 || _isWhimsy(row, column + 1)
           ? EdgeType.flat
           : (_tabPointsRight(row, column) ? EdgeType.tab : EdgeType.blank),
     );
@@ -223,19 +242,37 @@ void _addEdge(
 /// Tiny xorshift32 generator. Used instead of dart:math's Random because its
 /// seeded sequence is not specified to match across platforms, and a puzzle
 /// cut on one device may be resumed after an engine update on another.
-class _Xorshift32 {
-  _Xorshift32(int seed)
+class Xorshift32 {
+  Xorshift32(int seed)
     // Xorshift must not start at 0 (it would stay 0 forever).
     : _state = (seed & 0xFFFFFFFF) == 0 ? 0x9E3779B9 : seed & 0xFFFFFFFF;
 
   int _state;
 
-  bool nextBool() {
+  int _next() {
     var x = _state;
     x = (x ^ (x << 13)) & 0xFFFFFFFF;
     x ^= x >>> 17;
     x = (x ^ (x << 5)) & 0xFFFFFFFF;
     _state = x;
-    return x.isOdd;
+    return x;
+  }
+
+  bool nextBool() => _next().isOdd;
+
+  /// Uniform-enough value in [0, bound). The modulo bias is immaterial at
+  /// this game's bounds (a few hundred cells) and keeping it simple keeps
+  /// the sequence reproducible forever.
+  int nextInt(int bound) => _next() % bound;
+}
+
+/// Fisher-Yates shuffle driven by [Xorshift32], so the order is identical on
+/// every platform for the same seed.
+void seededShuffle<T>(List<T> items, Xorshift32 random) {
+  for (var i = items.length - 1; i > 0; i--) {
+    final j = random.nextInt(i + 1);
+    final swap = items[i];
+    items[i] = items[j];
+    items[j] = swap;
   }
 }
