@@ -40,6 +40,7 @@ class PuzzleSelectScreen extends StatefulWidget {
     this.clock,
     this.isActive = true,
     this.catalog = puzzleCatalog,
+    this.onOpenCollection,
   });
 
   /// Returns "now"; tests fix the date to make the daily puzzle
@@ -56,6 +57,10 @@ class PuzzleSelectScreen extends StatefulWidget {
   /// The daily card and continue card deliberately keep reading the real
   /// catalogs — fixture saves never produce either.
   final List<PuzzleImage> catalog;
+
+  /// Shell hook for the journey card's "See the collection" exit; null
+  /// (tests pumping this screen alone) just drops the request.
+  final VoidCallback? onOpenCollection;
 
   @override
   State<PuzzleSelectScreen> createState() => _PuzzleSelectScreenState();
@@ -91,6 +96,13 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
 
   /// The selected filter chip; null shows the whole catalog ("All").
   String? _selectedCategoryId;
+
+  /// Whether the streak line may promise a bonus piece: the journey must
+  /// be open (5 first finishes anywhere in the catalog — no promises about
+  /// a system the player has not seen yet) AND a gift board must still be
+  /// assembling (a finished track banks nothing, so the countdown would
+  /// lie).
+  bool _showBonusHook = false;
 
   /// False until the first status load lands. The body renders nothing
   /// before that: painting defaults first would let the continue card pop
@@ -265,9 +277,16 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
       excludedDailyId: runCredit != null ? daily.id : null,
     );
     final gridIds = {for (final image in widget.catalog) image.id};
-    final completed = imageIdsFromCompletions(completions)
-        .intersection(gridIds);
+    final finishedIds = imageIdsFromCompletions(completions);
+    final completed = finishedIds.intersection(gridIds);
     final percents = _progressPercentsFrom(saves, completions, gridIds);
+    // The FULL catalog's finishes, like My Puzzles: the journey opens on
+    // the 5th first finish wherever it happened, not just on this grid.
+    final bonus = bonusTrackStateFor(
+      firstFinishes: galleryFirstFinishCount(finishedIds),
+      streakPieces: streakPieces(days),
+    );
+    final showBonusHook = bonus.journeyUnlocked && !bonus.trackComplete;
     // A read started before midnight must not overwrite the next day's data.
     if (!mounted || dayKey(now) != dayKey(_now)) {
       return;
@@ -281,7 +300,8 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
         _dailyRunCredit == runCredit &&
         _continueRun == continueRun &&
         setEquals(_completedImageIds, completed) &&
-        mapEquals(_progressPercents, percents)) {
+        mapEquals(_progressPercents, percents) &&
+        _showBonusHook == showBonusHook) {
       return;
     }
     setState(() {
@@ -292,11 +312,12 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
       _continueRun = continueRun;
       _completedImageIds = completed;
       _progressPercents = percents;
+      _showBonusHook = showBonusHook;
     });
   }
 
   Future<void> _resumeRun(InProgressRun run) async {
-    await startPuzzleFlow(
+    final request = await startPuzzleFlow(
       context,
       run.image,
       source: LaunchSource.continueCard,
@@ -305,10 +326,11 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
     );
     // The run may have advanced, finished, or chained into another puzzle.
     await _refreshDailyStatus();
+    _forward(request);
   }
 
   Future<void> _playDaily(PuzzleImage daily) async {
-    await startPuzzleFlow(
+    final request = await startPuzzleFlow(
       context,
       daily,
       source: LaunchSource.daily,
@@ -316,12 +338,13 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
     );
     // Finishing it changes the streak row; refresh when the player returns.
     await _refreshDailyStatus();
+    _forward(request);
   }
 
   Future<void> _openPuzzle(PuzzleImage image) async {
     // Forward this screen's catalog so "Next puzzle" picks from the same
     // set the grid shows (a fixture catalog in tests, the global one live).
-    await startPuzzleFlow(
+    final request = await startPuzzleFlow(
       context,
       image,
       source: LaunchSource.gallery,
@@ -330,6 +353,14 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
     );
     // The puzzle may have been started or finished while the game was open.
     await _refreshDailyStatus();
+    _forward(request);
+  }
+
+  /// Hands a flow's exit request to the shell once this screen is back.
+  void _forward(PuzzleFlowRequest? request) {
+    if (mounted && request == PuzzleFlowRequest.openCollection) {
+      widget.onOpenCollection?.call();
+    }
   }
 
   @override
@@ -340,8 +371,11 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
         if (imagesInCategory(category.id, catalog: widget.catalog).isNotEmpty)
           category,
     ];
+    // "All" interleaves one image per category so the first screen shows
+    // the catalog's breadth (owner ruling, 11-26); a filtered view keeps
+    // the category's own order.
     final gridImages = _selectedCategoryId == null
-        ? widget.catalog
+        ? interleaveByCategory(widget.catalog)
         : imagesInCategory(_selectedCategoryId!, catalog: widget.catalog);
     return PopScope(
       // A selected filter is not a route, but Android back should still
@@ -391,11 +425,16 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
                                 _dailyRunCredit == dayKey(_dailyDate),
                             onPlay: () => _playDaily(daily),
                           ),
-                          const SizedBox(height: 10),
+                          // More air than the cards' 10: the streak reads
+                          // as its own section, not a card footnote (owner
+                          // feedback 11-26 — the old 10/0 sat tight).
+                          const SizedBox(height: 18),
                           DailyStreakRow(
                             now: _dailyDate,
                             completedDays: _completedDailyDays,
+                            showBonusHook: _showBonusHook,
                           ),
+                          const SizedBox(height: 6),
                         ],
                       ),
                     ),

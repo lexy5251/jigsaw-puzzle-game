@@ -94,26 +94,3 @@ int currentStreak(Set<String> completedDays, DateTime today) {
   return streak;
 }
 
-/// The longest run of consecutive completed days, ever.
-int longestStreak(Set<String> completedDays) {
-  // Parse at UTC midnight so daylight-saving changes never shorten a day.
-  final days =
-      completedDays
-          .map((key) => DateTime.tryParse('${key}T00:00:00Z'))
-          .nonNulls
-          .toList()
-        ..sort();
-  var longest = 0;
-  var run = 0;
-  DateTime? previous;
-  for (final day in days) {
-    run = previous != null && day.difference(previous).inDays == 1
-        ? run + 1
-        : 1;
-    if (run > longest) {
-      longest = run;
-    }
-    previous = day;
-  }
-  return longest;
-}

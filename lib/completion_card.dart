@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 
 import 'puzzle_catalog.dart';
 import 'riso_icons.dart';
+import 'riso_markers.dart';
 import 'studio_surfaces.dart';
 import 'studio_theme.dart';
 
@@ -28,6 +29,8 @@ class CompletionCard extends StatelessWidget {
     this.bonusUnlock,
     this.onPlayBonus,
     this.onSaveBonusForLater,
+    this.journeyPieces,
+    this.onSeeCollection,
   });
 
   final PuzzleImage image;
@@ -54,6 +57,14 @@ class CompletionCard extends StatelessWidget {
   /// Tucks the section away; the gift already waits in the Collection, so
   /// this loses nothing.
   final VoidCallback? onSaveBonusForLater;
+
+  /// Pieces already on the bonus board when this finish opened the journey;
+  /// null hides the journey section. The game screen never sets this and
+  /// [bonusUnlock] together — the journey moment outranks a gift.
+  final int? journeyPieces;
+
+  /// "See the collection" — exits the game toward My Puzzles → Collection.
+  final VoidCallback? onSeeCollection;
 
   /// How long the blur, scrim, and card take to fade in. Tests pump this
   /// exact duration, so keep them on this constant.
@@ -148,7 +159,10 @@ class CompletionCard extends StatelessWidget {
               _photo(),
               const SizedBox(height: 18),
               ..._info(context),
-              if (bonusUnlock != null) ...[
+              if (journeyPieces != null) ...[
+                const SizedBox(height: 14),
+                _journeySection(context),
+              ] else if (bonusUnlock != null) ...[
                 const SizedBox(height: 14),
                 _bonusSection(context),
               ],
@@ -179,7 +193,10 @@ class CompletionCard extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   ..._info(context),
-                  if (bonusUnlock != null) ...[
+                  if (journeyPieces != null) ...[
+                    const SizedBox(height: 12),
+                    _journeySection(context),
+                  ] else if (bonusUnlock != null) ...[
                     const SizedBox(height: 12),
                     _bonusSection(context),
                   ],
@@ -315,6 +332,94 @@ class CompletionCard extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// The journey's one unlock moment (the 5th finished painting): a bonus
+  /// piece pops in like a game pickup, the banked head start is named, and
+  /// one line explains the economy — the only place it is ever taught.
+  Widget _journeySection(BuildContext context) {
+    final theme = Theme.of(context);
+    final pieces = journeyPieces!;
+    return Semantics(
+      container: true,
+      identifier: 'journey-unlock-card',
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+        decoration: const BoxDecoration(
+          color: StudioColors.ground,
+          borderRadius: BorderRadius.all(Radius.circular(14)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                // The pickup pop: overshoot-and-settle, starting as the
+                // card fades in. Purely decorative — the text beside it
+                // says everything.
+                ExcludeSemantics(
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0, end: 1),
+                    duration: const Duration(milliseconds: 700),
+                    curve: Curves.elasticOut,
+                    builder: (context, scale, child) =>
+                        Transform.scale(scale: scale, child: child),
+                    child: const FamilyPiece(
+                      size: 44,
+                      fill: StudioColors.tomato,
+                      outline: StudioColors.card,
+                      strokeWidth: 1.4,
+                      rotationDegrees: 8,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'THE JOURNEY OPENS',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: StudioColors.structureDark,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.6,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'You start with $pieces '
+                        '${pieces == 1 ? 'piece' : 'pieces'}.',
+                        style: theme.textTheme.titleSmall,
+                      ),
+                      // "First finish": replays add nothing, and that
+                      // must not be implied here. (That earned gifts also
+                      // feed no pieces is left unsaid — at this moment the
+                      // player owns none, and the caption is a first
+                      // lesson, not the rulebook.)
+                      Text(
+                        'Your first finish of each painting and every '
+                        '3 streak days add a piece — 25 finish a gift '
+                        'painting.',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Semantics(
+              identifier: 'journey-see-collection',
+              child: FilledButton(
+                onPressed: onSeeCollection,
+                child: const Text('See the collection'),
+              ),
             ),
           ],
         ),

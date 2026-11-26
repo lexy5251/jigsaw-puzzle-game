@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:jigsaw_puzzle/bonus_track.dart';
 import 'package:jigsaw_puzzle/daily_puzzle.dart';
 import 'package:jigsaw_puzzle/daily_puzzle_card.dart';
 import 'package:jigsaw_puzzle/puzzle_catalog.dart';
+import 'package:jigsaw_puzzle/puzzle_completion.dart';
 import 'package:jigsaw_puzzle/puzzle_save.dart';
 import 'package:jigsaw_puzzle/riso_markers.dart';
-import 'package:jigsaw_puzzle/studio_mascots.dart';
 import 'package:jigsaw_puzzle/studio_surfaces.dart';
 import 'package:jigsaw_puzzle/studio_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -37,13 +38,11 @@ void main() {
     ),
   );
 
-  // The card's done marker: the bloomed cactus (owner ruling, UI-2). With the
-  // status text gone, this is how tests probe the done state.
+  // The card's done marker: the catalog's own done sticker (owner ruling,
+  // 11-26 — the plant-era cactus retired). Tests probe the done state here.
   Finder doneMarker() => find.descendant(
     of: find.byType(DailyPuzzleCard),
-    matching: find.byWidgetPredicate(
-      (widget) => widget is MascotArt && widget.mascot == StudioMascot.cactus,
-    ),
+    matching: find.byType(DonePieceSticker),
   );
 
   testWidgets('shows a live streak that today has not broken yet', (
@@ -65,12 +64,16 @@ void main() {
       ),
       findsNothing,
     );
-    expect(find.text('Not started'), findsOneWidget);
-    // The Begin card invites; the rule line explains the streak piece.
+    // No visible status text in any state — the Begin button IS the
+    // not-started state (owner ruling, 11-26).
+    expect(find.text('Not started'), findsNothing);
     expect(find.widgetWithText(FilledButton, 'Begin'), findsOneWidget);
     expect(find.text("Finish it and today's piece clicks in."), findsOneWidget);
-    // The streak is one quiet line under the strip.
-    expect(find.text('2-day streak · longest: 2'), findsOneWidget);
+    // Journey still locked (no finishes seeded): the line is the bold
+    // streak alone — no bonus-piece talk before the player has seen the
+    // board (owner ruling, 11-26).
+    expect(find.text('2-day streak'), findsOneWidget);
+    expect(find.textContaining('bonus piece'), findsNothing);
     // Two clicked-in pieces on the strip.
     expect(clickedPieces(), findsNWidgets(2));
   });
@@ -98,13 +101,46 @@ void main() {
     semantics.dispose();
   });
 
+  testWidgets('the bonus-piece hook appears once the journey is open', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      'daily.days': '["2026-11-04", "2026-11-05"]',
+      // Five first finishes anywhere in the catalog open the journey —
+      // only then may the line name the reward it feeds.
+      for (var i = 0; i < journeyUnlockFinishes; i++)
+        puzzleCompletionKey(imageId: 'seed-$i', columns: 5, rows: 5):
+            completionOn(DateTime(2026, 11, 1)).toJsonString(),
+    });
+    await pumpSelectScreen(tester, clock: fixedNow);
+    await tester.pumpAndSettle();
+
+    expect(find.text('2-day streak · 1 day to a bonus piece'), findsOneWidget);
+  });
+
+  testWidgets('the hook retires once every gift is earned', (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'daily.days': '["2026-11-04", "2026-11-05"]',
+      // Enough first finishes to fill every gift board: further pieces
+      // fund nothing, so a countdown would lie.
+      for (var i = 0; i < bonusPuzzleCatalog.length * bonusBoardPieces; i++)
+        puzzleCompletionKey(imageId: 'seed-$i', columns: 5, rows: 5):
+            completionOn(DateTime(2026, 11, 1)).toJsonString(),
+    });
+    await pumpSelectScreen(tester, clock: fixedNow);
+    await tester.pumpAndSettle();
+
+    expect(find.text('2-day streak'), findsOneWidget);
+    expect(find.textContaining('bonus piece'), findsNothing);
+  });
+
   testWidgets('starts gently with no streak at all', (tester) async {
     SharedPreferences.setMockInitialValues({});
     await pumpSelectScreen(tester, clock: fixedNow);
     await tester.pumpAndSettle();
 
     expect(find.text('A piece clicks in for every quiet day.'), findsOneWidget);
-    expect(find.textContaining('longest'), findsNothing);
+    expect(find.textContaining('bonus piece'), findsNothing);
     expect(clickedPieces(), findsNothing);
   });
 
@@ -113,11 +149,12 @@ void main() {
     await pumpSelectScreen(tester, clock: fixedNow);
     await tester.pumpAndSettle();
 
-    expect(find.text('1-day streak · longest: 1'), findsOneWidget);
-    // The done marker is the bloomed cactus on the card, with no status text
-    // under the title (owner ruling, UI-2 + follow-up) — never the old
-    // stock Material check.
+    expect(find.text('1-day streak'), findsOneWidget);
+    // The done marker is the done sticker plus the rule line's promise
+    // fulfilled in words (owner feedback 11-26: a mark alone read unclear)
+    // — never the old stock Material check.
     expect(doneMarker(), findsOneWidget);
+    expect(find.text("Today's piece clicked in."), findsOneWidget);
     expect(find.text('In progress'), findsNothing);
     expect(find.text('Not started'), findsNothing);
     expect(
@@ -147,7 +184,9 @@ void main() {
     await pumpSelectScreen(tester, clock: fixedNow);
     await tester.pumpAndSettle();
 
-    // Everything announces through the card's single merged node...
+    // Everything announces through the card's single merged node — the
+    // status has no visible text anymore, so the merged label is the one
+    // place screen readers still hear it...
     final card = tester.getSemantics(find.text("TODAY'S CHALLENGE"));
     expect(
       card.label,
@@ -197,12 +236,13 @@ void main() {
         ),
       ),
     );
-    expect(find.text('In progress'), findsOneWidget);
+    // The Continue button is the in-progress state; no status text.
+    expect(find.text('In progress'), findsNothing);
     expect(find.widgetWithText(FilledButton, 'Continue'), findsOneWidget);
     expect(find.text("Finish it and today's piece clicks in."), findsNothing);
   });
 
-  testWidgets('an abandoned save that cannot bloom shows Not started', (
+  testWidgets('an abandoned save that cannot bloom still offers Begin', (
     tester,
   ) async {
     // A consistent save of today's image begun yesterday — when the image
@@ -220,8 +260,8 @@ void main() {
     await pumpSelectScreen(tester, clock: fixedNow);
     await tester.pumpAndSettle();
 
-    expect(find.text('In progress'), findsNothing);
-    expect(find.text('Not started'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Continue'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Begin'), findsOneWidget);
   });
 
   testWidgets('the Begin button opens the size picker too', (tester) async {
@@ -279,8 +319,8 @@ void main() {
     });
     await pumpSelectScreen(tester, clock: fixedNow);
     await tester.pumpAndSettle();
-    expect(find.text('In progress'), findsNothing);
-    expect(find.text('Not started'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Continue'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Begin'), findsOneWidget);
   });
 
   testWidgets('refreshes the daily card at each local midnight', (
@@ -316,11 +356,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(cardShows(mondayImage), findsOneWidget);
-    expect(find.text('In progress'), findsOneWidget);
     expect(doneMarker(), findsNothing);
     // An in-progress daily offers to pick the run back up.
     expect(find.widgetWithText(FilledButton, 'Continue'), findsOneWidget);
-    expect(find.text('2-day streak · longest: 2'), findsOneWidget);
+    expect(find.text('2-day streak'), findsOneWidget);
     expect(clickedPieces(), findsNothing);
 
     // A second rollover checks that the timer was rearmed and that the
@@ -332,10 +371,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(cardShows(tuesdayImage), findsOneWidget);
-    expect(find.text('Not started'), findsOneWidget);
+    // Monday's progress must not carry over: the fresh card offers Begin.
+    expect(find.widgetWithText(FilledButton, 'Begin'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Continue'), findsNothing);
     // Streak broken, but the history stays as one gentle line.
     expect(
-      find.text('longest: 2 · the pieces wait, no pressure'),
+      find.text('The pieces wait, no pressure.'),
       findsOneWidget,
     );
 
@@ -367,9 +408,9 @@ void main() {
 
     expect(cardShows(dailyPuzzleFor(now)), findsOneWidget);
     expect(doneMarker(), findsNothing);
-    expect(find.text('Not started'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Begin'), findsOneWidget);
     expect(
-      find.text('longest: 1 · the pieces wait, no pressure'),
+      find.text('The pieces wait, no pressure.'),
       findsOneWidget,
     );
   });

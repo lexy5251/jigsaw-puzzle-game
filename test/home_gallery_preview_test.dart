@@ -25,11 +25,16 @@ void main() {
       await loadStudioFonts();
       await loadMaterialIcons();
 
-      // The marked state's actors: first two non-daily paintings, so the
-      // pill and sticker land in the grid rows the capture shows.
-      final nonDaily = nonDailyCatalogImages(previewNow());
-      final started = nonDaily.first;
-      final completed = nonDaily[1];
+      // The marked state's actors: the first two non-daily paintings OF
+      // THE INTERLEAVED "All" ORDER, so the pill and sticker land in the
+      // grid rows the capture shows.
+      final daily = dailyPuzzleFor(previewNow());
+      final allOrder = [
+        for (final painting in interleaveByCategory(puzzleCatalog))
+          if (painting.id != daily.id) painting,
+      ];
+      final started = allOrder.first;
+      final completed = allOrder[1];
       final grid = puzzleSizes[1];
 
       Future<GlobalKey> openHome(
@@ -67,9 +72,9 @@ void main() {
         await precachePreviewImages(
           tester.element(find.byType(PuzzleSelectScreen)),
           [
-            dailyPuzzleFor(previewNow()).assetPath,
+            daily.assetPath,
             started.assetPath,
-            for (final painting in puzzleCatalog.take(8)) painting.assetPath,
+            for (final painting in allOrder.take(8)) painting.assetPath,
             for (final painting in imagesInCategory('landscapes').take(8))
               painting.assetPath,
           ],

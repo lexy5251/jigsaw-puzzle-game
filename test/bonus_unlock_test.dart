@@ -3,9 +3,14 @@
 // rides the next-puzzle chain, "Save for later" tucks the section away, and
 // replays, gift finishes, or failed writes never unlock anything.
 
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jigsaw_puzzle/bonus_track.dart';
+import 'package:jigsaw_puzzle/daily_puzzle.dart';
+import 'package:jigsaw_puzzle/game_screen.dart';
+import 'package:jigsaw_puzzle/jigsaw_game.dart';
 import 'package:jigsaw_puzzle/puzzle_catalog.dart';
 import 'package:jigsaw_puzzle/puzzle_completion.dart';
 
@@ -222,5 +227,127 @@ void main() {
     expect(find.textContaining('no timer, no score'), findsOneWidget);
     expect(bonusSection(), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  group('journey unlock', () {
+    Finder journeySection() => find.text('THE JOURNEY OPENS');
+
+    testWidgets('the 5th first finish opens the journey on the card', (
+      tester,
+    ) async {
+      seedDistinctCompletions(journeyUnlockFinishes - 1);
+      final game = await bootGameScreen(
+        tester,
+        image: singlePieceImage,
+        size: singlePieceSize,
+        catalogs: const PuzzleCatalogs(gifts: giftFixtures),
+      );
+      await completePuzzle(tester, game);
+
+      expect(journeySection(), findsOneWidget);
+      // Four prior finishes plus this one, no streak pieces banked.
+      expect(find.text('You start with 5 pieces.'), findsOneWidget);
+      expect(
+        find.textContaining('Your first finish of each painting and every 3'),
+        findsOneWidget,
+      );
+      expect(
+        find.widgetWithText(FilledButton, 'See the collection'),
+        findsOneWidget,
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('a finish past the unlock shows no journey section', (
+      tester,
+    ) async {
+      seedDistinctCompletions(journeyUnlockFinishes);
+      final game = await bootGameScreen(
+        tester,
+        image: singlePieceImage,
+        size: singlePieceSize,
+        catalogs: const PuzzleCatalogs(gifts: giftFixtures),
+      );
+      await completePuzzle(tester, game);
+
+      expect(journeySection(), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('the journey moment outranks a simultaneous gift unlock', (
+      tester,
+    ) async {
+      // 4 finishes + 20 banked streak pieces (60 consecutive days) = 24;
+      // the 5th finish makes 25, so the first gift board completes on the
+      // same write that opens the journey. One moment, not two stacked
+      // sections: the card sends the player to Collection, where that
+      // gift already hangs.
+      seedDistinctCompletions(journeyUnlockFinishes - 1);
+      prefs.storage['flutter.daily.days'] = jsonEncode([
+        for (var i = 0; i < 60; i++)
+          dayKey(DateTime.utc(2026, 1, 1).add(Duration(days: i))),
+      ]);
+      final game = await bootGameScreen(
+        tester,
+        image: singlePieceImage,
+        size: singlePieceSize,
+        catalogs: const PuzzleCatalogs(gifts: giftFixtures),
+      );
+      await completePuzzle(tester, game);
+
+      expect(journeySection(), findsOneWidget);
+      expect(find.text('BONUS PUZZLE UNLOCKED'), findsNothing);
+      // The 25th piece rolled the board over: the gift is done and the
+      // next board starts empty.
+      expect(find.text('You start with 0 pieces.'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('See the collection pops the game with the request', (
+      tester,
+    ) async {
+      seedDistinctCompletions(journeyUnlockFinishes - 1);
+      late Future<Object?> pushed;
+      late JigsawGame game;
+      await tester.runAsync(() async {
+        await tester.pumpWidget(
+          MaterialApp(home: const Scaffold(body: Text('base'))),
+        );
+        pushed = tester
+            .state<NavigatorState>(find.byType(Navigator))
+            .push<Object>(
+              MaterialPageRoute<Object>(
+                builder: (_) => GameScreen(
+                  image: singlePieceImage,
+                  size: singlePieceSize,
+                  catalogs: const PuzzleCatalogs(gifts: giftFixtures),
+                ),
+              ),
+            );
+        // Build the route, then wait out its transition before grabbing
+        // the game.
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 350));
+        game = currentGame(tester);
+        await game.loaded;
+      });
+      for (var i = 0; i < 3; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await completePuzzle(tester, game);
+
+      await tester.ensureVisible(find.text('See the collection'));
+      await tester.tap(find.text('See the collection'));
+      await pumpRoute(tester);
+
+      expect(find.text('base'), findsOneWidget);
+      // The pop already landed; awaiting through runAsync (real async)
+      // just unwraps the completed future's value.
+      expect(
+        await tester.runAsync(() => pushed),
+        isA<OpenCollectionRequest>(),
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
   });
 }

@@ -33,7 +33,13 @@ import 'studio_theme.dart';
 import 'tab_activation.dart';
 
 class MyPuzzlesScreen extends StatefulWidget {
-  const MyPuzzlesScreen({super.key, this.clock, this.isActive = true});
+  const MyPuzzlesScreen({
+    super.key,
+    this.clock,
+    this.isActive = true,
+    this.onOpenCollection,
+    this.collectionRequests = 0,
+  });
 
   /// Returns "now"; tests fix the date to make daily credit deterministic.
   /// Defaults to [DateTime.now].
@@ -44,12 +50,27 @@ class MyPuzzlesScreen extends StatefulWidget {
   /// visible again — not being rebuilt — is the reload signal.
   final bool isActive;
 
+  /// Shell hook for the journey card's "See the collection" exit — a game
+  /// launched FROM this screen can be the journey-opening finish too.
+  final VoidCallback? onOpenCollection;
+
+  /// Bumped by the shell per "See the collection" request; each bump
+  /// switches the inner tab to Collection.
+  final int collectionRequests;
+
   @override
   State<MyPuzzlesScreen> createState() => _MyPuzzlesScreenState();
 }
 
 class _MyPuzzlesScreenState extends State<MyPuzzlesScreen>
-    with TabActivationAware<MyPuzzlesScreen> {
+    with TabActivationAware<MyPuzzlesScreen>, SingleTickerProviderStateMixin {
+  /// Owned (not a DefaultTabController) so the shell's Collection requests
+  /// can switch tabs from outside.
+  late final TabController _tabController = TabController(
+    length: 3,
+    vsync: this,
+  );
+
   /// Null until the stores answer; the page renders nothing before that so
   /// it never flashes an empty state it is about to replace.
   MyPuzzlesSummary? _summary;
@@ -61,6 +82,20 @@ class _MyPuzzlesScreenState extends State<MyPuzzlesScreen>
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void didUpdateWidget(MyPuzzlesScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.collectionRequests != oldWidget.collectionRequests) {
+      _tabController.animateTo(2);
+    }
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   @override
@@ -97,7 +132,7 @@ class _MyPuzzlesScreenState extends State<MyPuzzlesScreen>
   }
 
   Future<void> _open(PuzzleImage image) async {
-    await startPuzzleFlow(
+    final request = await startPuzzleFlow(
       context,
       image,
       source: LaunchSource.myPuzzles,
@@ -106,35 +141,37 @@ class _MyPuzzlesScreenState extends State<MyPuzzlesScreen>
     // The run may have moved tabs (or new ones begun) while the game was
     // open.
     await _load();
+    if (mounted && request == PuzzleFlowRequest.openCollection) {
+      widget.onOpenCollection?.call();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final summary = _summary;
     final bonus = _bonus;
-    return DefaultTabController(
-      length: 3,
-      child: Scaffold(
-        appBar: risoAppBar(
-          'My Puzzles',
-          bottom: const TabBar(
-            tabs: [
-              Tab(text: 'In progress'),
-              Tab(text: 'Finished'),
-              Tab(text: 'Collection'),
-            ],
-          ),
+    return Scaffold(
+      appBar: risoAppBar(
+        'My Puzzles',
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(text: 'In progress'),
+            Tab(text: 'Finished'),
+            Tab(text: 'Collection'),
+          ],
         ),
-        body: summary == null || bonus == null
-            ? const SizedBox.shrink()
-            : TabBarView(
-                children: [
-                  _inProgressTab(summary),
-                  _finishedTab(summary),
-                  _collectionTab(bonus),
-                ],
-              ),
       ),
+      body: summary == null || bonus == null
+          ? const SizedBox.shrink()
+          : TabBarView(
+              controller: _tabController,
+              children: [
+                _inProgressTab(summary),
+                _finishedTab(summary),
+                _collectionTab(bonus),
+              ],
+            ),
     );
   }
 

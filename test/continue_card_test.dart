@@ -7,7 +7,6 @@ import 'package:jigsaw_puzzle/my_puzzles.dart';
 import 'package:jigsaw_puzzle/puzzle_catalog.dart';
 import 'package:jigsaw_puzzle/puzzle_save.dart';
 import 'package:jigsaw_puzzle/puzzle_select_screen.dart';
-import 'package:jigsaw_puzzle/studio_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'test_helpers.dart';
@@ -139,8 +138,9 @@ void main() {
       find.descendant(of: continueCard(), matching: find.text(other.title)),
       findsOneWidget,
     );
-    // The daily card still owns its own run's status.
-    expect(find.text(statusInProgressLabel), findsOneWidget);
+    // The daily card still owns its own run: it offers Continue (its only
+    // state marker — the status text is gone, owner ruling 11-26).
+    expect(find.widgetWithText(FilledButton, 'Continue'), findsOneWidget);
   });
 
   testWidgets('only a crediting daily run, card stays hidden', (tester) async {
@@ -161,7 +161,7 @@ void main() {
     tester,
   ) async {
     // Begun weeks ago from a category, so dailyCreditDay rejects it: the
-    // daily card shows 'Not started' — without the card, the most recently
+    // daily card offers Begin — without the card, the most recently
     // played run would have no resume surface on home all day.
     SharedPreferences.setMockInitialValues({
       seedSaveKey(daily, puzzleSizes[0]): resumableSeed(
@@ -177,7 +177,7 @@ void main() {
       find.descendant(of: continueCard(), matching: find.text(daily.title)),
       findsOneWidget,
     );
-    expect(find.text('Not started'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Begin'), findsOneWidget);
   });
 
   testWidgets('a fully placed run is never offered as a continue', (

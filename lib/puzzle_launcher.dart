@@ -119,16 +119,25 @@ Future<PuzzleSize?> _pickSizeFromSheet(
   return choice;
 }
 
+/// A follow-up the finished flow asks of its host screen. Null is the
+/// usual plain exit.
+enum PuzzleFlowRequest {
+  /// The journey-unlock card's "See the collection": the host should ask
+  /// the shell to open My Puzzles → Collection.
+  openCollection,
+}
+
 /// Opens the size sheet for [image] and, if a size is chosen, runs the game —
 /// chaining straight into each "Next puzzle" pick at the same size until the
 /// player exits. Returns once the player is truly back, so callers can
-/// refresh their state.
+/// refresh their state — plus the [PuzzleFlowRequest] the exit asked for,
+/// if any.
 ///
 /// [resumeSize] (the home continue card) skips the sheet and reopens that
 /// size's run in one tap — but only while its save is intact AND written at
 /// the current photo resolution; anything else falls back to the sheet, so
 /// the tap can never silently restart.
-Future<void> startPuzzleFlow(
+Future<PuzzleFlowRequest?> startPuzzleFlow(
   BuildContext context,
   PuzzleImage image, {
   required LaunchSource source,
@@ -139,7 +148,7 @@ Future<void> startPuzzleFlow(
   PuzzleSize? resumeSize,
 }) async {
   if (_launchInFlight) {
-    return;
+    return null;
   }
   _launchInFlight = true;
   try {
@@ -150,21 +159,21 @@ Future<void> startPuzzleFlow(
     // changes apply from the next puzzle on.
     var settings = await _settingsStore.load();
     if (!context.mounted) {
-      return;
+      return null;
     }
     final PuzzleSize? pickedSize;
     if (resumeSize != null && await _canResumeDirectly(image, resumeSize)) {
       pickedSize = resumeSize;
     } else {
       if (!context.mounted) {
-        return;
+        return null;
       }
       pickedSize = await _pickSizeFromSheet(context, image);
     }
     // The sheet can be dismissed, or the host screen removed while it is
     // open.
     if (pickedSize == null || !context.mounted) {
-      return;
+      return null;
     }
     // Rebound: [pickedSize]'s promotion does not carry into the route
     // builder closure below (it is assigned inside this try), but an
@@ -180,10 +189,11 @@ Future<void> startPuzzleFlow(
         source: launchSource,
       );
       // The game screen pops with the painting the player chose via the
-      // completion card's "Next puzzle" button, or null on a plain exit.
-      final pushed = Navigator.push<PuzzleImage>(
+      // completion card's "Next puzzle" button, an [OpenCollectionRequest]
+      // from the journey card, or null on a plain exit.
+      final pushed = Navigator.push<Object>(
         context,
-        MaterialPageRoute<PuzzleImage>(
+        MaterialPageRoute<Object>(
           builder: (_) => GameScreen(
             image: current,
             size: selectedSize,
@@ -199,8 +209,13 @@ Future<void> startPuzzleFlow(
       // when its sheet went up), load-bearing for the direct-resume path.
       _launchInFlight = false;
       final next = await pushed;
-      if (next == null || !context.mounted) {
-        return;
+      if (next is OpenCollectionRequest) {
+        // Ends the chain; the host forwards this to the shell (and checks
+        // its own mounted state, so no context guard here).
+        return PuzzleFlowRequest.openCollection;
+      }
+      if (next is! PuzzleImage || !context.mounted) {
+        return null;
       }
       Analytics.instance.nextPuzzleAccepted(puzzleId: next.id);
       current = next;
@@ -209,7 +224,7 @@ Future<void> startPuzzleFlow(
       startedDay = dayKey((clock ?? DateTime.now)());
       settings = await _settingsStore.load();
       if (!context.mounted) {
-        return;
+        return null;
       }
     }
   } finally {

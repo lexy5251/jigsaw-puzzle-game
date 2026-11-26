@@ -37,9 +37,11 @@ void main() {
       await pumpSelectScreen(tester, clock: fixedNow);
       await tester.pumpAndSettle();
 
-      // The daily card repeats both the catalog title and status text,
-      // but must never satisfy the size picker's progress selector.
-      expect(find.text('In progress'), findsOneWidget);
+      // The daily card marks its run with the Continue button (no visible
+      // status text since 11-26), so nothing on home may satisfy the size
+      // picker's progress selector.
+      expect(find.widgetWithText(FilledButton, 'Continue'), findsOneWidget);
+      expect(find.text('In progress'), findsNothing);
       final easyStatus = find.bySemanticsIdentifier(
         'puzzle-in-progress-alpine-lakes-panorama-5x5',
       );

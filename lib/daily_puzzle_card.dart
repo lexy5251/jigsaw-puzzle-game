@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
+import 'bonus_track.dart';
 import 'daily_puzzle.dart';
 import 'home_hero_card.dart';
 import 'puzzle_catalog.dart';
 import 'riso_markers.dart';
-import 'studio_mascots.dart';
 import 'studio_theme.dart';
 
 /// The daily-puzzle "Begin card": today's image, its status, and the one
@@ -41,15 +41,28 @@ class DailyPuzzleCard extends StatelessWidget {
     final theme = Theme.of(context);
     return HomeHeroCard(
       image: image,
-      // Owner's v23 rulings: challenge wording, and no visible title —
-      // eyebrow + status + rule line are the card's three info.
+      // Owner's v23 rulings: challenge wording, and no visible title.
+      // Since 11-26 the status text is gone too — the card reads as
+      // eyebrow + rule line + action.
       eyebrow: "TODAY'S CHALLENGE",
       showTitle: false,
       details: [
-        // The done state has no status text: the bloomed cactus alone
-        // marks it (owner ruling, UI-2 follow-up).
-        if (!doneToday) ...[
-          Text(_statusText(), style: theme.textTheme.bodySmall),
+        // No bare status text in ANY state: the action is the status —
+        // Begin, Continue, or the done sticker (owner rulings, UI-2 +
+        // 11-26). The button is hidden from screen readers (the card is
+        // one merged stop), so the pending states ride along here as an
+        // invisible label, like the hidden title above.
+        if (doneToday)
+          // The rule line's promise, fulfilled in its own words — the
+          // sticker alone read unclear on device (owner feedback 11-26).
+          Text(
+            "Today's piece clicked in.",
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.primary,
+            ),
+          )
+        else ...[
+          Semantics(label: _statusText(), child: const SizedBox.shrink()),
           if (bloomsToday)
             // The rule players otherwise trip over: only this painting
             // clicks today's streak piece in.
@@ -72,18 +85,15 @@ class DailyPuzzleCard extends StatelessWidget {
     );
   }
 
-  /// Today's pot, bloomed — the rule line ("Finish it and today's pot
-  /// blooms.") coming true on the card itself, echoing the windowsill
-  /// below (owner ruling, UI-2).
-  // The label keeps the done state in the card's merged screen-reader
-  // utterance now that no visible text carries it.
-  Widget _doneMarker() => Semantics(
-    label: 'Done today',
-    child: const MascotArt(StudioMascot.cactus, height: 40),
-  );
+  /// The catalog's own done mark (v21 status family): the rule line's
+  /// piece, clicked in — the plant-era cactus retired with the pots
+  /// (owner ruling, 11-26). The sticker's own 'Completed' label joins the
+  /// merged card utterance.
+  Widget _doneMarker() => const DonePieceSticker();
 
-  /// The e2e tests assert on these texts. There is no done text: the
-  /// bloomed pot alone marks a finished day.
+  /// Screen-reader-only: visually the Begin/Continue button carries the
+  /// pending states, but it is excluded from semantics. The done state has
+  /// its own visible line and sticker instead.
   String _statusText() => inProgress ? statusInProgressLabel : 'Not started';
 }
 
@@ -96,10 +106,17 @@ class DailyStreakRow extends StatelessWidget {
     super.key,
     required this.now,
     required this.completedDays,
+    required this.showBonusHook,
   });
 
   final DateTime now;
   final Set<String> completedDays;
+
+  /// Whether the line may mention bonus pieces. False until the journey
+  /// unlocks (5 first finishes): before the player has seen the bonus
+  /// board in Collection, "bonus piece" would be an unexplained promise
+  /// (owner ruling, 11-26). Pieces bank silently either way.
+  final bool showBonusHook;
 
   static const _letters = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
   static const _names = [
@@ -127,27 +144,48 @@ class DailyStreakRow extends StatelessWidget {
               _dayPiece(theme, monday.add(Duration(days: i)), today),
           ],
         ),
-        const SizedBox(height: 6),
-        Text(
-          _streakLine(),
-          textAlign: TextAlign.center,
-          style: theme.textTheme.bodySmall,
-        ),
+        const SizedBox(height: 8),
+        _streakText(theme),
       ],
     );
   }
 
-  /// One quiet line instead of a headline — the streak is decor, not score.
-  String _streakLine() {
+  /// One line under the pieces — a live streak speaks up in tomato bold,
+  /// and the tail looks FORWARD: days until the run earns its next bonus
+  /// piece, never more than [streakDaysPerPiece] away (owner ruling,
+  /// 11-26 — "best/longest" was a backward stat that explained nothing;
+  /// a near reward is the come-back-tomorrow hook).
+  Widget _streakText(ThemeData theme) {
     final streak = currentStreak(completedDays, now);
-    final longest = longestStreak(completedDays);
+    final style = theme.textTheme.bodyMedium;
     if (streak > 0) {
-      return '${streakLabel(streak)} · longest: $longest';
+      final daysLeft = streakDaysPerPiece - streak % streakDaysPerPiece;
+      return Text.rich(
+        TextSpan(
+          children: [
+            TextSpan(
+              text: streakLabel(streak),
+              style: style?.copyWith(
+                color: theme.colorScheme.primary,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            if (showBonusHook)
+              TextSpan(
+                text:
+                    ' · $daysLeft ${daysLeft == 1 ? 'day' : 'days'} '
+                    'to a bonus piece',
+              ),
+          ],
+        ),
+        textAlign: TextAlign.center,
+        style: style,
+      );
     }
-    if (longest > 0) {
-      return 'longest: $longest · the pieces wait, no pressure';
-    }
-    return 'A piece clicks in for every quiet day.';
+    final line = completedDays.isEmpty
+        ? 'A piece clicks in for every quiet day.'
+        : 'The pieces wait, no pressure.';
+    return Text(line, textAlign: TextAlign.center, style: style);
   }
 
   Widget _dayPiece(ThemeData theme, DateTime day, DateTime today) {
@@ -171,24 +209,26 @@ class DailyStreakRow extends StatelessWidget {
         children: [
           Opacity(
             opacity: opacity,
+            // 22/28, up from 16/21: the streak is the screen's retention
+            // hook and earns hero-adjacent weight (owner ruling, 11-26).
             child: done
                 ? FamilyPiece(
-                    size: isToday ? 21 : 16,
+                    size: isToday ? 28 : 22,
                     fill: StudioColors.tomato,
                     // Today's win gets the print rim, like the sticker.
                     stroke: isToday ? StudioColors.structureDark : null,
-                    strokeWidth: 3,
+                    strokeWidth: 3.5,
                   )
                 : FamilyPiece(
-                    size: isToday ? 21 : 16,
+                    size: isToday ? 28 : 22,
                     stroke: StudioColors.structureInk,
-                    strokeWidth: 3.5,
+                    strokeWidth: 4,
                   ),
           ),
-          const SizedBox(height: 2),
+          const SizedBox(height: 4),
           Text(
             _letters[day.weekday - 1],
-            style: theme.textTheme.labelSmall?.copyWith(
+            style: theme.textTheme.labelMedium?.copyWith(
               fontWeight: isToday ? FontWeight.w800 : FontWeight.w600,
               color: theme.colorScheme.onSurface.withValues(
                 alpha: isToday ? 1 : 0.55,

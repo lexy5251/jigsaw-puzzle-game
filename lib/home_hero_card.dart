@@ -41,7 +41,7 @@ class HomeHeroCard extends StatelessWidget {
   /// card and then a redundant button.
   final Widget? action;
 
-  /// Non-interactive trailing ornament (the daily card's bloomed cactus).
+  /// Non-interactive trailing ornament (the daily card's done sticker).
   /// Always keeps the row slot; callers pass [marker] or [action], not
   /// both.
   final Widget? marker;

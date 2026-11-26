@@ -42,6 +42,10 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   var _index = 0;
+
+  /// Bumped with each journey-card "See the collection" exit; My Puzzles
+  /// watches the number and switches its inner tab to Collection.
+  var _collectionRequests = 0;
   late final BackgroundMusic _music;
 
   /// One nudge per session: it exists only to satisfy browser autoplay
@@ -92,6 +96,16 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     _music.resume();
   }
 
+  /// The journey card's "See the collection": jump to My Puzzles with
+  /// its Collection tab selected, whichever tab hosted the game.
+  void _openCollection() => setState(() {
+    _index = _myPuzzlesIndex;
+    _collectionRequests++;
+  });
+
+  /// My Puzzles' position in [_tabs] — kept beside the list it indexes.
+  static const _myPuzzlesIndex = 2;
+
   /// One record per tab: the nav entry and the screen come from the same
   /// list, so the IndexedStack child, the destination, and the isActive
   /// wire can never fall out of step when a tab is added or moved.
@@ -103,8 +117,11 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         label: 'Gallery',
         tooltip: 'Gallery tab',
       ),
-      builder: (isActive) =>
-          PuzzleSelectScreen(clock: widget.clock, isActive: isActive),
+      builder: (isActive) => PuzzleSelectScreen(
+        clock: widget.clock,
+        isActive: isActive,
+        onOpenCollection: _openCollection,
+      ),
     ),
     _Tab(
       destination: const NavigationDestination(
@@ -113,8 +130,11 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         label: 'Story',
         tooltip: 'Story tab',
       ),
-      builder: (isActive) =>
-          StoryScreen(clock: widget.clock, isActive: isActive),
+      builder: (isActive) => StoryScreen(
+        clock: widget.clock,
+        isActive: isActive,
+        onOpenCollection: _openCollection,
+      ),
     ),
     _Tab(
       destination: const NavigationDestination(
@@ -128,8 +148,12 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         label: 'My Puzzles',
         tooltip: 'My Puzzles tab',
       ),
-      builder: (isActive) =>
-          MyPuzzlesScreen(clock: widget.clock, isActive: isActive),
+      builder: (isActive) => MyPuzzlesScreen(
+        clock: widget.clock,
+        isActive: isActive,
+        onOpenCollection: _openCollection,
+        collectionRequests: _collectionRequests,
+      ),
     ),
     _Tab(
       destination: const NavigationDestination(

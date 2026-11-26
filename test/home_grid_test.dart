@@ -71,14 +71,30 @@ void main() {
   testWidgets('phones get two photo columns', (tester) async {
     await pumpHome(tester);
 
+    // "All" interleaves one image per category, so cozy 'third' sits
+    // beside landscape 'first' and the second landscape wraps below.
     final first = tester.getRect(card('first'));
     final second = tester.getRect(card('second'));
     final third = tester.getRect(card('third'));
+    expect(third.top, first.top);
+    expect(third.left, greaterThan(first.left));
+    expect(second.top, greaterThan(first.top));
+    expect(second.left, first.left);
+  });
+
+  testWidgets('a category chip restores plain catalog order', (tester) async {
+    await pumpHome(tester);
+
+    await tester.tap(chip('landscapes'));
+    await tester.pumpAndSettle();
+
+    // No cozy neighbor to interleave with: the landscapes sit in catalog
+    // order again.
+    final first = tester.getRect(card('first'));
+    final second = tester.getRect(card('second'));
+    expect(card('third'), findsNothing);
     expect(second.top, first.top);
     expect(second.left, greaterThan(first.left));
-    // The third card wraps to the next row, under the first.
-    expect(third.top, greaterThan(first.top));
-    expect(third.left, first.left);
   });
 
   testWidgets('cards are picture-only; the name lives in semantics', (
@@ -351,5 +367,53 @@ void main() {
     expect(card('first'), findsNothing);
     expect(card('third'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  group('interleaveByCategory', () {
+    PuzzleImage image(String id, String category) => PuzzleImage(
+      id: id,
+      title: id,
+      categoryId: category,
+      fileName: 'test_photo.jpg',
+    );
+
+    test('rotates through categories in first-appearance order', () {
+      final order = interleaveByCategory([
+        image('a1', 'a'),
+        image('a2', 'a'),
+        image('b1', 'b'),
+        image('b2', 'b'),
+        image('c1', 'c'),
+        image('c2', 'c'),
+      ]).map((entry) => entry.id);
+      expect(order, ['a1', 'b1', 'c1', 'a2', 'b2', 'c2']);
+    });
+
+    test('an exhausted category drops out; every image appears once', () {
+      final order = interleaveByCategory([
+        image('a1', 'a'),
+        image('a2', 'a'),
+        image('a3', 'a'),
+        image('b1', 'b'),
+      ]).map((entry) => entry.id);
+      expect(order, ['a1', 'b1', 'a2', 'a3']);
+    });
+
+    test('the real catalog survives a round trip', () {
+      final order = interleaveByCategory(puzzleCatalog);
+      expect(order.length, puzzleCatalog.length);
+      expect(
+        order.map((entry) => entry.id).toSet(),
+        {for (final entry in puzzleCatalog) entry.id},
+      );
+      // The first row of each round holds one image per category.
+      final categoryCount = {
+        for (final entry in puzzleCatalog) entry.categoryId,
+      }.length;
+      expect(
+        order.take(categoryCount).map((entry) => entry.categoryId).toSet(),
+        hasLength(categoryCount),
+      );
+    });
   });
 }

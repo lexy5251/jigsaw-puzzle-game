@@ -55,6 +55,7 @@ class StoryScreen extends StatefulWidget {
     super.key,
     this.clock,
     this.isActive = true,
+    this.onOpenCollection,
     this.celebrationStore = const SharedPreferencesStoryCelebrationStore(),
     this.sounds,
     this.haptics,
@@ -68,6 +69,10 @@ class StoryScreen extends StatefulWidget {
   /// alive, so becoming visible again — not being rebuilt — is the reload
   /// signal.
   final bool isActive;
+
+  /// Shell hook for the journey card's "See the collection" exit — a
+  /// story finish can be the 5th first finish too.
+  final VoidCallback? onOpenCollection;
 
   /// Remembers which one-time celebrations have played.
   final StoryCelebrationStore celebrationStore;
@@ -404,7 +409,7 @@ class _StoryScreenState extends State<StoryScreen>
   }
 
   Future<void> _openScene(PuzzleImage image) async {
-    await startPuzzleFlow(
+    final request = await startPuzzleFlow(
       context,
       image,
       source: LaunchSource.story,
@@ -412,6 +417,9 @@ class _StoryScreenState extends State<StoryScreen>
     );
     // The run may have read new scenes while the game was open.
     await _load();
+    if (mounted && request == PuzzleFlowRequest.openCollection) {
+      widget.onOpenCollection?.call();
+    }
   }
 
   @override

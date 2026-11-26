@@ -137,4 +137,28 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(NavigationBar).hitTestable(), findsOneWidget);
   });
+
+  testWidgets('a collection request switches to My Puzzles, Collection tab', (
+    tester,
+  ) async {
+    await bootApp(tester);
+
+    // The journey card's exit reaches the shell through this hook; driving
+    // it directly pins the wiring without playing five real games.
+    tester
+        .widget<PuzzleSelectScreen>(find.byType(PuzzleSelectScreen))
+        .onOpenCollection!();
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+      2,
+    );
+    // The inner tab switched to Collection: its journey teaser is the
+    // visible, tappable content.
+    expect(
+      find.text('Finish 5 more puzzles to open the journey.').hitTestable(),
+      findsOneWidget,
+    );
+  });
 }

@@ -21,6 +21,8 @@ void main() {
     WidgetTester tester, {
     VoidCallback? onNextPuzzle,
     VoidCallback? onBackToGallery,
+    int? journeyPieces,
+    VoidCallback? onSeeCollection,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -33,6 +35,8 @@ void main() {
               pieceCount: 24,
               onBackToGallery: onBackToGallery ?? () {},
               onNextPuzzle: onNextPuzzle,
+              journeyPieces: journeyPieces,
+              onSeeCollection: onSeeCollection,
             ),
           ],
         ),
@@ -135,5 +139,30 @@ void main() {
     expect(hero.bottom, lessThanOrEqualTo(360));
     expect(exit.bottom, lessThanOrEqualTo(360));
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the journey section pops its piece in and explains the economy',
+      (tester) async {
+    var sawCollection = false;
+    await pumpCard(
+      tester,
+      journeyPieces: 5,
+      onSeeCollection: () => sawCollection = true,
+    );
+
+    expect(find.text('THE JOURNEY OPENS'), findsOneWidget);
+    expect(find.text('You start with 5 pieces.'), findsOneWidget);
+    expect(
+      find.text(
+        'Your first finish of each painting and every 3 streak days add '
+        'a piece \u2014 25 finish a gift painting.',
+      ),
+      findsOneWidget,
+    );
+    // Let the pickup pop-in settle, then the CTA must reach its callback.
+    await tester.pump(const Duration(milliseconds: 700));
+    await tester.ensureVisible(find.text('See the collection'));
+    await tester.tap(find.text('See the collection'));
+    expect(sawCollection, isTrue);
   });
 }

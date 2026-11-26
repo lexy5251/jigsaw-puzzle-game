@@ -35,6 +35,15 @@ import 'studio_surfaces.dart';
 import 'studio_theme.dart';
 import 'whimsy_plan.dart';
 
+/// The game route's pop result when the player taps "See the collection"
+/// on the journey-unlock card: the launcher ends its chain and reports it,
+/// and the host screen asks the shell to open My Puzzles → Collection.
+/// Lives here (not in the launcher) so importing it never cycles — the
+/// launcher already imports this file.
+class OpenCollectionRequest {
+  const OpenCollectionRequest();
+}
+
 /// Hosts one running puzzle.
 class GameScreen extends StatefulWidget {
   const GameScreen({
@@ -118,6 +127,11 @@ class _GameScreenState extends State<GameScreen> {
   /// The gift painting this completion just unlocked; null when no bonus
   /// board finished (or the player pressed "Save for later").
   PuzzleImage? _bonusUnlock;
+
+  /// Pieces already on the bonus board when THIS finish opened the journey
+  /// (the 5th first finish); null hides the journey section — the usual
+  /// case. Set at most once per install by nature of the boundary.
+  int? _journeyPieces;
 
   Timer? _completionTimer;
   Timer? _revealFallbackTimer;
@@ -326,6 +340,7 @@ class _GameScreenState extends State<GameScreen> {
       _showCompletionCard = false;
       _nextImage = null;
       _bonusUnlock = null;
+      _journeyPieces = null;
     });
     // Stop new writes before awaiting any old ones. An already-held finger
     // can still deliver a release after the dialog closes.
@@ -460,35 +475,55 @@ class _GameScreenState extends State<GameScreen> {
     required Set<String> idsBefore,
     required Set<String> daysBefore,
   }) async {
-    final piecesBefore =
-        galleryFirstFinishCount(idsBefore, bonusCatalog: widget.catalogs.gifts) +
-        streakPieces(daysBefore);
+    final firstFinishesBefore = galleryFirstFinishCount(
+      idsBefore,
+      bonusCatalog: widget.catalogs.gifts,
+    );
+    final firstFinishesAfter = galleryFirstFinishCount(
+      {...idsBefore, widget.image.id},
+      bonusCatalog: widget.catalogs.gifts,
+    );
     // The streak write sequenced just before the completion write may have
     // added a day, so the after-side day set is re-read from storage.
     final daysAfter = await const SharedPreferencesDailyStreakStore()
         .completedDays();
-    final piecesAfter =
-        galleryFirstFinishCount(
-          {...idsBefore, widget.image.id},
-          bonusCatalog: widget.catalogs.gifts,
-        ) +
-        streakPieces(daysAfter);
-    final unlocked = newlyUnlockedBonus(
-      piecesBefore: piecesBefore,
-      piecesAfter: piecesAfter,
-      bonusCatalog: widget.catalogs.gifts,
-    );
+    final piecesBefore = firstFinishesBefore + streakPieces(daysBefore);
+    final piecesAfter = firstFinishesAfter + streakPieces(daysAfter);
+    // THIS finish crossing the 5-finish line is the journey's one unlock
+    // moment. It outranks a (rare) simultaneous gift unlock: the card
+    // sends the player to Collection, where that gift already hangs.
+    final journeyOpened =
+        firstFinishesBefore < journeyUnlockFinishes &&
+        firstFinishesAfter >= journeyUnlockFinishes;
+    final unlocked = journeyOpened
+        ? null
+        : newlyUnlockedBonus(
+            piecesBefore: piecesBefore,
+            piecesAfter: piecesAfter,
+            bonusCatalog: widget.catalogs.gifts,
+          );
     // The !_showCompletionCard guard: on wedged storage the card can reveal
     // (via its fallback timer) before the writes land — inserting the gift
     // section into an already-interactive card would shove the action
     // buttons mid-tap. The late gift stays silent here and waits in
     // Collection; the reveal itself must never wait on writes (UI-4 rule).
-    if (unlocked != null &&
+    if ((unlocked != null || journeyOpened) &&
         mounted &&
         !_restarting &&
         !_showCompletionCard &&
         identical(_game, game)) {
-      setState(() => _bonusUnlock = unlocked);
+      setState(() {
+        _bonusUnlock = unlocked;
+        if (journeyOpened) {
+          // The count the Collection board will actually show — banked
+          // streak pieces surface here as a head start.
+          _journeyPieces = bonusTrackStateFor(
+            firstFinishes: firstFinishesAfter,
+            streakPieces: streakPieces(daysAfter),
+            bonusCatalog: widget.catalogs.gifts,
+          ).piecesOnCurrentBoard;
+        }
+      });
     }
   }
 
@@ -750,6 +785,12 @@ class _GameScreenState extends State<GameScreen> {
               final bonus => () => Navigator.pop(context, bonus),
             },
             onSaveBonusForLater: () => setState(() => _bonusUnlock = null),
+            // The journey's one unlock moment: popping with the request
+            // ends the launcher's chain, and the host screen asks the
+            // shell for My Puzzles → Collection.
+            journeyPieces: _journeyPieces,
+            onSeeCollection: () =>
+                Navigator.pop(context, const OpenCollectionRequest()),
           ),
       ],
     );

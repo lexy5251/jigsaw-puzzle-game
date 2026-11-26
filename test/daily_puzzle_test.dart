@@ -241,32 +241,4 @@ void main() {
     });
   });
 
-  group('longestStreak', () {
-    test('is zero with no completed days', () {
-      expect(longestStreak({}), 0);
-    });
-
-    test('counts a single day', () {
-      expect(longestStreak({'2026-11-02'}), 1);
-    });
-
-    test('finds the longest run among several', () {
-      final days = {
-        '2026-10-01', '2026-10-02', '2026-10-03', // three in a row
-        '2026-10-20', '2026-10-21', // two in a row
-        '2026-11-02', // alone
-      };
-      expect(longestStreak(days), 3);
-    });
-
-    test('ignores malformed stored keys', () {
-      expect(longestStreak({'garbage', '2026-11-02'}), 1);
-    });
-
-    test('counts calendar days across daylight-saving changes', () {
-      expect(longestStreak({'2026-03-07', '2026-03-08', '2026-03-09'}), 3);
-      expect(longestStreak({'2026-10-31', '2026-11-01', '2026-11-02'}), 3);
-    });
-  });
-
 }

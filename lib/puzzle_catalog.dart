@@ -716,6 +716,28 @@ List<PuzzleImage> imagesInCategory(
     if (image.categoryId == categoryId) image,
 ];
 
+/// The "All" grid's display order: one image per category in turn (the
+/// catalog declares categories back to back, which would otherwise bury
+/// every category but the first below the fold). Categories keep their
+/// first-appearance order, images keep their in-category order, and the
+/// result is deterministic — a painting stays where the player last saw
+/// it. Category pages and My Puzzles keep plain catalog order.
+List<PuzzleImage> interleaveByCategory(List<PuzzleImage> catalog) {
+  final byCategory = <String, List<PuzzleImage>>{};
+  for (final image in catalog) {
+    byCategory.putIfAbsent(image.categoryId, () => []).add(image);
+  }
+  final rounds = byCategory.values.fold(
+    0,
+    (longest, images) => images.length > longest ? images.length : longest,
+  );
+  return [
+    for (var round = 0; round < rounds; round++)
+      for (final images in byCategory.values)
+        if (round < images.length) images[round],
+  ];
+}
+
 /// The painting to offer as "Next puzzle" after finishing [current]: the
 /// nearest image after it in its category (wrapping around) whose id is not
 /// in [completedIds]. Null when the rest of the category is done — the
