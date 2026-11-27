@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:jigsaw_puzzle/game_sounds.dart';
 import 'package:jigsaw_puzzle/jigsaw_game.dart';
 import 'package:jigsaw_puzzle/piece_tray.dart';
-import 'package:jigsaw_puzzle/puzzle_logic.dart';
 import 'package:jigsaw_puzzle/puzzle_piece.dart';
 import 'package:jigsaw_puzzle/puzzle_save.dart';
 
@@ -137,35 +136,31 @@ void main() {
 
     expect(pieces(game), hasLength(2));
     expect(game.trayPieceIndexes, hasLength(22));
-    // The normal drop rules ran instead: the chunk was pushed clear of the
-    // whole bottom band — tray AND the control row above it — so no part
-    // of it can hide under the tray or the row's buttons.
+    // The normal drop rules ran instead: the chunk was pushed clear of
+    // the tray, so no part of it can hide under the piece strip.
     for (final piece in pieces(game).values) {
       final bottomOnScreen = game.camera.localToGlobal(
         piece.position + piece.size,
       );
-      expect(
-        bottomOnScreen.y,
-        lessThanOrEqualTo(trayTopOf(game) - trayControlRowHeight),
-      );
+      expect(bottomOnScreen.y, lessThanOrEqualTo(trayTopOf(game)));
     }
   });
 
-  testWidgets('a lone piece dropped on the control-row band returns too', (
+  testWidgets('a lone piece dropped just inside the tray returns too', (
     tester,
   ) async {
     final store = InMemorySaveStore();
     final game = await boot(tester, store, loose: {8: grid6x4Home(8) + offset});
     final piece = pieces(game)[8]!;
 
-    // Release with the finger inside the band above the tray: without the
-    // band-aware boundary this was a dead zone that bounced the piece up.
-    final inBand = Vector2(
-      game.size.x / 2,
-      trayTopOf(game) - trayControlRowHeight / 2,
+    // Release with the finger just past the tray's top edge — the return
+    // zone starts exactly there now that no control band sits above it.
+    final overTray = Vector2(game.size.x / 2, trayTopOf(game) + 8);
+    game.movePieceTo(
+      piece,
+      game.camera.globalToLocal(overTray) - piece.size / 2,
     );
-    game.movePieceTo(piece, game.camera.globalToLocal(inBand) - piece.size / 2);
-    piece.noteDragPointer(inBand);
+    piece.noteDragPointer(overTray);
     piece.settle();
     for (var i = 0; i < 5; i++) {
       await tester.pump(const Duration(milliseconds: 16));
@@ -175,13 +170,13 @@ void main() {
     expect(game.trayPieceIndexes, hasLength(24));
   });
 
-  testWidgets('a restored piece is nudged out of the reserved band', (
+  testWidgets('a restored piece is nudged clear of the tray', (
     tester,
   ) async {
     final store = InMemorySaveStore();
     // Saved below the board (another screen's sorting area): on this
-    // surface it would project into the band, where the Flutter buttons
-    // sit above the canvas and would make the piece un-grabbable.
+    // surface it would project into the tray, where the piece strip
+    // draws above it and would make the piece un-grabbable.
     final game = await boot(
       tester,
       store,
@@ -192,10 +187,7 @@ void main() {
     final bottomOnScreen = game.camera.localToGlobal(
       piece.position + piece.size,
     );
-    expect(
-      bottomOnScreen.y,
-      lessThanOrEqualTo(trayTopOf(game) - trayControlRowHeight),
-    );
+    expect(bottomOnScreen.y, lessThanOrEqualTo(trayTopOf(game)));
   });
 
   testWidgets('the sweep returns loose singles, keeps chunks and locked', (
@@ -287,10 +279,7 @@ void main() {
     final bottomOnScreen = game.camera.localToGlobal(
       piece.position + piece.size,
     );
-    expect(
-      bottomOnScreen.y,
-      lessThanOrEqualTo(trayTopOf(game) - game.controlRowHeight),
-    );
+    expect(bottomOnScreen.y, lessThanOrEqualTo(trayTopOf(game)));
   });
 
   testWidgets('a squashed window never hurls pieces out of reach', (

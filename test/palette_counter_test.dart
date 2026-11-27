@@ -92,6 +92,11 @@ void main() {
         }
         expect(find.byType(BackButton), findsOneWidget);
         final bar = tester.getRect(find.byType(AppBar));
+        // Legibility floor: the FittedBox may shrink the counter when the
+        // tools pill starves the title slot, but the load-bearing number
+        // must never drop below readable — silent over-shrink would pass
+        // every containment check above.
+        expect(tester.getRect(find.text('200 / 216')).height, greaterThan(12));
         for (final text in ['200 / 216', 'pieces placed']) {
           final finder = find.text(text);
           final paragraph = tester.renderObject<RenderParagraph>(finder);
@@ -104,19 +109,18 @@ void main() {
           find.bySemanticsLabel('200 of 216 pieces placed'),
           findsOneWidget,
         );
-        for (final tooltip in ['Image preview', 'Options']) {
+        // The whole tools pill fits the same width/scale matrix beside
+        // the counter — constant tooltips are the finder handles per the
+        // e2e stable-handle rule.
+        for (final tooltip in [
+          'Edges only',
+          'Return to tray',
+          'Image preview',
+          'Options',
+        ]) {
           expect(find.byTooltip(tooltip).hitTestable(), findsOneWidget);
         }
-        // The tray control row fits the same width/scale matrix: the
-        // filter chip and the sweep button are present and tappable (the
-        // sweep button always keeps its 'Tidy' label; its constant tooltip
-        // is the finder handle per the e2e stable-handle rule).
-        expect(find.text('Edges only').hitTestable(), findsOneWidget);
-        expect(
-          find.byTooltip('Return to tray').hitTestable(),
-          findsOneWidget,
-        );
-        await tester.tap(find.text('Edges only'));
+        await tester.tap(find.byTooltip('Edges only'));
         await tester.pump();
         expect(
           tester.widget<EdgesOnlyToggle>(find.byType(EdgesOnlyToggle)).selected,

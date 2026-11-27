@@ -96,11 +96,13 @@ void main() {
         ),
       ),
     );
-    // The toggled flag must sit on the SAME node as the label — a separate
-    // label-less toggle node is silent for screen readers.
-    final node = tester.getSemantics(find.text('Edges only'));
+    // The toggled flag must sit on the SAME node as the name — a separate
+    // nameless toggle node is silent for screen readers. The name rides
+    // the tooltip (the app-wide IconButton pattern), announced like a
+    // label.
+    final node = tester.getSemantics(find.byType(EdgesOnlyToggle));
     final data = node.getSemanticsData();
-    expect(data.label, contains('Edges only'));
+    expect(data.tooltip, contains('Edges only'));
     expect(data.flagsCollection.isToggled, Tristate.isTrue);
     semantics.dispose();
   });

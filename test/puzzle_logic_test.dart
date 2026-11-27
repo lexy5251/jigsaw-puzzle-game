@@ -171,17 +171,26 @@ void main() {
     });
   });
 
-  group('scaledControlRowHeight', () {
-    test('grows with text up to the shared cap, never shrinks below base', () {
-      expect(scaledControlRowHeight(1.0), trayControlRowHeight);
-      expect(scaledControlRowHeight(0.8), trayControlRowHeight);
-      expect(scaledControlRowHeight(1.2), closeTo(48 * 1.2, 1e-9));
-      // Past the cap the band stops growing — the row clamps its text at
-      // the same point, so buttons and band stay in step.
-      expect(
-        scaledControlRowHeight(3.0),
-        closeTo(48 * trayControlRowMaxTextScale, 1e-9),
-      );
+  group('edgePieceCount', () {
+    test('counts the outer ring of normal grids', () {
+      expect(edgePieceCount(6, 4), 16);
+      expect(edgePieceCount(5, 5), 16);
+      expect(edgePieceCount(2, 2), 4);
+    });
+
+    test('degenerate grids with no interior are all edges', () {
+      expect(edgePieceCount(1, 1), 1);
+      expect(edgePieceCount(5, 1), 5);
+      expect(edgePieceCount(1, 7), 7);
+    });
+
+    test('matches isEdgePiece piece by piece', () {
+      const columns = 6, rows = 4;
+      final counted = [
+        for (var i = 0; i < columns * rows; i++)
+          if (isEdgePiece(i, columns, rows)) i,
+      ].length;
+      expect(edgePieceCount(columns, rows), counted);
     });
   });
 

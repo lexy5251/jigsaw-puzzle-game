@@ -146,11 +146,31 @@ class _GameScreenState extends State<GameScreen> {
 
   late JigsawGame _game = _createGame();
 
-  DateTime get _now => (widget.clock ?? DateTime.now)();
+  /// Toggles the tray's edges-only filter from the app bar's tools pill.
+  void _setEdgesOnly(bool edgesOnly) {
+    // A finished frame makes the filter pointless — it would show an
+    // empty tray with the interior pieces hidden, and no further lock
+    // could trigger the auto-off below. Same rule, applied up front.
+    if (edgesOnly && _game.frameComplete) {
+      return;
+    }
+    Analytics.instance.edgesOnlyToggled(enabled: edgesOnly);
+    setState(() => _edgesOnly = edgesOnly);
+    _game.setEdgesOnlyFilter(edgesOnly);
+  }
 
-  /// The player's raw text-scale factor (base label size 14).
-  double get _textScaleFactor =>
-      MediaQuery.textScalerOf(context).scale(14) / 14;
+  /// The filter dismisses itself the moment the frame is complete — an
+  /// edges-only tray with nothing left in it helps nobody (the genre
+  /// leaders do the same). Deliberately no analytics event: the player
+  /// didn't act.
+  void _onPlacedCountChanged() {
+    if (_edgesOnly && _game.frameComplete) {
+      setState(() => _edgesOnly = false);
+      _game.setEdgesOnlyFilter(false);
+    }
+  }
+
+  DateTime get _now => (widget.clock ?? DateTime.now)();
 
   String get _saveKey => puzzleSaveKey(
     imageId: widget.image.id,
@@ -180,9 +200,6 @@ class _GameScreenState extends State<GameScreen> {
       trayMaxThumbnailHeight: widget.trayMaxThumbnailHeight,
       // The hidden figures this image can carry, matched to its scene.
       whimsyPool: whimsyPoolFor(widget.image),
-      // The camera's reserve must match the control row the screen draws
-      // over it, including the text-scale growth.
-      controlRowHeight: scaledControlRowHeight(_textScaleFactor),
       onCompleted: () => _onPuzzleCompleted(game),
       onBoardLoaded: (resumed) {
         if (mounted && !_restarting && identical(_game, game)) {
@@ -196,6 +213,10 @@ class _GameScreenState extends State<GameScreen> {
     game.setEdgesOnlyFilter(_edgesOnly);
     game.setGhostPreview(_showGhostPreview);
     game.setBoardColor(_boardColor);
+    // Every new game gets the auto-off watcher here, so no construction
+    // path can forget it; the matching removeListener lives in
+    // _confirmRestart (old instance) and dispose.
+    game.placedCount.addListener(_onPlacedCountChanged);
     return game;
   }
 
@@ -282,6 +303,7 @@ class _GameScreenState extends State<GameScreen> {
       ],
       builder: (context, controller, child) => IconButton(
         tooltip: 'Options',
+        visualDensity: VisualDensity.compact,
         icon: const RisoIcon(RisoGlyph.options),
         onPressed: () =>
             controller.isOpen ? controller.close() : controller.open(),
@@ -348,6 +370,9 @@ class _GameScreenState extends State<GameScreen> {
     if (!mounted) {
       return;
     }
+    // The auto-off watcher must not outlive its game: unhook the old
+    // notifier before _createGame hooks the new one.
+    _game.placedCount.removeListener(_onPlacedCountChanged);
     setState(() {
       _resumed = null;
       _restarting = false;
@@ -613,15 +638,8 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // The system text size can change mid-game; the band the camera
-    // reserves must follow the row's real height.
-    _game.setControlRowHeight(scaledControlRowHeight(_textScaleFactor));
-  }
-
-  @override
   void dispose() {
+    _game.placedCount.removeListener(_onPlacedCountChanged);
     _completionTimer?.cancel();
     _revealFallbackTimer?.cancel();
     super.dispose();
@@ -661,98 +679,50 @@ class _GameScreenState extends State<GameScreen> {
                 toolbarHeight: counterHeight > kToolbarHeight
                     ? counterHeight
                     : kToolbarHeight,
+                // The counter pill carries its own visual padding, and the
+                // tools pill leaves the title slot tight on narrow
+                // screens — default title spacing would only shrink the
+                // counter further.
+                titleSpacing: 0,
                 title: MediaQuery.withClampedTextScaling(
                   maxScaleFactor: _titleMaxTextScale,
-                  child: ValueListenableBuilder<int>(
-                    valueListenable: _game.placedCount,
-                    builder: (context, placed, _) => _PaletteCounter(
-                      placed: placed,
-                      total: widget.size.pieceCount,
+                  // The tools pill leaves the title slot narrower than the
+                  // tested width/scale matrix assumed; the FittedBox is the
+                  // last-resort shrink for narrow screens at large scale.
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: ValueListenableBuilder<int>(
+                      valueListenable: _game.placedCount,
+                      builder: (context, placed, _) => _PaletteCounter(
+                        placed: placed,
+                        total: widget.size.pieceCount,
+                      ),
                     ),
                   ),
                 ),
                 actions: [
-                  IconButton(
-                    tooltip: 'Image preview',
-                    isSelected: _showGhostPreview,
-                    icon: const RisoIcon(RisoGlyph.imagePreview),
-                    selectedIcon: const RisoIcon(
-                      RisoGlyph.imagePreview,
-                      color: StudioColors.tomato,
-                    ),
-                    onPressed: () {
-                      setState(() => _showGhostPreview = !_showGhostPreview);
-                      _game.setGhostPreview(_showGhostPreview);
+                  _ToolsPill(
+                    edgesOnly: _edgesOnly,
+                    onEdgesOnlyChanged: _setEdgesOnly,
+                    onReturnToTray: _game.returnLoosePiecesToTray,
+                    ghostPreview: _showGhostPreview,
+                    onGhostPreviewChanged: (enabled) {
+                      setState(() => _showGhostPreview = enabled);
+                      _game.setGhostPreview(enabled);
                     },
+                    optionsMenu: _optionsMenu(),
                   ),
-                  _optionsMenu(),
                 ],
               ),
+              // Labeled so e2e tests (and screen readers) can identify
+              // the game screen — Flame's canvas exposes no semantics of
+              // its own. No overlays: every play tool lives in the app
+              // bar, so nothing can sit under a carried piece.
               body: IgnorePointer(
                 ignoring: _restarting,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    // Labeled so e2e tests (and screen readers) can
-                    // identify the game screen — Flame's canvas exposes no
-                    // semantics of its own.
-                    Semantics(
-                      label: _boardSemanticsLabel,
-                      child: GameWidget(key: ObjectKey(_game), game: _game),
-                    ),
-                    // Rides exactly on the tray's top edge, in the band
-                    // the camera fit reserves. The game publishes the tray
-                    // height; 0 (still loading) keeps the row hidden.
-                    ValueListenableBuilder<double>(
-                      valueListenable: _game.trayHeightOnScreen,
-                      builder: (context, trayHeight, child) => trayHeight <= 0
-                          ? const SizedBox.shrink()
-                          : Positioned(
-                              left: 0,
-                              right: 0,
-                              bottom: trayHeight,
-                              height: _game.controlRowHeight,
-                              child: child!,
-                            ),
-                      child: ValueListenableBuilder<int>(
-                        valueListenable: _game.carriedPieces,
-                        // Fade out under a carried piece: Flutter paints
-                        // above the game canvas, so the opaque buttons
-                        // would hide the piece and steal its drop. Taps
-                        // stay off until the fade-in completes too — a
-                        // still-invisible row must never swallow a tap
-                        // aimed at the board.
-                        builder: (context, carried, child) =>
-                            TweenAnimationBuilder<double>(
-                              tween: Tween(end: carried > 0 ? 0.0 : 1.0),
-                              duration: const Duration(milliseconds: 120),
-                              builder: (context, opacity, child) =>
-                                  IgnorePointer(
-                                    // Off the instant a carry starts, back
-                                    // only once the fade-in has finished.
-                                    ignoring: carried > 0 || opacity < 1,
-                                    child: Opacity(
-                                      opacity: opacity,
-                                      child: child,
-                                    ),
-                                  ),
-                              child: child,
-                            ),
-                        child: _TrayControlRow(
-                          edgesOnly: _edgesOnly,
-                          onEdgesOnlyChanged: (edgesOnly) {
-                            Analytics.instance.edgesOnlyToggled(
-                              enabled: edgesOnly,
-                            );
-                            setState(() => _edgesOnly = edgesOnly);
-                            _game.setEdgesOnlyFilter(edgesOnly);
-                          },
-                          onReturnToTray: () =>
-                              _game.returnLoosePiecesToTray(),
-                        ),
-                      ),
-                    ),
-                  ],
+                child: Semantics(
+                  label: _boardSemanticsLabel,
+                  child: GameWidget(key: ObjectKey(_game), game: _game),
                 ),
               ),
             ),
@@ -830,14 +800,7 @@ class _PaletteCounter extends StatelessWidget {
             bottomLeft: Radius.elliptical(22, 24),
             bottomRight: Radius.elliptical(28, 18),
           ),
-          boxShadow: [
-            BoxShadow(
-              color: StudioColors.warmShadow,
-              offset: Offset(0, 3),
-              blurRadius: 10,
-              spreadRadius: -5,
-            ),
-          ],
+          boxShadow: [_appBarCardShadow],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -880,69 +843,78 @@ class _PaletteCounter extends StatelessWidget {
   }
 }
 
-/// The tray's control row: the "Edges only" filter chip on the left (one
-/// on/off switch — owner's call over a two-button group) and the "Tidy"
-/// sweep on the right (owner's pick of the genre's short cleanup verbs;
-/// its long-press tooltip still spells out "Return to tray"), floating in
-/// the band the camera reserves above the tray. Visuals are deliberately
-/// slim — small text, compact density — while the padded tap targets stay
-/// full size. The background stays transparent, so taps between the
-/// buttons fall through to the board.
-class _TrayControlRow extends StatelessWidget {
-  const _TrayControlRow({
+/// The soft warm lift shared by the app bar's two floating cards — the
+/// palette counter and the tools pill. One source so the deliberately
+/// matched surfaces cannot drift apart.
+const _appBarCardShadow = BoxShadow(
+  color: StudioColors.warmShadow,
+  offset: Offset(0, 3),
+  blurRadius: 10,
+  spreadRadius: -5,
+);
+
+/// One cream pill holds every play tool (the genre leaders' layout,
+/// owner's pick over buttons by the tray): piece tools left of the
+/// divider, view/menu right. It mirrors the counter's card surface.
+class _ToolsPill extends StatelessWidget {
+  const _ToolsPill({
     required this.edgesOnly,
     required this.onEdgesOnlyChanged,
     required this.onReturnToTray,
+    required this.ghostPreview,
+    required this.onGhostPreviewChanged,
+    required this.optionsMenu,
   });
 
   final bool edgesOnly;
   final ValueChanged<bool> onEdgesOnlyChanged;
   final VoidCallback onReturnToTray;
+  final bool ghostPreview;
+  final ValueChanged<bool> onGhostPreviewChanged;
+  final Widget optionsMenu;
 
   @override
   Widget build(BuildContext context) {
-    // Text scaling is honored up to the same cap the band height grows
-    // with (scaledControlRowHeight), so the buttons keep full-size tap
-    // targets instead of being scaled down into a band that stopped
-    // growing with them.
-    const labelStyle = TextStyle(
-      fontFamily: 'Nunito',
-      fontSize: 12,
-      fontWeight: FontWeight.w700,
-    );
-    return MediaQuery.withClampedTextScaling(
-      maxScaleFactor: trayControlRowMaxTextScale,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8),
+    return Center(
+      child: Container(
+        margin: const EdgeInsets.only(right: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        decoration: const BoxDecoration(
+          color: StudioColors.card,
+          borderRadius: BorderRadius.all(Radius.circular(24)),
+          boxShadow: [_appBarCardShadow],
+        ),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Flexible(
-              // Last-resort shrink for extreme cases; the slim labels fit
-              // every supported width, so it normally never engages.
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: EdgesOnlyToggle(
-                  selected: edgesOnly,
-                  onChanged: onEdgesOnlyChanged,
-                ),
-              ),
+            EdgesOnlyToggle(
+              selected: edgesOnly,
+              onChanged: onEdgesOnlyChanged,
             ),
-            const SizedBox(width: 8),
-            Tooltip(
-              message: 'Return to tray',
-              child: TextButton.icon(
-                onPressed: onReturnToTray,
-                style: TextButton.styleFrom(
-                  visualDensity: VisualDensity.compact,
-                  textStyle: labelStyle,
-                  foregroundColor: StudioColors.ink,
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                ),
-                icon: const RisoIcon(RisoGlyph.broom, size: 16),
-                label: const Text('Tidy'),
-              ),
+            IconButton(
+              tooltip: 'Return to tray',
+              visualDensity: VisualDensity.compact,
+              icon: const RisoIcon(RisoGlyph.broom),
+              onPressed: onReturnToTray,
             ),
+            Container(
+              width: 1,
+              height: 22,
+              margin: const EdgeInsets.symmetric(horizontal: 1),
+              color: StudioColors.boardOutline,
+            ),
+            IconButton(
+              tooltip: 'Image preview',
+              visualDensity: VisualDensity.compact,
+              isSelected: ghostPreview,
+              icon: const RisoIcon(RisoGlyph.imagePreview),
+              selectedIcon: const RisoIcon(
+                RisoGlyph.imagePreview,
+                color: StudioColors.tomato,
+              ),
+              onPressed: () => onGhostPreviewChanged(!ghostPreview),
+            ),
+            optionsMenu,
           ],
         ),
       ),
@@ -950,11 +922,11 @@ class _TrayControlRow extends StatelessWidget {
   }
 }
 
-/// The bare "Edges only" toggle (owner's v26b pick A: BOTH tray controls
-/// are bare icon + word so the pair reads even; the on-state borrows the
-/// nav's active grammar — tomato ink plus a tomato underline). Visible
-/// only so tests can read [selected] where they used to read the
-/// FilterChip's — not part of the screen's real API.
+/// The "Edges only" toggle in the app bar's tools pill: the edge-piece
+/// glyph alone, wearing a tomato circle while the filter is live (the
+/// pill's strongest signal — the filter hides pieces, so its on-state
+/// must not be missable). Visible only so tests can read [selected] where
+/// they used to read the FilterChip's — not part of the screen's real API.
 @visibleForTesting
 class EdgesOnlyToggle extends StatelessWidget {
   const EdgesOnlyToggle({
@@ -968,49 +940,27 @@ class EdgesOnlyToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ink = selected ? StudioColors.tomato : StudioColors.mutedInk;
     // MergeSemantics folds the button's own node into this one — without
     // it the toggled flag sits on a label-less ancestor and screen readers
     // announce the button with no on/off state.
     return MergeSemantics(
       child: Semantics(
         toggled: selected,
-        child: TextButton(
-        onPressed: () => onChanged(!selected),
-        style: TextButton.styleFrom(
+        child: IconButton(
+          tooltip: 'Edges only',
           visualDensity: VisualDensity.compact,
-          foregroundColor: ink,
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        ),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(
-                color: selected ? StudioColors.tomato : Colors.transparent,
-                width: 3,
-              ),
-            ),
+          isSelected: selected,
+          style: IconButton.styleFrom(
+            backgroundColor: selected
+                ? StudioColors.tomato
+                : Colors.transparent,
+            foregroundColor: selected
+                ? StudioColors.onTomato
+                : StudioColors.ink,
           ),
-          child: Padding(
-            padding: const EdgeInsets.only(bottom: 2),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                RisoIcon(RisoGlyph.edgePiece, size: 16, color: ink),
-                const SizedBox(width: 6),
-                const Text(
-                  'Edges only',
-                  style: TextStyle(
-                    fontFamily: 'Nunito',
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
+          icon: const RisoIcon(RisoGlyph.edgePiece),
+          onPressed: () => onChanged(!selected),
         ),
-      ),
       ),
     );
   }

@@ -194,9 +194,10 @@ void main() {
           var bounds = boundsFor(2, 2, whimsy);
           if (lastPiece) {
             // Hover the figure up-right of its hole, with the drag shadow,
-            // like a piece carried the instant before it snaps.
+            // like a piece carried the instant before it snaps. Far enough
+            // that the near-cell-sized figure doesn't cover its own hole.
             bounds = bounds.shift(
-              Offset(0.42 * cell * scale, -0.38 * cell * scale),
+              Offset(0.62 * cell * scale, -0.56 * cell * scale),
             );
             whimsy.artwork.renderShadow(
               canvas,

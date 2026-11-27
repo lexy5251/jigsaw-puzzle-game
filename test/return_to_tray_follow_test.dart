@@ -8,7 +8,6 @@ import 'package:flame/game.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jigsaw_puzzle/jigsaw_game.dart';
 import 'package:jigsaw_puzzle/piece_tray.dart';
-import 'package:jigsaw_puzzle/puzzle_logic.dart';
 import 'package:jigsaw_puzzle/puzzle_piece.dart';
 import 'package:jigsaw_puzzle/puzzle_save.dart';
 
@@ -127,15 +126,15 @@ void main() {
     expect(tray.landingPieceIndex, isNull);
   });
 
-  testWidgets('the finger decides: releasing above the return band keeps the '
+  testWidgets('the finger decides: releasing above the tray keeps the '
       'piece on the board even when its center hangs inside it', (tester) async {
     final store = InMemorySaveStore();
     final game = await boot(tester, store, loose: {8: home(8)});
     final piece = pieceOf(game, 8)!;
     final trayTop = trayOf(game).position.y;
-    // The return boundary is the control-row band's top, 48px above the
-    // tray itself (drops in the band count as tray returns).
-    final bandTop = trayTop - trayControlRowHeight;
+    // The return boundary is the tray's own top edge (no reserved band:
+    // the play controls live in the app bar).
+    final bandTop = trayTop;
 
     // Grab the piece near its TOP edge, so its center hangs well below the
     // finger, then stop with the finger just above the band: the center is

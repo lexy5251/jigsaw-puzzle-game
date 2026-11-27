@@ -63,7 +63,6 @@ class JigsawGame extends FlameGame
     this.onBoardLoaded,
     this.trayColumns = trayVisibleColumns,
     this.trayMaxThumbnailHeight = trayThumbnailHeightCap,
-    this._controlRowHeight = trayControlRowHeight,
     this.whimsyPool = universalWhimsyShapes,
   }) {
     // Claim at construction, not load: a restart creates the new game before
@@ -113,26 +112,6 @@ class JigsawGame extends FlameGame
   /// ceiling; the preview harness passes candidates (null = no ceiling).
   final double? trayMaxThumbnailHeight;
 
-  /// On-screen height of the Flutter control row above the tray. The host
-  /// screen passes its text-scaled value (see [scaledControlRowHeight]) at
-  /// construction and keeps it current via [setControlRowHeight], so the
-  /// camera reserve and the row's real height can never disagree.
-  double get controlRowHeight => _controlRowHeight;
-  double _controlRowHeight;
-
-  /// Re-reserves the band when the player's text scale changes mid-game.
-  /// Refits like a real resize (zoom and pan reset), which also re-clears
-  /// pieces out of the grown or shrunk band.
-  void setControlRowHeight(double height) {
-    if (height == _controlRowHeight) {
-      return;
-    }
-    _controlRowHeight = height;
-    if (_tray == null) {
-      return; // onLoad's fit applies the final value.
-    }
-    _fitCameraToBoard();
-  }
 
   /// Reads and writes saved progress. Tests can omit storage to play in memory.
   final PuzzleSaveStore? saveStore;
@@ -257,23 +236,18 @@ class JigsawGame extends FlameGame
 
   double? _traySpriteAspect;
 
-  /// Screen band reserved below the board: the tray plus the Flutter
-  /// control row floating just above it.
-  double get _bottomHudHeight => _trayHeight + controlRowHeight;
+  /// Screen band reserved below the board — the tray alone, since every
+  /// play control moved into the app bar's tools pill.
+  double get _bottomHudHeight => _trayHeight;
 
   /// Height left for the board above the reserved band. The floor keeps
   /// camera math finite — and clamp bounds ordered — on degenerate
   /// viewports (a web window shorter than the band itself).
   double get _availableBoardHeight => max(1.0, size.y - _bottomHudHeight);
 
-  /// How many pieces a finger is currently carrying (0 or 1 gesture's
-  /// group). The host screen fades the control row out while a piece is
-  /// carried, so it can never hide the piece or steal its drop.
-  final ValueNotifier<int> carriedPieces = ValueNotifier(0);
-
-  /// On-screen tray height, published for the host screen's control row
-  /// (a Flutter overlay that must sit exactly on the tray's top edge).
-  /// Stays 0 until the tray exists, which hides the row while loading.
+  /// On-screen tray height. Stays 0 until the tray exists. No production
+  /// consumer since the controls moved to the app bar, but it is the
+  /// camera tests' handle on the reserved band's real size.
   final ValueNotifier<double> trayHeightOnScreen = ValueNotifier(0);
 
   void _publishTrayHeight() {
@@ -488,6 +462,22 @@ class JigsawGame extends FlameGame
   void setEdgesOnlyFilter(bool enabled) {
     _edgesOnlyFilter = enabled;
     _tray?.setEdgesOnly(enabled);
+  }
+
+  /// Whether every border piece sits locked in place. The host screen
+  /// checks this on [placedCount] changes to dismiss its edges-only
+  /// filter the moment the frame is done. Counted against the grid's
+  /// edge total because pieces still in the tray have no board component
+  /// to inspect.
+  bool get frameComplete {
+    var lockedEdges = 0;
+    for (final piece in _boardPieces.values) {
+      if (_groups.isLocked(piece.index) &&
+          isEdgePiece(piece.index, columns, rows)) {
+        lockedEdges++;
+      }
+    }
+    return lockedEdges == edgePieceCount(columns, rows);
   }
 
   void _addBoardOutline() {
@@ -733,7 +723,6 @@ class JigsawGame extends FlameGame
     for (final index in members) {
       _boardPieces[index]!.setDragging(true);
     }
-    carriedPieces.value++;
     return true;
   }
 
@@ -758,11 +747,6 @@ class JigsawGame extends FlameGame
   /// A lone piece dropped over the tray goes back into it (players clear a
   /// messy board this way). Chunks and locked pieces stay: the tray holds
   /// single pieces only. [settlePiece] resolves the drop point.
-  ///
-  /// The boundary is the control-row band's top, not the tray's own edge:
-  /// the clearance nudge keeps pieces out of the whole band, so a release
-  /// inside it must count as "over the tray" — otherwise the band would be
-  /// a dead zone where the piece neither returns nor stays put.
   bool _shouldReturnToTray(PuzzlePiece piece, Vector2 dropPoint) {
     if (_tray == null || _groups.membersOf(piece.index).length > 1) {
       return false;
@@ -776,8 +760,8 @@ class JigsawGame extends FlameGame
     persistProgress();
   }
 
-  /// Sweeps every loose single piece back into the tray — the control row's
-  /// "Return to tray" button. Chunks and locked pieces stay: the tray holds
+  /// Sweeps every loose single piece back into the tray — the tools
+  /// pill's "Return to tray" button. Chunks and locked pieces stay: the tray holds
   /// single pieces only, the same rule as dropping one piece onto it. One
   /// drop sound and one save cover the whole sweep.
   void returnLoosePiecesToTray() {
@@ -854,7 +838,7 @@ class JigsawGame extends FlameGame
     );
   }
 
-  /// Nudges every unlocked group clear of the tray/control-row band.
+  /// Nudges every unlocked group clear of the tray band.
   /// Drops do this per piece; every camera fit sweeps the whole board, or
   /// a save replayed at another screen size could park a piece under the
   /// Flutter buttons where it cannot be grabbed.
@@ -884,7 +868,7 @@ class JigsawGame extends FlameGame
     }
   }
 
-  /// Breathing room between a cleared piece and the band's top edge.
+  /// Breathing room between a cleared piece and the tray's top edge.
   static const _bandClearanceGap = 8.0;
 
   void _keepGroupClearOfTray(int member) {
@@ -912,11 +896,6 @@ class JigsawGame extends FlameGame
   void settlePiece(PuzzlePiece piece, {bool allowTrayReturn = true}) {
     if (_disposed || _discardingProgress) return;
     if (piece.isLocked || piece.isSettling) return;
-    // Elevated here means a gesture carried this group (matched by the
-    // increment in beginPieceDrag); programmatic settles arrive loose.
-    if (piece.isElevated) {
-      carriedPieces.value = max(0, carriedPieces.value - 1);
-    }
     _groups.moveTo(piece.index, Point(piece.x, piece.y));
     _busyPieces.removeAll(_groups.membersOf(piece.index));
     // The finger decides where the drop lands, not the piece's center: a

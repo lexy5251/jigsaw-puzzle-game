@@ -149,7 +149,7 @@ void main() {
           ).toJsonString();
       await bootGameScreen(tester, image: singlePieceImage, size: size);
 
-      await tester.tap(find.text('Edges only'));
+      await tester.tap(find.byTooltip('Edges only'));
       await tester.pump(const Duration(milliseconds: 16));
       await tester.tap(find.byTooltip('Return to tray'));
       await tester.pump(const Duration(milliseconds: 16));

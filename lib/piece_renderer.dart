@@ -228,8 +228,9 @@ Future<List<ShapedPieceImage>> rasterizePieces({
   // knob — so only those pieces carry the grown margin: their sprite box is
   // ~2x the cell per side (~1.66x the baked pixels of a knob box), paid by
   // just the four neighbors of each figure. Everything else (including the
-  // whimsy piece itself: its figure never leaves the cell) keeps the knob
-  // bleed, so tray thumbnails stay as large as on a whimsy-free board. The
+  // whimsy piece itself: its figure tips overhang the cell less than a tab
+  // does — tested) keeps the knob bleed, so tray thumbnails stay as large
+  // as on a whimsy-free board. The
   // tray reads one shared sprite aspect off the first piece; that stays
   // valid because whimsy plans only exist on the square catalog grids,
   // where every cell-plus-bleed box is square.

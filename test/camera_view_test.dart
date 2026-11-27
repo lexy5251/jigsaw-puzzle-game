@@ -104,8 +104,10 @@ void main() {
     // The board's top-left corner on screen: horizontally centered, with
     // exactly the fit margin above it — all slack falls below the board.
     final topLeft = game.camera.localToGlobal(Vector2.zero());
-    final available = game.size.y - trayHeight - game.controlRowHeight;
-    expect(topLeft.y, closeTo(boardTopMargin(available), 1e-6));
+    final available = game.size.y - trayHeight;
+    // Loose-ish tolerance: Flame's Vector2 stores float32, so the
+    // published tray height carries ~1e-5 rounding against our doubles.
+    expect(topLeft.y, closeTo(boardTopMargin(available), 1e-3));
     // Symmetric side margins mean the board is centered.
     final zoom = game.camera.viewfinder.zoom;
     expect(

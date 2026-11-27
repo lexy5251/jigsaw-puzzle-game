@@ -276,22 +276,29 @@ class _RisoIconPainter extends CustomPainter {
     }
   }
 
+  // Longer dashes and near-solid hills: outline-and-dot glyphs carry far
+  // less ink than their filled neighbors (edge piece, broom), so at equal
+  // nominal size they read smaller in the play screen's tools pill. Both
+  // this glyph and _options are weighted up until the pill's four icons
+  // match optically. imagePreview also renders on the settings screen's
+  // preview switch card, which inherits the heavier weight — fine there,
+  // but re-check that card if these numbers move again.
   void _imagePreview(Canvas canvas, Paint stroke) {
     canvas
-      ..drawPath(_dashed(_bowedFrame(), 5.5, 5), stroke)
+      ..drawPath(_dashed(_bowedFrame(), 6.5, 4.2), stroke)
       ..drawPath(
         _hills(),
         Paint()
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 3
+          ..strokeWidth = 3.4
           ..strokeCap = StrokeCap.round
           ..strokeJoin = StrokeJoin.round
-          ..color = ink.withValues(alpha: 0.55),
+          ..color = ink.withValues(alpha: 0.8),
       );
   }
 
   void _options(Canvas canvas, Paint fill) {
-    for (final (cx, cy, r) in [(12.0, 24.4, 3.4), (24.0, 23.0, 3.6), (36.0, 24.6, 3.4)]) {
+    for (final (cx, cy, r) in [(12.0, 24.4, 4.5), (24.0, 23.0, 4.7), (36.0, 24.6, 4.5)]) {
       canvas.drawOval(
         Rect.fromCenter(center: Offset(cx, cy), width: 2 * r, height: 2 * r - 0.5),
         fill,

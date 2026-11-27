@@ -225,9 +225,9 @@ void main() {
 
       // Only the four flap neighbors need room to reach the whimsy cell's
       // center: their bleed grows from the knob's 6 to ceil(20 / 2) + 1 =
-      // 11. Everything else — the whimsy piece included, its figure never
-      // leaves the cell — keeps the knob bleed, so tray thumbnails stay as
-      // large as on a whimsy-free board.
+      // 11. Everything else — the whimsy piece included, its figure tips
+      // overhang the cell less than a tab — keeps the knob bleed, so tray
+      // thumbnails stay as large as on a whimsy-free board.
       const flapNeighbors = {7, 11, 13, 17};
       for (var index = 0; index < pieces.length; index++) {
         final flap = flapNeighbors.contains(index);
@@ -249,13 +249,13 @@ void main() {
       final whimsyAlpha = await alphaOf(12);
       expect(whimsyAlpha(6 + 10, 6 + 8), 255);
       expect(whimsyAlpha(6, 6), 0);
-      expect(whimsyAlpha(6 + 1, 6 + 1), 0);
 
       // The neighbor above (index 7) grows a flap into the whimsy cell's
-      // top triangle: opaque deep inside the triangle, above the figure and
-      // clear of the antialiased diagonal seams...
+      // top triangle. The heart's lobes eat most of it and cross the shared
+      // edge, so the surviving meat is the cleft notch between the lobes:
+      // opaque there, clear of the figure walls and the diagonal seams...
       final aboveAlpha = await alphaOf(7);
-      expect(aboveAlpha(11 + 10, 11 + 16 + 1), 255);
+      expect(aboveAlpha(11 + 10, 11 + 16), 255);
       // ...its own cell face is untouched...
       expect(aboveAlpha(11 + 10, 11 + 8), 255);
       // ...and it claims nothing outside its triangle (left seam region of

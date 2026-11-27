@@ -1,16 +1,22 @@
 // Whimsy pieces overview:
 // 1. A whimsy piece is one interior cell cut as a recognizable figure (heart,
-//    star, fish, ...) instead of a knobbed square. The figure sits centered
-//    inside its cell at [whimsyFigureFraction] of the cell's shorter side, so
-//    photo always remains around it.
-// 2. The leftover photo around the figure is split between the four
-//    orthogonal neighbors: each absorbs one triangle of the whimsy cell
-//    (cell corners to cell center), minus the figure. The four triangles
-//    tile the cell exactly, so every photo pixel belongs to exactly one
-//    piece — no gaps, no double cover.
-// 3. Figures are authored once in a unit box (0,0)..(1,1) and scaled per
-//    cell. Every figure is a single closed contour with no enclosed holes:
-//    a hole would strand photo pixels no neighbor could reach.
+//    star, fish, ...) instead of a knobbed square. The figure is centered on
+//    the cell and sized per shape ([whimsyFigureSpans]) so it reads about as
+//    big as a knobbed piece: its extreme tips cross the cell edge and bite
+//    into the orthogonal neighbors, exactly like a tab does.
+// 2. The photo around the figure is split between the four orthogonal
+//    neighbors: each absorbs one triangle of the whimsy cell (cell corners
+//    to cell center) and gives up whatever the figure covers — inside the
+//    whimsy cell and, where a tip crosses the shared edge, inside its own
+//    cell. The five pieces tile the figure's plus-shaped reach exactly, so
+//    every photo pixel belongs to exactly one piece — no gaps, no double
+//    cover. Figures never reach the diagonal neighbors — the builder clips
+//    them to the plus region (and tests pin it on square cells), so the
+//    diagonals keep their plain knobbed outlines.
+// 3. Figures are authored once in a unit box (0,0)..(1,1), normalized by
+//    their true contour bounds and scaled per cell. Every figure is a single
+//    closed contour with no enclosed holes: a hole would strand photo pixels
+//    no neighbor could reach.
 //
 // Geometry is pure and Flame-free so it can be unit-tested directly.
 
@@ -35,15 +41,90 @@ enum WhimsyShape {
   snowflake,
 }
 
-/// Figure size as a fraction of the cell's shorter side. The owner-tunable
-/// knob: smaller leaves wider photo flaps for the neighbors (safer against
-/// slivers drowning in the rim shade), larger makes the figure bolder.
-const whimsyFigureFraction = 0.75;
+/// Figure size per shape: tip-to-tip span of the figure's longer axis as a
+/// fraction of the cell's shorter side (1.0 = exactly one cell). The
+/// owner-tunable knob. Solid figures (heart, moon) carry more visual mass
+/// than lacy ones (star, snowflake) at the same span, so lacy shapes get
+/// more — the goal is every figure reading about as big as a knobbed piece.
+///
+/// Two rules bound the values (both tested per shape):
+/// - On each axis the figure must either cross the cell edge by at least
+///   [whimsyAxisCrossMin] or stay inside [whimsyAxisInsideMax]: an extreme
+///   stopping just short of the edge would pinch the neighbor's photo into
+///   a hair-thin thread along the seam.
+/// - Every protrusion must stay under the knob overhang, so whimsy sprites
+///   keep the plain knob bleed, and well clear of the cell corners, so no
+///   figure ever reaches a diagonal neighbor.
+const whimsyFigureSpans = <WhimsyShape, double>{
+  WhimsyShape.heart: 1.10,
+  WhimsyShape.star: 1.18,
+  WhimsyShape.fish: 1.06,
+  WhimsyShape.sailboat: 1.08,
+  WhimsyShape.cat: 1.06,
+  WhimsyShape.teacup: 1.06,
+  WhimsyShape.butterfly: 1.09,
+  WhimsyShape.flower: 1.12,
+  WhimsyShape.leaf: 1.12,
+  WhimsyShape.bird: 1.06,
+  WhimsyShape.moon: 1.04,
+  WhimsyShape.snowflake: 1.18,
+};
+
+/// Per-axis extent limits for [whimsyFigureSpans], as fractions of the
+/// cell's shorter side: stay at least this far inside the cell...
+const whimsyAxisInsideMax = 0.92;
+
+/// ...or cross the seam by at least this much.
+const whimsyAxisCrossMin = 1.005;
 
 /// Where a neighbor piece sits relative to the whimsy cell. Also names the
 /// triangle of the whimsy cell that neighbor absorbs (the one touching
 /// their shared edge).
 enum WhimsySide { above, below, leftOf, rightOf }
+
+/// True contour bounds of each unit figure, measured once by walking the
+/// path. Path.getBounds() includes curve control points and can over-report
+/// by a few percent, which would silently under-scale curvy figures and
+/// could park an extreme in the forbidden near-seam band (see
+/// [whimsyAxisInsideMax]) — so the real extremes are sampled and cached.
+final _tightUnitBounds = <WhimsyShape, Rect>{};
+
+Rect whimsyUnitBounds(WhimsyShape shape) =>
+    _tightUnitBounds.putIfAbsent(shape, () {
+      // computeMetrics flattens curves to a fixed absolute tolerance — far
+      // too coarse on a unit-sized path — so measure a 1000x copy.
+      const measureScale = 1000.0;
+      final measured = _unitFigure(shape).transform(
+        Float64List.fromList([
+          measureScale, 0, 0, 0, //
+          0, measureScale, 0, 0, //
+          0, 0, 1, 0, //
+          0, 0, 0, 1,
+        ]),
+      );
+      var minX = double.infinity, minY = double.infinity;
+      var maxX = double.negativeInfinity, maxY = double.negativeInfinity;
+      for (final metric in measured.computeMetrics()) {
+        // ~2-of-1000 arc-length steps: deviation between samples is far
+        // below the 0.005-of-cell tolerance anything downstream cares about.
+        final steps = max(64, (metric.length / 2).ceil());
+        for (var i = 0; i <= steps; i++) {
+          final position = metric
+              .getTangentForOffset(metric.length * i / steps)!
+              .position;
+          minX = min(minX, position.dx);
+          minY = min(minY, position.dy);
+          maxX = max(maxX, position.dx);
+          maxY = max(maxY, position.dy);
+        }
+      }
+      return Rect.fromLTRB(
+        minX / measureScale,
+        minY / measureScale,
+        maxX / measureScale,
+        maxY / measureScale,
+      );
+    });
 
 /// The figure outline for a whimsy cell, in cell-local coordinates
 /// (0,0)..(cellWidth,cellHeight), centered, scaled uniformly so a heart
@@ -53,15 +134,31 @@ Path buildWhimsyFigurePath({
   required double cellWidth,
   required double cellHeight,
 }) {
-  final side = whimsyFigureFraction * min(cellWidth, cellHeight);
-  // Column-major 4x4: scale by the figure side, then center in the cell.
+  final tight = whimsyUnitBounds(shape);
+  final scale =
+      whimsyFigureSpans[shape]! *
+      min(cellWidth, cellHeight) /
+      max(tight.width, tight.height);
+  // Column-major 4x4: scale by the span, then land the figure's true center
+  // on the cell center.
   final transform = Float64List.fromList([
-    side, 0, 0, 0, //
-    0, side, 0, 0, //
+    scale, 0, 0, 0, //
+    0, scale, 0, 0, //
     0, 0, 1, 0, //
-    (cellWidth - side) / 2, (cellHeight - side) / 2, 0, 1,
+    cellWidth / 2 - tight.center.dx * scale,
+    cellHeight / 2 - tight.center.dy * scale, 0, 1,
   ]);
-  return _unitFigure(shape).transform(transform);
+  final figure = _unitFigure(shape).transform(transform);
+  // Only the four flap neighbors subtract this path from their outlines;
+  // a diagonal neighbor's plain knobbed cut knows nothing about it, so any
+  // ink past a cell corner would double-paint over that piece. Clipping to
+  // the cell-plus-flaps region makes "never reaches a diagonal neighbor"
+  // true by construction — on square cells the leaf's diagonal tips land
+  // exactly there, truncated here by a few percent instead of overlapping.
+  final plus = Path()
+    ..addRect(Rect.fromLTRB(-cellWidth, 0, 2 * cellWidth, cellHeight))
+    ..addRect(Rect.fromLTRB(0, -cellHeight, cellWidth, 2 * cellHeight));
+  return Path.combine(PathOperation.intersect, figure, plus);
 }
 
 /// A neighbor's outline when it borders a whimsy cell: its normal outline
@@ -285,9 +382,8 @@ Path _bird() => Path()
 
 Path _moon() {
   // Fat waxing crescent: a circle with a circular bite taken from its right.
-  // Built with path ops instead of arcToPoint because wide arcs report
-  // control-point bounds far outside the real curve, which would break the
-  // stay-inside-the-cell guarantee the renderer relies on.
+  // Built with path ops instead of arcToPoint — the simplest route to a
+  // single closed crescent contour.
   final disc = Path()
     ..addOval(Rect.fromCircle(center: const Offset(0.63, 0.5), radius: 0.45));
   final bite = Path()

@@ -41,6 +41,13 @@ bool isEdgePiece(int index, int columns, int rows) {
   return row == 0 || row == rows - 1 || column == 0 || column == columns - 1;
 }
 
+/// How many pieces of a [columns] x [rows] grid lie on that outermost ring.
+int edgePieceCount(int columns, int rows) {
+  final interiorColumns = max(0, columns - 2);
+  final interiorRows = max(0, rows - 2);
+  return columns * rows - interiorColumns * interiorRows;
+}
+
 /// Clamps a tray scroll offset so the piece strip never scrolls past its ends.
 double clampTrayScroll(double offset, double stripWidth, double trayWidth) {
   final maxOffset = max(0.0, stripWidth - trayWidth);
@@ -145,24 +152,6 @@ double trayHeightCap({
       boardFitHeightFraction;
   final slack = screenHeight - boardNeeds;
   return max(legacyCap, min(slack, screenHeight * 0.45));
-}
-
-/// Height of the control row (tray filters + "Return to tray") that floats
-/// in Flutter just above the tray. The camera fit and the tray-clearance
-/// nudge both reserve this band so pieces never hide under the buttons.
-const trayControlRowHeight = 48.0;
-
-/// How far the control row honors enlarged text before clamping. The band
-/// height and the row's own text clamp share this cap, so the buttons are
-/// never shrunk to fit a band that stopped growing with them.
-const trayControlRowMaxTextScale = 1.3;
-
-/// Control-row band height for the player's text scale: the band grows
-/// with large text (up to the shared cap) so the buttons keep full-size
-/// tap targets instead of being scaled down into a fixed 48px strip.
-double scaledControlRowHeight(double textScaleFactor) {
-  return trayControlRowHeight *
-      textScaleFactor.clamp(1.0, trayControlRowMaxTextScale);
 }
 
 /// Top breathing room of the fitted board: the share of the available height

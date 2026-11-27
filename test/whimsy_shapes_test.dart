@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -33,26 +34,61 @@ void main() {
     cellHeight: cellHeight,
   );
 
-  /// Maps a unit-box point into the figure's cell coordinates.
-  Offset inCell(Offset unit) {
-    final side = whimsyFigureFraction * cellHeight; // shorter side is height
+  /// Maps a unit-box point into [shape]'s cell coordinates — the same
+  /// normalize-and-center transform buildWhimsyFigurePath applies.
+  Offset inCell(WhimsyShape shape, Offset unit) {
+    final tight = whimsyUnitBounds(shape);
+    // Shorter side is the height.
+    final scale =
+        whimsyFigureSpans[shape]! * cellHeight / max(tight.width, tight.height);
     return Offset(
-      (cellWidth - side) / 2 + unit.dx * side,
-      (cellHeight - side) / 2 + unit.dy * side,
+      cellWidth / 2 + (unit.dx - tight.center.dx) * scale,
+      cellHeight / 2 + (unit.dy - tight.center.dy) * scale,
     );
   }
 
   group('buildWhimsyFigurePath', () {
-    test('every figure stays inside its cell with a photo band around', () {
-      // getBounds over-reports around curves (control-point bounds), so the
-      // asserted band is looser than the geometric (1 - fraction) / 2.
-      final band = 0.06 * cellHeight;
+    test('every figure stays inside the cell plus its flap neighbors', () {
+      // The figure may bite into the four orthogonal neighbors — never into
+      // a diagonal one, whose plain knobbed outline knows nothing about it.
+      // The plus region is two overlapping slabs; the pad absorbs path-op
+      // float noise along shared boundaries.
+      const pad = 0.01;
+      final plus = Path()
+        ..addRect(
+          const Rect.fromLTRB(
+            -cellWidth,
+            -pad,
+            2 * cellWidth,
+            cellHeight + pad,
+          ),
+        )
+        ..addRect(
+          const Rect.fromLTRB(-pad, -cellHeight, cellWidth + pad, 2 * cellHeight),
+        );
+      for (final shape in WhimsyShape.values) {
+        final outside = Path.combine(
+          PathOperation.difference,
+          figureFor(shape),
+          plus,
+        );
+        expect(
+          outside.computeMetrics().isEmpty,
+          isTrue,
+          reason: '$shape escapes the cell-plus-flap-neighbors region',
+        );
+      }
+    });
+
+    test('figure tips overhang the cell less than a knob tab', () {
+      // The renderer gives a whimsy piece the plain knob bleed; a tip
+      // protruding past the knob overhang would be clipped off its sprite.
       final allowed = const Rect.fromLTWH(
         0,
         0,
         cellWidth,
         cellHeight,
-      ).deflate(band);
+      ).inflate(knobOverhangFraction * cellHeight);
       for (final shape in WhimsyShape.values) {
         final bounds = figureFor(shape).getBounds();
         expect(
@@ -64,11 +100,86 @@ void main() {
       }
     });
 
+    test('every figure stays inside the plus region on SQUARE cells too', () {
+      // The rectangular suite above scales figures by the shorter side, so
+      // square cells — the real catalog shape — are the harder corner
+      // case, and the one that caught the leaf's diagonal tips reaching
+      // the corner squares (owner's find, 2026-11). The builder clips to
+      // the plus region; this pins that the clip holds and that no figure
+      // is clipped into nothing.
+      const square = 100.0;
+      const pad = 0.01;
+      final plus = Path()
+        ..addRect(const Rect.fromLTRB(-square, -pad, 2 * square, square + pad))
+        ..addRect(const Rect.fromLTRB(-pad, -square, square + pad, 2 * square))
+        ..fillType = PathFillType.nonZero;
+      for (final shape in WhimsyShape.values) {
+        final figure = buildWhimsyFigurePath(
+          shape: shape,
+          cellWidth: square,
+          cellHeight: square,
+        );
+        final outside = Path.combine(
+          PathOperation.difference,
+          figure,
+          plus,
+        );
+        expect(
+          outside.computeMetrics().isEmpty,
+          isTrue,
+          reason: '$shape escapes the plus region on a square cell',
+        );
+        // The clip must trim tips, not erase figures: the shape's meaty
+        // probe point survives, and the figure still spans most of the cell.
+        final unitProbe = probes[shape]!;
+        final tight = whimsyUnitBounds(shape);
+        final scale = whimsyFigureSpans[shape]! /
+            max(tight.width, tight.height) *
+            square;
+        final probe = Offset(
+          square / 2 + (unitProbe.dx - tight.center.dx) * scale,
+          square / 2 + (unitProbe.dy - tight.center.dy) * scale,
+        );
+        expect(
+          figure.contains(probe),
+          isTrue,
+          reason: '$shape lost its interior to the clip',
+        );
+        expect(
+          figure.getBounds().longestSide,
+          greaterThan(square * 0.8),
+          reason: '$shape shrank unexpectedly after the clip',
+        );
+      }
+    });
+
+    test('each axis crosses the seam cleanly or stays clear of it', () {
+      // Catalog cells are square — check the sizing rule where it applies.
+      // An extreme parked in the dead band just inside the edge would pinch
+      // the neighbor's photo into a thread between figure and seam.
+      for (final shape in WhimsyShape.values) {
+        final tight = whimsyUnitBounds(shape);
+        final longest = max(tight.width, tight.height);
+        for (final extent in [
+          whimsyFigureSpans[shape]! * tight.width / longest,
+          whimsyFigureSpans[shape]! * tight.height / longest,
+        ]) {
+          expect(
+            extent <= whimsyAxisInsideMax || extent >= whimsyAxisCrossMin,
+            isTrue,
+            reason:
+                '$shape axis extent $extent sits in the dead band '
+                '($whimsyAxisInsideMax, $whimsyAxisCrossMin)',
+          );
+        }
+      }
+    });
+
     test('every figure contains its probe point and has real area', () {
       for (final shape in WhimsyShape.values) {
         final figure = figureFor(shape);
         expect(
-          figure.contains(inCell(probes[shape]!)),
+          figure.contains(inCell(shape, probes[shape]!)),
           isTrue,
           reason: '$shape should contain its probe',
         );
@@ -124,14 +235,17 @@ void main() {
         ),
     };
 
-    test('figure and the four flaps cover the whimsy cell exactly once', () {
-      // The star is the hardest case: deep concave notches near the center
-      // where all four flap triangles meet.
-      for (final shape in [WhimsyShape.star, WhimsyShape.heart]) {
+    test('figure and the four flaps cover the plus region exactly once', () {
+      // Sampled over the whimsy cell AND the strips the figure can bite out
+      // of the flap neighbors, for every shape: tips crossing the seam move
+      // photo between pieces, and any slip would show as a hole or a doubly
+      // drawn sliver right on a seam.
+      for (final shape in WhimsyShape.values) {
         final figure = figureFor(shape);
         final neighbors = neighborsAround(figure);
 
-        /// How many of the five pieces claim the whimsy-cell point [p].
+        /// How many of the five pieces claim the point [p] (whimsy-cell
+        /// coordinates).
         int coverage(Offset p) {
           var count = figure.contains(p) ? 1 : 0;
           for (final entry in neighbors.entries) {
@@ -142,16 +256,31 @@ void main() {
 
         var checked = 0;
         const eps = 1.5;
-        for (var i = 1; i < 25; i++) {
-          for (var j = 1; j < 25; j++) {
+        for (var i = -5; i <= 30; i++) {
+          for (var j = -5; j <= 30; j++) {
             final p = Offset(cellWidth * i / 25, cellHeight * j / 25);
-            // Skip points near the diagonal seams between flaps.
-            final d1 = (p.dy * cellWidth - p.dx * cellHeight).abs();
-            final d2 = (p.dy * cellWidth + p.dx * cellHeight -
-                    cellWidth * cellHeight)
-                .abs();
-            final diagonalScale = Offset(cellWidth, cellHeight).distance;
-            if (d1 / diagonalScale < eps || d2 / diagonalScale < eps) continue;
+            final inX = p.dx >= 0 && p.dx <= cellWidth;
+            final inY = p.dy >= 0 && p.dy <= cellHeight;
+            // Only the plus region is tiled by these five pieces; diagonal
+            // cells belong to pieces this test doesn't build.
+            if (!inX && !inY) continue;
+            // Skip points near the cell seams, where ownership flips.
+            if ((p.dx.abs() < eps || (p.dx - cellWidth).abs() < eps) ||
+                (p.dy.abs() < eps || (p.dy - cellHeight).abs() < eps)) {
+              continue;
+            }
+            if (inX && inY) {
+              // Skip points near the diagonal seams between flaps.
+              final d1 = (p.dy * cellWidth - p.dx * cellHeight).abs();
+              final d2 = (p.dy * cellWidth +
+                      p.dx * cellHeight -
+                      cellWidth * cellHeight)
+                  .abs();
+              final diagonalScale = Offset(cellWidth, cellHeight).distance;
+              if (d1 / diagonalScale < eps || d2 / diagonalScale < eps) {
+                continue;
+              }
+            }
             // Skip points hugging the figure boundary: antialias-width zones
             // where contains() legitimately wobbles between the two owners.
             final jitter = [
@@ -191,7 +320,7 @@ void main() {
       }
     });
 
-    test('the flap never disturbs the neighbor away from the shared edge', () {
+    test('the figure bite is the only disturbance to the neighbor', () {
       final figure = figureFor(WhimsyShape.star);
       final outline = buildWhimsyNeighborOutline(
         basePath: flatBase,
@@ -200,8 +329,15 @@ void main() {
         cellWidth: cellWidth,
         cellHeight: cellHeight,
       );
-      // The neighbor's own cell is untouched: its far corners and center
-      // stay inside, and nothing extends past its left/right/top edges.
+      // The star's top tip crosses the shared edge into this neighbor: just
+      // above the seam, on the tip's axis, the outline is bitten away.
+      expect(
+        outline.contains(const Offset(cellWidth / 2, cellHeight - 2)),
+        isFalse,
+      );
+      // Away from the shared edge the neighbor's cell is untouched: its far
+      // corners and center stay inside, and nothing extends past its
+      // left/right/top edges.
       expect(outline.contains(const Offset(1, 1)), isTrue);
       expect(outline.contains(const Offset(cellWidth - 1, 1)), isTrue);
       expect(

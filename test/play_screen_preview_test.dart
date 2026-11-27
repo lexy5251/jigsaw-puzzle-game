@@ -49,6 +49,16 @@ PuzzleSaveState _midGameSave(int photoSide, {required bool roomBelow}) {
   );
 }
 
+/// Flips the Edges only filter on and lets the tray re-filter settle, so
+/// the panel shows the toggle's active (tomato circle) state over the
+/// edge-only tray.
+Future<void> _turnOnEdgesOnly(WidgetTester tester) async {
+  await tester.tap(find.byTooltip('Edges only'));
+  for (var i = 0; i < 3; i++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+}
+
 void main() {
   final enabled = previewEnabled('PLAY_SCREEN_PREVIEW');
 
@@ -62,7 +72,7 @@ void main() {
       // mid-game save for exactly its screen size.
       SharedPreferences.setMockInitialValues({
         for (final (width, _, name) in previewPhoneSizes)
-          for (final variant in const ['resting', 'menu'])
+          for (final variant in const ['resting', 'edges', 'menu'])
             puzzleSaveKey(
               imageId: 'play-$name-$variant',
               columns: _grid.columns,
@@ -78,6 +88,7 @@ void main() {
         for (final (width, height, name) in previewPhoneSizes) {
           for (final (variant, label) in const [
             ('resting', ''),
+            ('edges', ' - edges only on'),
             ('menu', ' - menu open'),
           ]) {
             panels.add((
@@ -87,7 +98,11 @@ void main() {
                 panelId: 'play-$name-$variant',
                 screenSize: Size(width, height),
                 grid: _grid,
-                beforeCapture: variant == 'menu' ? openOptionsMenu : null,
+                beforeCapture: switch (variant) {
+                  'menu' => openOptionsMenu,
+                  'edges' => _turnOnEdgesOnly,
+                  _ => null,
+                },
               ),
               '$name$label',
             ));
