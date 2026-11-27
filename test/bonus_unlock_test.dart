@@ -1,7 +1,9 @@
-// The "Bonus puzzle unlocked" moment on the completion card: it appears
-// exactly when a completion's writes cross a 25-piece boundary, "Play now"
-// rides the next-puzzle chain, "Save for later" tucks the section away, and
-// replays, gift finishes, or failed writes never unlock anything.
+// The completion card's Collection notes (hand-placement era, owner ruling
+// 2026-11-26): a first finish shows one quiet "piece waiting" line — the
+// placing itself happens on the Collection board — while replays, gift
+// finishes, failed writes, and a full track say nothing. The journey's
+// unlock section still fires exactly on the 5th first finish and outranks
+// the line.
 
 import 'dart:convert';
 
@@ -34,11 +36,33 @@ void main() {
     }
   }
 
-  Finder bonusSection() => find.text('BONUS PUZZLE UNLOCKED');
+  Finder pieceLine() => find.text('A new piece is waiting in your Collection.');
 
-  testWidgets('the finish that completes a board unlocks its gift', (
+  testWidgets('a first finish notes the piece waiting in Collection', (
     tester,
   ) async {
+    seedDistinctCompletions(10);
+    final game = await bootGameScreen(
+      tester,
+      image: singlePieceImage,
+      size: singlePieceSize,
+      catalogs: const PuzzleCatalogs(gifts: giftFixtures),
+    );
+    await completePuzzle(tester, game);
+
+    expect(pieceLine(), findsOneWidget);
+    // The old gift section is gone for good: no board completes here —
+    // the player places the pieces by hand in Collection.
+    expect(find.text('BONUS PUZZLE UNLOCKED'), findsNothing);
+    expect(find.text('Play now'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('filling the board by earning alone still only notes a piece', (
+    tester,
+  ) async {
+    // 24 on record + this finish = 25 earned. Earning never unlocks the
+    // gift anymore — its board completes in Collection, by hand.
     seedDistinctCompletions(bonusBoardPieces - 1);
     final game = await bootGameScreen(
       tester,
@@ -48,55 +72,8 @@ void main() {
     );
     await completePuzzle(tester, game);
 
-    expect(bonusSection(), findsOneWidget);
-    expect(find.text('Gift One'), findsOneWidget);
-    expect(find.text('Saved to your Collection.'), findsOneWidget);
-    expect(find.widgetWithText(FilledButton, 'Play now'), findsOneWidget);
-    expect(find.widgetWithText(TextButton, 'Save for later'), findsOneWidget);
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
-
-  testWidgets('Save for later tucks the section away, the card stays', (
-    tester,
-  ) async {
-    seedDistinctCompletions(bonusBoardPieces - 1);
-    final game = await bootGameScreen(
-      tester,
-      image: singlePieceImage,
-      size: singlePieceSize,
-      catalogs: const PuzzleCatalogs(gifts: giftFixtures),
-    );
-    await completePuzzle(tester, game);
-
-    // The gift section can sit below the fold of the card's scroll view.
-    await tester.ensureVisible(find.text('Save for later'));
-    await tester.tap(find.text('Save for later'));
-    await tester.pump();
-
-    expect(bonusSection(), findsNothing);
-    // The completion card itself is untouched — only the gift section goes.
-    expect(find.textContaining('no timer, no score'), findsOneWidget);
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
-
-  testWidgets('Play now pops with the gift painting (the chain input)', (
-    tester,
-  ) async {
-    seedDistinctCompletions(bonusBoardPieces - 1);
-    final route = await pushGameScreen(
-      tester,
-      image: singlePieceImage,
-      size: singlePieceSize,
-      catalogs: const PuzzleCatalogs(gifts: giftFixtures),
-    );
-    await completePuzzle(tester, currentGame(tester));
-
-    // The gift section can sit below the fold of the card's scroll view.
-    await tester.ensureVisible(find.text('Play now'));
-    await tester.tap(find.text('Play now'));
-    await tester.pumpAndSettle();
-
-    expect(route.popResult?.id, giftImageOne.id);
+    expect(pieceLine(), findsOneWidget);
+    expect(find.text('Gift One'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -104,10 +81,10 @@ void main() {
     tester,
   ) async {
     // Wedged storage: the card reveals first, the completion write lands
-    // seconds later. The gift section must NOT pop into the interactive
-    // card (it would shove the buttons mid-tap) — the gift waits silently
-    // in Collection instead.
-    seedDistinctCompletions(bonusBoardPieces - 1);
+    // seconds later. The line must NOT pop into the interactive card (it
+    // would shove the buttons mid-tap) — the piece waits silently in
+    // Collection instead.
+    seedDistinctCompletions(10);
     prefs.onWrite = (key) async {
       if (key == singlePieceCompletionKey) {
         await Future<void>.delayed(const Duration(seconds: 5));
@@ -122,21 +99,19 @@ void main() {
     );
     await completePuzzle(tester, game);
 
-    expect(find.textContaining('no timer, no score'), findsOneWidget);
-    expect(bonusSection(), findsNothing);
+    expect(find.text('FINISHED'), findsOneWidget);
+    expect(pieceLine(), findsNothing);
 
     // The delayed write resolves; the revealed card must not reflow.
     await tester.pump(const Duration(seconds: 6));
-    expect(bonusSection(), findsNothing);
+    expect(pieceLine(), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('a replay crosses no boundary and unlocks nothing', (
-    tester,
-  ) async {
+  testWidgets('a replay earns nothing and says nothing', (tester) async {
     // The photo under test is already on record: this run is a replay, so
-    // the distinct-id count cannot move even though the board sits full.
-    seedDistinctCompletions(bonusBoardPieces - 1);
+    // the distinct-id count cannot move.
+    seedDistinctCompletions(10);
     prefs.storage[singlePieceCompletionKey] = completionJson(
       DateTime(2026, 11, 1),
     );
@@ -148,16 +123,16 @@ void main() {
     );
     await completePuzzle(tester, game);
 
-    expect(bonusSection(), findsNothing);
+    expect(find.text('FINISHED'), findsOneWidget);
+    expect(pieceLine(), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
   testWidgets('finishing a gift itself earns nothing (owner ruling)', (
     tester,
   ) async {
-    // One piece short, and the finished painting IS a gift: the filter
-    // must keep the board at 24 — gifts are rewards, not currency.
-    seedDistinctCompletions(bonusBoardPieces - 1);
+    // The finished painting IS a gift: gifts are rewards, not currency.
+    seedDistinctCompletions(10);
     prefs.storage[saveKeyFor(giftImageOne)] = singleLoosePieceSave()
         .toJsonString();
     final game = await bootGameScreen(
@@ -168,8 +143,8 @@ void main() {
     );
     await completePuzzle(tester, game);
 
-    expect(find.textContaining('no timer, no score'), findsOneWidget);
-    expect(bonusSection(), findsNothing);
+    expect(find.text('FINISHED'), findsOneWidget);
+    expect(pieceLine(), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -177,10 +152,9 @@ void main() {
     tester,
   ) async {
     // Scenes are NOT gifts: their first finish is currency (owner ruling,
-    // 2026-11-14), so the 25th piece landing from a scene unlocks the gift.
-    // (A scene REPLAY adds no distinct id — the replay test above covers
-    // that path for every image kind.)
-    seedDistinctCompletions(bonusBoardPieces - 1);
+    // 2026-11-14). (A scene REPLAY adds no distinct id — the replay test
+    // above covers that path for every image kind.)
+    seedDistinctCompletions(10);
     prefs.storage[saveKeyFor(sceneImageOne)] = singleLoosePieceSave()
         .toJsonString();
     final game = await bootGameScreen(
@@ -191,13 +165,17 @@ void main() {
     );
     await completePuzzle(tester, game);
 
-    expect(bonusSection(), findsOneWidget);
-    expect(find.text('Gift One'), findsOneWidget);
+    expect(pieceLine(), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('mid-board finishes celebrate the puzzle only', (tester) async {
-    seedDistinctCompletions(10);
+  testWidgets('pieces past the last board fund nothing and say nothing', (
+    tester,
+  ) async {
+    // Both fixture boards' worth of pieces already earned: the track is
+    // full, so a further first finish must not promise a piece that no
+    // board will ever offer.
+    seedDistinctCompletions(giftFixtures.length * bonusBoardPieces);
     final game = await bootGameScreen(
       tester,
       image: singlePieceImage,
@@ -206,15 +184,15 @@ void main() {
     );
     await completePuzzle(tester, game);
 
-    expect(find.textContaining('no timer, no score'), findsOneWidget);
-    expect(bonusSection(), findsNothing);
+    expect(find.text('FINISHED'), findsOneWidget);
+    expect(pieceLine(), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('a failed completion write never unlocks', (tester) async {
-    // The unlock must mirror what storage holds: the retained save retries
-    // the write later, and the gift fires on the retry that lands instead.
-    seedDistinctCompletions(bonusBoardPieces - 1);
+  testWidgets('a failed completion write notes nothing', (tester) async {
+    // The note must mirror what storage holds: the retained save retries
+    // the write later, and the piece is noted on the retry that lands.
+    seedDistinctCompletions(10);
     prefs.onWrite = (key) => key != singlePieceCompletionKey;
     final game = await bootGameScreen(
       tester,
@@ -224,8 +202,8 @@ void main() {
     );
     await completePuzzle(tester, game);
 
-    expect(find.textContaining('no timer, no score'), findsOneWidget);
-    expect(bonusSection(), findsNothing);
+    expect(find.text('FINISHED'), findsOneWidget);
+    expect(pieceLine(), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -255,6 +233,9 @@ void main() {
         find.widgetWithText(FilledButton, 'See the collection'),
         findsOneWidget,
       );
+      // One moment, not two: the journey section already sends the player
+      // to Collection, pieces and all.
+      expect(pieceLine(), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
     });
 
@@ -274,14 +255,12 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     });
 
-    testWidgets('the journey moment outranks a simultaneous gift unlock', (
+    testWidgets('banked streak pieces ride into the journey head start', (
       tester,
     ) async {
-      // 4 finishes + 20 banked streak pieces (60 consecutive days) = 24;
-      // the 5th finish makes 25, so the first gift board completes on the
-      // same write that opens the journey. One moment, not two stacked
-      // sections: the card sends the player to Collection, where that
-      // gift already hangs.
+      // 4 finishes + 20 banked streak pieces (60 consecutive days); the
+      // 5th finish opens the journey with all 25 waiting to be placed —
+      // nothing rolls over by itself anymore.
       seedDistinctCompletions(journeyUnlockFinishes - 1);
       prefs.storage['flutter.daily.days'] = jsonEncode([
         for (var i = 0; i < 60; i++)
@@ -296,10 +275,8 @@ void main() {
       await completePuzzle(tester, game);
 
       expect(journeySection(), findsOneWidget);
-      expect(find.text('BONUS PUZZLE UNLOCKED'), findsNothing);
-      // The 25th piece rolled the board over: the gift is done and the
-      // next board starts empty.
-      expect(find.text('You start with 0 pieces.'), findsOneWidget);
+      expect(pieceLine(), findsNothing);
+      expect(find.text('You start with 25 pieces.'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
     });
 

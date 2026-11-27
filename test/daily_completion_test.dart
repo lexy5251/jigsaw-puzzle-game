@@ -64,7 +64,7 @@ void main() {
     // The card stays celebration-free (UI-4): the bloom only shows on the
     // home windowsill.
     expect(find.textContaining('pot bloomed'), findsNothing);
-    expect(find.textContaining('no timer, no score'), findsOneWidget);
+    expect(find.text('FINISHED'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -74,7 +74,7 @@ void main() {
     await completePuzzle(tester, game);
 
     expect(prefs.storage[dailyDaysKey], contains('2026-11-06'));
-    expect(find.textContaining('no timer, no score'), findsOneWidget);
+    expect(find.text('FINISHED'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 

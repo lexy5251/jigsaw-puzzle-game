@@ -124,9 +124,11 @@ class _GameScreenState extends State<GameScreen> {
   /// null when the rest of the category is already done at this size).
   PuzzleImage? _nextImage;
 
-  /// The gift painting this completion just unlocked; null when no bonus
-  /// board finished (or the player pressed "Save for later").
-  PuzzleImage? _bonusUnlock;
+  /// Bonus pieces THIS finish earned toward the Collection board; zero for
+  /// replays and gift finishes. Shown as one quiet line on the completion
+  /// card — placing the pieces happens in Collection (owner ruling,
+  /// 2026-11-26).
+  int _piecesEarned = 0;
 
   /// Pieces already on the bonus board when THIS finish opened the journey
   /// (the 5th first finish); null hides the journey section — the usual
@@ -361,7 +363,7 @@ class _GameScreenState extends State<GameScreen> {
       _restarting = true;
       _showCompletionCard = false;
       _nextImage = null;
-      _bonusUnlock = null;
+      _piecesEarned = 0;
       _journeyPieces = null;
     });
     // Stop new writes before awaiting any old ones. An already-held finger
@@ -481,21 +483,22 @@ class _GameScreenState extends State<GameScreen> {
       ),
     );
     if (completionRecorded) {
-      await _offerBonusUnlock(game, idsBefore: idsBefore, daysBefore: daysBefore);
+      await _noteEarnedPieces(game, idsBefore: idsBefore, daysBefore: daysBefore);
     }
     return dailyRecorded && completionRecorded;
   }
 
-  /// Shows the "Bonus puzzle unlocked" section on the completion card when
-  /// the writes that just landed crossed a 25-piece boundary. Pieces come
-  /// from first finishes (gift paintings filtered out — owner ruling) plus
-  /// streak pieces, so a replay's set union is a no-op and nothing unlocks.
-  /// If the completion write failed, the caller skips this entirely: the
-  /// retained save retries the write (and this offer) on resume. A write
-  /// that LANDS but whose card is never seen (exit before the reveal, or
-  /// the late-write guard below) unlocks silently in Collection instead,
-  /// like historic progress — the gift itself is never lost.
-  Future<void> _offerBonusUnlock(
+  /// Notes what the writes that just landed earned toward the Collection
+  /// board: the quiet "piece waiting" line, or the journey section when
+  /// THIS finish crossed the 5-finish line. Pieces come from first finishes
+  /// (gift paintings filtered out — owner ruling) plus streak pieces, so a
+  /// replay's set union is a no-op and nothing is announced. If the
+  /// completion write failed, the caller skips this entirely: the retained
+  /// save retries the write (and this note) on resume. A write that LANDS
+  /// but whose card is never seen (exit before the reveal, or the
+  /// late-write guard below) says nothing — the pieces wait loose in
+  /// Collection either way, so nothing is lost.
+  Future<void> _noteEarnedPieces(
     JigsawGame game, {
     required Set<String> idsBefore,
     required Set<String> daysBefore,
@@ -515,30 +518,29 @@ class _GameScreenState extends State<GameScreen> {
     final piecesBefore = firstFinishesBefore + streakPieces(daysBefore);
     final piecesAfter = firstFinishesAfter + streakPieces(daysAfter);
     // THIS finish crossing the 5-finish line is the journey's one unlock
-    // moment. It outranks a (rare) simultaneous gift unlock: the card
-    // sends the player to Collection, where that gift already hangs.
+    // moment; it outranks the quiet line (the section already sends the
+    // player to Collection, pieces and all). Pieces earned past the last
+    // board fund nothing, so they get no line either.
     final journeyOpened =
         firstFinishesBefore < journeyUnlockFinishes &&
         firstFinishesAfter >= journeyUnlockFinishes;
-    final unlocked = journeyOpened
-        ? null
-        : newlyUnlockedBonus(
-            piecesBefore: piecesBefore,
-            piecesAfter: piecesAfter,
-            bonusCatalog: widget.catalogs.gifts,
-          );
+    final trackFull =
+        piecesBefore >= widget.catalogs.gifts.length * bonusBoardPieces;
+    final earned = journeyOpened || trackFull
+        ? 0
+        : piecesAfter - piecesBefore;
     // The !_showCompletionCard guard: on wedged storage the card can reveal
-    // (via its fallback timer) before the writes land — inserting the gift
-    // section into an already-interactive card would shove the action
-    // buttons mid-tap. The late gift stays silent here and waits in
+    // (via its fallback timer) before the writes land — inserting new
+    // content into an already-interactive card would shove the action
+    // buttons mid-tap. The late note stays silent; the pieces wait in
     // Collection; the reveal itself must never wait on writes (UI-4 rule).
-    if ((unlocked != null || journeyOpened) &&
+    if ((earned > 0 || journeyOpened) &&
         mounted &&
         !_restarting &&
         !_showCompletionCard &&
         identical(_game, game)) {
       setState(() {
-        _bonusUnlock = unlocked;
+        _piecesEarned = earned;
         if (journeyOpened) {
           // The count the Collection board will actually show — banked
           // streak pieces surface here as a head start.
@@ -746,15 +748,7 @@ class _GameScreenState extends State<GameScreen> {
               null => null,
               final next => () => Navigator.pop(context, next),
             },
-            // "Play now" rides the same chain; the gift is already earned,
-            // so "Save for later" just tucks the section away — the painting
-            // waits in My Puzzles → Collection either way.
-            bonusUnlock: _bonusUnlock,
-            onPlayBonus: switch (_bonusUnlock) {
-              null => null,
-              final bonus => () => Navigator.pop(context, bonus),
-            },
-            onSaveBonusForLater: () => setState(() => _bonusUnlock = null),
+            piecesEarned: _piecesEarned,
             // The journey's one unlock moment: popping with the request
             // ends the launcher's chain, and the host screen asks the
             // shell for My Puzzles → Collection.

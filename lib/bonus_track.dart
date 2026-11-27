@@ -1,18 +1,22 @@
-// Bonus track overview (owner's design, 2026-11-13):
+// Bonus track overview (owner's design, 2026-11-13; hand-placement
+// 2026-11-26):
 // 1. The journey OPENS after the player finishes their first 5 paintings;
 //    before that, the Collection tab shows a teaser.
 // 2. Every gift board is a 25-piece puzzle (one size, always). One piece is
 //    earned per FIRST finish of each gallery painting (replays and the gift
 //    puzzles themselves earn nothing — owner rulings), plus one piece for
 //    every 3 consecutive days of the daily streak.
-// 3. Progress is DERIVED from the permanent completion records and the
-//    streak day set — there is no second counter to keep consistent: a
-//    failed completion write simply earns its piece when the retry lands.
-// 4. The unlock moment compares the derived piece total before and after
-//    one completion's writes; crossing a 25-piece boundary triggers the
-//    "Bonus puzzle unlocked" card. Historic progress (records that existed
-//    before this feature) unlocks silently in Collection instead.
+// 3. EARNING is DERIVED from the permanent completion records and the
+//    streak day set — no counter to keep consistent: a failed completion
+//    write simply earns its piece when the retry lands.
+// 4. PLACING is the player's job (owner ruling, 2026-11-26): earned pieces
+//    wait loose on the Collection board until dragged into place, and a
+//    board — and its gift — completes only when its last piece is placed
+//    there. What has been placed lives in bonus_placement.dart.
 
+import 'dart:math' as math;
+
+import 'bonus_placement.dart';
 import 'puzzle_catalog.dart';
 import 'puzzle_completion.dart';
 
@@ -33,24 +37,39 @@ class BonusTrackState {
     required this.totalPieces,
     required this.unlocked,
     required this.currentBoard,
-    required this.piecesOnCurrentBoard,
+    required this.placedCells,
+    required this.loosePieces,
+    required this.earningComplete,
   });
 
   /// Distinct gallery paintings finished at least once.
   final int firstFinishes;
 
-  /// [firstFinishes] plus the streak pieces.
+  /// Earned pieces ever: [firstFinishes] plus the streak pieces.
   final int totalPieces;
 
-  /// Fully earned gift paintings, in unlock order.
+  /// Gift paintings whose boards were fully placed, in unlock order.
   final List<PuzzleImage> unlocked;
 
-  /// The board assembling now; null once every gift is earned.
+  /// The board assembling now; null once every gift is placed.
   final PuzzleImage? currentBoard;
 
-  /// Always below [bonusBoardPieces]: a full board rolls into [unlocked]
-  /// and the next one starts. Zero when the track is complete.
-  final int piecesOnCurrentBoard;
+  /// Cells of [currentBoard] the player has snapped in (row-major 0..24).
+  final Set<int> placedCells;
+
+  /// Earned pieces waiting loose on [currentBoard], capped at its open
+  /// slots — pieces earned beyond that wait silently for the next board.
+  final int loosePieces;
+
+  /// What the current board holds, placed and waiting alike — the count a
+  /// just-opened journey promises as the head start.
+  int get piecesOnCurrentBoard => placedCells.length + loosePieces;
+
+  /// Whether every board's worth of pieces has been EARNED — nothing more
+  /// can ever be banked, however much of it still waits to be placed. The
+  /// daily card's "to a bonus piece" hook retires on this, not on
+  /// [trackComplete]: earning capacity is what the hook promises.
+  final bool earningComplete;
 
   /// The Collection tab shows a teaser until this flips.
   bool get journeyUnlocked => firstFinishes >= journeyUnlockFinishes;
@@ -62,44 +81,41 @@ class BonusTrackState {
   bool get trackComplete => currentBoard == null;
 }
 
-/// How many boards a piece total has filled, capped at the catalog.
-int _boardsCompleted(int totalPieces, int boardCount) {
-  final boards = totalPieces ~/ bonusBoardPieces;
-  return boards > boardCount ? boardCount : boards;
-}
-
-/// Folds the two earning sources into board progress. Pieces beyond the
-/// last board are ignored — finishing more paintings after the track is
-/// done stays a plain pleasure, not an overflow.
+/// Folds the two earning sources and the player's hand-placed progress
+/// into one board state. Boards advance only by PLACEMENT; pieces earned
+/// beyond the last board are ignored — finishing more paintings after the
+/// track is done stays a plain pleasure, not an overflow.
 BonusTrackState bonusTrackStateFor({
   required int firstFinishes,
   required int streakPieces,
+  BonusPlacement placement = BonusPlacement.none,
   List<PuzzleImage> bonusCatalog = bonusPuzzleCatalog,
 }) {
   final totalPieces = firstFinishes + streakPieces;
-  final boards = _boardsCompleted(totalPieces, bonusCatalog.length);
+  final boards = math.min(placement.completedBoards, bonusCatalog.length);
   final complete = boards == bonusCatalog.length;
+  final placedCells = complete ? const <int>{} : placement.placedCells;
+  // Loose pieces are earned-but-unplaced, floored at zero so a debug wipe
+  // of the completion records can never show negative pieces.
+  final loose = complete
+      ? 0
+      : math.max(
+          0,
+          math.min(
+            totalPieces - (boards * bonusBoardPieces + placedCells.length),
+            bonusBoardPieces - placedCells.length,
+          ),
+        );
   return BonusTrackState(
     firstFinishes: firstFinishes,
     totalPieces: totalPieces,
     unlocked: bonusCatalog.sublist(0, boards),
     currentBoard: complete ? null : bonusCatalog[boards],
-    piecesOnCurrentBoard: complete ? 0 : totalPieces - boards * bonusBoardPieces,
+    placedCells: placedCells,
+    loosePieces: loose,
+    earningComplete:
+        totalPieces >= bonusCatalog.length * bonusBoardPieces,
   );
-}
-
-/// The gift painting a completion just finished the board for, or null when
-/// no 25-piece boundary was crossed (replays, mid-board pieces, exhausted
-/// track). Callers pass the derived piece totals before and after the
-/// writes they are reporting on.
-PuzzleImage? newlyUnlockedBonus({
-  required int piecesBefore,
-  required int piecesAfter,
-  List<PuzzleImage> bonusCatalog = bonusPuzzleCatalog,
-}) {
-  final before = _boardsCompleted(piecesBefore, bonusCatalog.length);
-  final after = _boardsCompleted(piecesAfter, bonusCatalog.length);
-  return after > before ? bonusCatalog[after - 1] : null;
 }
 
 /// Distinct image ids in an already-loaded completion snapshot (see

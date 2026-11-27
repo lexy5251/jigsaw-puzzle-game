@@ -1,13 +1,19 @@
-// Dev tool, not a test: renders the REAL Collection tab (fresh, mid-board,
-// first gift earned) and the completion card wearing the bonus-unlock
-// section, so the owner can judge the look as images before a device build.
+// Dev tool, not a test: renders the REAL Collection tab (teaser, loose
+// pieces waiting, mid-board placements, first gift placed) and the
+// completion card wearing the piece-waiting line, so the owner can judge
+// the look as images before a device build.
 // Skipped unless COLLECTION_PREVIEW=1:
 //   COLLECTION_PREVIEW=1 flutter test test/collection_preview_test.dart
 
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:jigsaw_puzzle/bonus_board.dart';
 import 'package:jigsaw_puzzle/completion_card.dart';
 import 'package:jigsaw_puzzle/my_puzzles_screen.dart';
+import 'package:jigsaw_puzzle/piece_shapes.dart';
 import 'package:jigsaw_puzzle/puzzle_catalog.dart';
 import 'package:jigsaw_puzzle/puzzle_completion.dart';
 import 'package:jigsaw_puzzle/studio_surfaces.dart';
@@ -60,37 +66,83 @@ void main() {
         return boundaryKey;
       }
 
+      /// The stored hand-placed record: the first [placed] cells of the
+      /// current board's reveal order snapped in.
+      String seededPlacement(int placed, {int boards = 0}) {
+        final gift = bonusPuzzleCatalog[boards];
+        final order = revealOrderFor(shapeSeedForKey('bonus-board.${gift.id}'));
+        return jsonEncode({
+          'boards': boards,
+          'cells': order.take(placed).toList(),
+        });
+      }
+
       // Before the journey: the teaser invitation (two paintings done).
       await capturePreviewPng(
         await openCollection(seededCompletions(2)),
         'docs/collection-preview-teaser-390.png',
       );
 
-      // Just opened: the fifth finish reveals the board with 5 pieces on.
+      // Just opened: the fifth finish reveals the board with 5 loose
+      // pieces waiting to be dragged in.
       await capturePreviewPng(
         await openCollection(seededCompletions(5)),
         'docs/collection-preview-opened-390.png',
       );
 
-      // Mid-board: the guessing stage, scattered pieces across the picture.
+      // Mid-board: 9 placed by hand, 5 new pieces resting at their
+      // scatter spots.
       await capturePreviewPng(
-        await openCollection(seededCompletions(14)),
+        await openCollection({
+          ...seededCompletions(14),
+          'bonus.placed': seededPlacement(9),
+        }),
         'docs/collection-preview-mid-390.png',
       );
       await capturePreviewPng(
-        await openCollection(seededCompletions(14), size: const Size(320, 568)),
+        await openCollection({
+          ...seededCompletions(14),
+          'bonus.placed': seededPlacement(9),
+        }, size: const Size(320, 568)),
         'docs/collection-preview-mid-320.png',
       );
 
-      // First gift earned: it hangs below while the next board starts.
+      // First gift fully placed: it hangs below while the next board
+      // starts bare.
       await capturePreviewPng(
-        await openCollection(seededCompletions(25)),
+        await openCollection({
+          ...seededCompletions(25),
+          'bonus.placed': seededPlacement(0, boards: 1),
+        }),
         'docs/collection-preview-unlocked-390.png',
       );
+
+      // The unlock moment itself: 24 placed, and the last piece placed
+      // through the a11y action so the celebration state renders.
+      final handle = tester.ensureSemantics();
+      final firstGift = bonusPuzzleCatalog.first;
+      final order = revealOrderFor(
+        shapeSeedForKey('bonus-board.${firstGift.id}'),
+      );
+      final celebrationKey = await openCollection({
+        ...seededCompletions(25),
+        'bonus.placed': seededPlacement(24),
+      });
+      final lastPiece = tester.getSemantics(
+        find.bySemanticsIdentifier('bonus-loose-piece-${order[24]}'),
+      );
+      lastPiece.owner!.performAction(lastPiece.id, SemanticsAction.tap);
+      // Let the seam-fade land before the shot.
+      await tester.pump(const Duration(milliseconds: 700));
+      await capturePreviewPng(
+        celebrationKey,
+        'docs/collection-preview-celebration-390.png',
+      );
+      handle.dispose();
     });
   }, skip: !enabled);
 
-  testWidgets('render the completion card with the bonus unlock', (
+  testWidgets('render the completion card with the piece-waiting line', (
     tester,
   ) async {
     final finished = imagesInCategory('landscapes').first;
@@ -111,9 +163,7 @@ void main() {
               pieceCount: 100,
               onBackToGallery: () {},
               onNextPuzzle: () {},
-              bonusUnlock: bonusPuzzleCatalog.first,
-              onPlayBonus: () {},
-              onSaveBonusForLater: () {},
+              piecesEarned: 1,
             ),
           ],
         ),
@@ -123,7 +173,7 @@ void main() {
       await tester.pump();
       await precachePreviewImages(
         tester.element(find.byType(CompletionCard)),
-        [finished.assetPath, bonusPuzzleCatalog.first.assetPath],
+        [finished.assetPath],
         width: TiltedPhotoCard.thumbnailCacheWidth,
       );
       await tester.pump();

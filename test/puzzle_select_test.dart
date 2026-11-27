@@ -118,7 +118,9 @@ void main() {
       );
 
       // The completion card covers the app bar, so the exit is its own
-      // "Back to gallery" button, not the page-back arrow.
+      // "Back to gallery" button, not the page-back arrow. The card's
+      // piece-waiting line can push it below the fold of the card scroll.
+      await tester.ensureVisible(find.text('Back to gallery'));
       await tester.tap(find.text('Back to gallery'));
       await tester.pumpAndSettle();
 

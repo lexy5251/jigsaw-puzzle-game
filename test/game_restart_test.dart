@@ -204,13 +204,13 @@ void main() {
       size: singlePieceSize,
     );
     await completeBoard(tester, old);
-    expect(find.textContaining('no timer, no score'), findsNothing);
+    expect(find.text('FINISHED'), findsNothing);
 
     await confirmRestart(tester);
     final next = await finishRestart(tester, old);
     expect(next.progress.isComplete, isFalse);
     await tester.pump(const Duration(seconds: 1));
-    expect(find.textContaining('no timer, no score'), findsNothing);
+    expect(find.text('FINISHED'), findsNothing);
   });
 
   testWidgets('restart waits for a completion delete already in flight', (

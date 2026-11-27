@@ -286,7 +286,7 @@ class _PuzzleSelectScreenState extends State<PuzzleSelectScreen>
       firstFinishes: galleryFirstFinishCount(finishedIds),
       streakPieces: streakPieces(days),
     );
-    final showBonusHook = bonus.journeyUnlocked && !bonus.trackComplete;
+    final showBonusHook = bonus.journeyUnlocked && !bonus.earningComplete;
     // A read started before midnight must not overwrite the next day's data.
     if (!mounted || dayKey(now) != dayKey(_now)) {
       return;

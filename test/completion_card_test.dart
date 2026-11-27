@@ -53,7 +53,7 @@ void main() {
 
     expect(find.text('FINISHED'), findsOneWidget);
     expect(find.text('Card test puzzle'), findsOneWidget);
-    expect(find.text('24 pieces · no timer, no score'), findsOneWidget);
+    expect(find.text('24 pieces'), findsOneWidget);
     expect(find.widgetWithText(FilledButton, 'Next puzzle'), findsOneWidget);
     expect(find.widgetWithText(TextButton, 'Back to gallery'), findsOneWidget);
     // Celebration-free by ruling: no cactus, sprig, or streak line.

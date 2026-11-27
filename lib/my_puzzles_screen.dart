@@ -19,9 +19,12 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import 'analytics.dart';
+import 'app_settings.dart';
 import 'bonus_board.dart';
+import 'bonus_placement.dart';
 import 'bonus_track.dart';
 import 'daily_streak.dart';
+import 'game_haptics.dart';
 import 'my_puzzles.dart';
 import 'puzzle_catalog.dart';
 import 'puzzle_completion.dart';
@@ -78,6 +81,14 @@ class _MyPuzzlesScreenState extends State<MyPuzzlesScreen>
   /// Loaded together with [_summary], so the body gate below covers both.
   BonusTrackState? _bonus;
 
+  /// The stored hand-placed progress behind [_bonus]; snaps update it
+  /// through [_persistPlacement] without waiting for a reload.
+  BonusPlacement _placement = BonusPlacement.none;
+
+  /// Snap/completion buzz for the bonus board, honoring the vibrate
+  /// setting; null keeps the device still.
+  GameHaptics? _haptics;
+
   @override
   void initState() {
     super.initState();
@@ -117,18 +128,40 @@ class _MyPuzzlesScreenState extends State<MyPuzzlesScreen>
     );
     final days = await const SharedPreferencesDailyStreakStore()
         .completedDays();
+    final placement = await const SharedPreferencesBonusPlacementStore()
+        .load();
+    final settings = await const SharedPreferencesAppSettingsStore().load();
     final bonus = bonusTrackStateFor(
       firstFinishes: galleryFirstFinishCount(
         imageIdsFromCompletions(completions),
       ),
       streakPieces: streakPieces(days),
+      placement: placement,
     );
     if (mounted) {
       setState(() {
         _summary = summary;
         _bonus = bonus;
+        _placement = placement;
+        _haptics = settings.hapticsEnabled ? const SystemGameHaptics() : null;
       });
     }
+  }
+
+  /// Persists a snap the board just made. The 25th cell rolls the record
+  /// into the next board — the celebration itself stays on the card until
+  /// the next reload swaps the finished gift onto the wall.
+  void _persistPlacement(Set<int> placedCells) {
+    final next = placedCells.length >= bonusBoardPieces
+        ? BonusPlacement(completedBoards: _placement.completedBoards + 1)
+        : BonusPlacement(
+            completedBoards: _placement.completedBoards,
+            placedCells: placedCells,
+          );
+    _placement = next;
+    // Fire-and-forget: the board is decoration around derived progress,
+    // and a failed write simply re-offers the piece next visit.
+    const SharedPreferencesBonusPlacementStore().save(next).ignore();
   }
 
   Future<void> _open(PuzzleImage image) async {
@@ -272,8 +305,19 @@ class _MyPuzzlesScreenState extends State<MyPuzzlesScreen>
       children: [
         if (board != null)
           BonusBoardCard(
+            // A new board must start with fresh card state, not inherit
+            // the finished one's celebration.
+            key: ValueKey('bonus-board-card-${board.id}'),
             image: board,
-            earnedPieces: bonus.piecesOnCurrentBoard,
+            placedCells: bonus.placedCells,
+            looseCells: looseCellsFor(
+              image: board,
+              placedCells: bonus.placedCells,
+              count: bonus.loosePieces,
+            ),
+            onPlacementChanged: _persistPlacement,
+            onPlay: () => _open(board),
+            haptics: _haptics,
           )
         else
           const _MessageCard(

@@ -26,9 +26,7 @@ class CompletionCard extends StatelessWidget {
     required this.onBackToGallery,
     required this.onNextPuzzle,
     this.exitLabel = 'Back to gallery',
-    this.bonusUnlock,
-    this.onPlayBonus,
-    this.onSaveBonusForLater,
+    this.piecesEarned = 0,
     this.journeyPieces,
     this.onSeeCollection,
   });
@@ -47,20 +45,15 @@ class CompletionCard extends StatelessWidget {
   /// "Back to gallery" to the hero button (the category is done).
   final VoidCallback? onNextPuzzle;
 
-  /// The gift painting this completion unlocked; null hides the bonus
-  /// section (the usual case — most finishes land mid-board).
-  final PuzzleImage? bonusUnlock;
-
-  /// Plays the unlocked gift right away (same chain as "Next puzzle").
-  final VoidCallback? onPlayBonus;
-
-  /// Tucks the section away; the gift already waits in the Collection, so
-  /// this loses nothing.
-  final VoidCallback? onSaveBonusForLater;
+  /// Bonus pieces this finish earned (a first finish, plus a possible
+  /// streak piece landing with it). Zero — replays, gift finishes, failed
+  /// writes — hides the line; the pieces themselves wait loose on the
+  /// Collection board, where placing them is the player's moment.
+  final int piecesEarned;
 
   /// Pieces already on the bonus board when this finish opened the journey;
   /// null hides the journey section. The game screen never sets this and
-  /// [bonusUnlock] together — the journey moment outranks a gift.
+  /// [piecesEarned] together — the journey moment outranks the quiet line.
   final int? journeyPieces;
 
   /// "See the collection" — exits the game toward My Puzzles → Collection.
@@ -162,9 +155,9 @@ class CompletionCard extends StatelessWidget {
               if (journeyPieces != null) ...[
                 const SizedBox(height: 14),
                 _journeySection(context),
-              ] else if (bonusUnlock != null) ...[
-                const SizedBox(height: 14),
-                _bonusSection(context),
+              ] else if (piecesEarned > 0) ...[
+                const SizedBox(height: 10),
+                _pieceWaitingLine(context),
               ],
               const SizedBox(height: 18),
               ..._actions(),
@@ -196,9 +189,9 @@ class CompletionCard extends StatelessWidget {
                   if (journeyPieces != null) ...[
                     const SizedBox(height: 12),
                     _journeySection(context),
-                  ] else if (bonusUnlock != null) ...[
-                    const SizedBox(height: 12),
-                    _bonusSection(context),
+                  ] else if (piecesEarned > 0) ...[
+                    const SizedBox(height: 8),
+                    _pieceWaitingLine(context),
                   ],
                   const SizedBox(height: 16),
                   ..._actions(),
@@ -244,97 +237,26 @@ class CompletionCard extends StatelessWidget {
       ),
       const SizedBox(height: 4),
       Text(
-        '$pieceCount pieces · no timer, no score',
+        '$pieceCount pieces',
         textAlign: TextAlign.center,
         style: theme.textTheme.bodySmall,
       ),
     ];
   }
 
-  /// The gift reveal: a quiet canvas-ground inset so it reads as its own
-  /// small event without shouting over the finished painting above it.
-  Widget _bonusSection(BuildContext context) {
-    final theme = Theme.of(context);
-    final bonus = bonusUnlock!;
+  /// One quiet line, not a section: the earning is acknowledged here, but
+  /// the moment itself — placing the piece — lives on the Collection board
+  /// (owner ruling, 2026-11-26).
+  Widget _pieceWaitingLine(BuildContext context) {
     return Semantics(
       container: true,
-      identifier: 'bonus-unlock-card',
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
-        decoration: const BoxDecoration(
-          color: StudioColors.ground,
-          borderRadius: BorderRadius.all(Radius.circular(14)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                FramedThumbnail(
-                  dimension: 56,
-                  assetPath: bonus.assetPath,
-                  title: bonus.title,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'BONUS PUZZLE UNLOCKED',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: StudioColors.structureDark,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1.6,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(bonus.title, style: theme.textTheme.titleSmall),
-                      Text(
-                        'Saved to your Collection.',
-                        style: theme.textTheme.bodySmall,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            // An OverflowBar, not a Row: side by side normally, stacked when
-            // enlarged text (or a narrow card) runs out of width.
-            OverflowBar(
-              alignment: MainAxisAlignment.end,
-              overflowAlignment: OverflowBarAlignment.end,
-              spacing: 4,
-              children: [
-                Semantics(
-                  identifier: 'bonus-save-later',
-                  child: TextButton(
-                    onPressed: onSaveBonusForLater,
-                    style: TextButton.styleFrom(
-                      foregroundColor: StudioColors.ink,
-                      textStyle: const TextStyle(
-                        fontFamily: 'Nunito',
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    child: const Text('Save for later'),
-                  ),
-                ),
-                Semantics(
-                  identifier: 'bonus-play-now',
-                  child: FilledButton(
-                    onPressed: onPlayBonus,
-                    // Actions are tomato (the old quieter-moss distinction
-                    // retired with the chrome) — the theme already styles
-                    // FilledButton, so no override needed.
-                    child: const Text('Play now'),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
+      identifier: 'bonus-piece-waiting',
+      child: Text(
+        piecesEarned == 1
+            ? 'A new piece is waiting in your Collection.'
+            : '$piecesEarned new pieces are waiting in your Collection.',
+        textAlign: TextAlign.center,
+        style: Theme.of(context).textTheme.bodySmall,
       ),
     );
   }

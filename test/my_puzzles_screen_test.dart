@@ -263,8 +263,11 @@ void main() {
       find.bySemanticsIdentifier('bonus-board-${firstGift.id}'),
       findsOneWidget,
     );
-    expect(find.text('5 of 25 pieces'), findsOneWidget);
-    expect(find.text(bonusBoardHintText), findsOneWidget);
+    // The five banked pieces arrive LOOSE — nothing is placed for the
+    // player (owner ruling, 2026-11-26).
+    expect(find.text('0 of 25 pieces'), findsOneWidget);
+    expect(find.text(bonusBoardLooseHintText(5)), findsOneWidget);
+    expect(find.text(bonusBoardHintText), findsNothing);
     // The picture is a surprise until it assembles: no visible title, and
     // nothing to play yet.
     expect(find.text(firstGift.title), findsNothing);
@@ -274,21 +277,23 @@ void main() {
     );
   });
 
-  testWidgets('an earned gift hangs in Collection and opens the size sheet', (
+  testWidgets('a placed-out gift hangs in Collection and opens the size sheet', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({
       for (var i = 0; i < 25; i++)
         puzzleCompletionKey(imageId: 'photo-$i', columns: 5, rows: 5):
             completionJson(DateTime(2026, 11, 1)),
+      // The player placed all 25 by hand — earning alone never unlocks.
+      'bonus.placed': '{"boards":1,"cells":[]}',
     });
     await pumpMyPuzzles(tester);
 
     await tester.tap(find.text('Collection'));
     await tester.pumpAndSettle();
 
-    // The first board (25 pieces) is complete: its gift hangs below while
-    // the second board starts empty.
+    // The first board is fully placed: its gift hangs below while the
+    // second board starts empty.
     final firstGift = bonusPuzzleCatalog[0];
     final secondGift = bonusPuzzleCatalog[1];
     final giftCard = find.bySemanticsIdentifier(
@@ -328,6 +333,7 @@ void main() {
 
   testWidgets('streak pieces land on the board too', (tester) async {
     // Five finishes open the journey; a 6-day streak adds two more pieces.
+    // All seven wait loose until the player places them.
     SharedPreferences.setMockInitialValues({
       for (var i = 0; i < 5; i++)
         puzzleCompletionKey(imageId: 'photo-$i', columns: 5, rows: 5):
@@ -341,6 +347,24 @@ void main() {
     await tester.tap(find.text('Collection'));
     await tester.pumpAndSettle();
 
-    expect(find.text('7 of 25 pieces'), findsOneWidget);
+    expect(find.text(bonusBoardLooseHintText(7)), findsOneWidget);
+  });
+
+  testWidgets('stored placements reach the board as placed cells', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      for (var i = 0; i < 7; i++)
+        puzzleCompletionKey(imageId: 'photo-$i', columns: 5, rows: 5):
+            completionJson(DateTime(2026, 11, 1 + i)),
+      'bonus.placed': '{"boards":0,"cells":[3,11,19]}',
+    });
+    await pumpMyPuzzles(tester);
+
+    await tester.tap(find.text('Collection'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('3 of 25 pieces'), findsOneWidget);
+    expect(find.text(bonusBoardLooseHintText(4)), findsOneWidget);
   });
 }
